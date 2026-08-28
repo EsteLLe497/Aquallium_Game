@@ -19,6 +19,11 @@ segments. The active segment is retained while using a helical ramp, so two
 vertically separated turns cannot be confused merely because their XZ
 coordinates overlap.
 
+Imported glTF geometry is converted from right-handed to left-handed space by
+negating Z in `StageModel`. Collision authoring must use the same rendered
+coordinates; Watatsumi therefore enters at rendered Z=-17.8 m and exits at
+Z=+17.8 m.
+
 ## Why this is not a NavMesh yet
 
 A navigation mesh answers where AI agents may walk; it does not replace a

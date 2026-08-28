@@ -33,19 +33,19 @@ DirectX::XMFLOAT3 EvaluateWatatsumiRampPoint(float t)
     };
     if (t < 0.06f)
     {
-        return line(-0.5f, 17.8f, 5.8f, 17.8f, t / 0.06f);
+        return line(-0.5f, -17.8f, 5.8f, -17.8f, t / 0.06f);
     }
     if (t < 0.20f)
     {
         return line(
-            5.8f, 17.8f, 17.8f, 17.8f,
+            5.8f, -17.8f, 17.8f, -17.8f,
             (t - 0.06f) / 0.14f);
     }
     if (t < 0.80f)
     {
         const float u = (t - 0.20f) / 0.60f;
         const float angle =
-            DirectX::XM_PIDIV2 - DirectX::XM_PI * u;
+            -DirectX::XM_PIDIV2 + DirectX::XM_PI * u;
         return DirectX::XMFLOAT3{
             17.8f + std::cos(angle) * 17.8f,
             y,
@@ -54,11 +54,11 @@ DirectX::XMFLOAT3 EvaluateWatatsumiRampPoint(float t)
     if (t < 0.97f)
     {
         return line(
-            17.8f, -17.8f, 5.8f, -17.8f,
+            17.8f, 17.8f, 5.8f, 17.8f,
             (t - 0.80f) / 0.17f);
     }
     return line(
-        5.8f, -17.8f, 3.6f, -17.8f,
+        5.8f, 17.8f, 3.6f, 17.8f,
         (t - 0.97f) / 0.03f);
 }
 }
@@ -101,7 +101,7 @@ void AquariumScene::BuildWatatsumiCollision()
     watatsumiCollision_.Clear();
     watatsumiCollision_.AddWalkableRect({
         L"Watatsumi_1F_PublicFloor",
-        -27.55f, 6.20f, -23.55f, 23.55f, 0.0f,
+        -27.55f, 6.90f, -23.55f, 23.55f, 0.0f,
         ColliderTag::Walkable,
         LayerMask(CollisionLayer::World)});
     watatsumiCollision_.AddWalkableRect({
@@ -143,6 +143,40 @@ void AquariumScene::BuildWatatsumiCollision()
         {7.50f, 18.40f, 14.75f},
         ColliderTag::Glass,
         LayerMask(CollisionLayer::World)});
+    // StageModel flips glTF Z while converting to the renderer's left-handed
+    // coordinates. These portal colliders therefore use the rendered signs:
+    // the lower entrance is at -17.8 m and the upper landing at +17.8 m.
+    watatsumiCollision_.AddBox({
+        L"Watatsumi_LowerPortalHeader",
+        {6.38f, 6.16f, -20.30f},
+        {7.50f, 18.40f, -15.30f},
+        ColliderTag::Solid,
+        LayerMask(CollisionLayer::World)});
+    watatsumiCollision_.AddBox({
+        L"Watatsumi_UpperPortalLowerWall",
+        {6.38f, 0.0f, 15.30f},
+        {7.50f, 11.95f, 20.30f},
+        ColliderTag::Solid,
+        LayerMask(CollisionLayer::World)});
+    for (const float portalZ : {-17.80f, 17.80f})
+    {
+        watatsumiCollision_.AddBox({
+            portalZ < 0.0f
+                ? L"Watatsumi_LowerPortalLeftShoulder"
+                : L"Watatsumi_UpperPortalLeftShoulder",
+            {6.38f, 0.0f, portalZ - 2.50f},
+            {7.50f, 18.40f, portalZ - 2.10f},
+            ColliderTag::Solid,
+            LayerMask(CollisionLayer::World)});
+        watatsumiCollision_.AddBox({
+            portalZ < 0.0f
+                ? L"Watatsumi_LowerPortalRightShoulder"
+                : L"Watatsumi_UpperPortalRightShoulder",
+            {6.38f, 0.0f, portalZ + 2.10f},
+            {7.50f, 18.40f, portalZ + 2.50f},
+            ColliderTag::Solid,
+            LayerMask(CollisionLayer::World)});
+    }
     watatsumiCollision_.AddBox({
         L"Watatsumi_RearWall",
         {-28.10f, -0.2f, -24.0f},

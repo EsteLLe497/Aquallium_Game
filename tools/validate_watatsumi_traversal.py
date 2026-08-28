@@ -26,6 +26,9 @@ HALL_CEILING_BOTTOM = 18.40
 
 def main() -> None:
     points = [ramp_point(index / SAMPLES) for index in range(SAMPLES + 1)]
+    # StageModel converts glTF right-handed coordinates to the renderer's
+    # left-handed space by negating Z. Runtime collision must use these signs.
+    rendered_points = [(point[0], point[1], -point[2]) for point in points]
     maximum_step = 0.0
     maximum_grade = 0.0
     route_length = 0.0
@@ -92,6 +95,8 @@ def main() -> None:
     assert resolved_offset <= allowed_center_offset
     assert abs(points[0][1] - 0.18) < 1.0e-4
     assert abs(points[-1][1] - 12.40) < 1.0e-4
+    assert abs(rendered_points[0][2] + 17.8) < 1.0e-4
+    assert abs(rendered_points[-1][2] - 17.8) < 1.0e-4
     assert reached_t >= 0.999
 
     print({
@@ -112,6 +117,8 @@ def main() -> None:
         "simulation_reached_t": round(reached_t, 4),
         "simulation_max_wall_offset_m": round(maximum_resolved_offset, 3),
         "eye_height_m": EYE_HEIGHT,
+        "rendered_lower_entrance_z_m": rendered_points[0][2],
+        "rendered_upper_exit_z_m": rendered_points[-1][2],
     })
 
 
