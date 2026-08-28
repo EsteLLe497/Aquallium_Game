@@ -949,9 +949,10 @@ StagePixelOutput PSStage(StageVertexOutput input)
         surfaceType > 15.5 && surfaceType < 16.5)
     {
         // One material is shared by the opaque tank backing and transparent
-        // front interface.  Water depth is measured from the 6.45 m surface,
+        // front interface. Water depth is measured from the enlarged 12.45 m
+        // surface,
         // so upper and lower observations retain the same physical gradient.
-        const float waterDepth = max(6.45 - input.worldPosition.y, 0.0);
+        const float waterDepth = max(12.45 - input.worldPosition.y, 0.0);
         const float viewGrazing = pow(
             1.0 - saturate(abs(dot(normal, -viewDirection))), 3.2);
         const float3 transmittance = exp(
@@ -1032,7 +1033,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
                     gStageRefractionSampler, safeUv + offset * 0.965).b)
             : float3(0.003, 0.065, 0.145);
         const float verticalEdge = pow(
-            saturate(abs(input.worldPosition.z) / 7.35), 10.0);
+            saturate(abs(input.worldPosition.z) / 14.62), 10.0);
         const float3 reflection = float3(0.04, 0.28, 0.62) *
             (fresnel * 0.48 + verticalEdge * 0.20);
         finalColor = lerp(
@@ -1058,7 +1059,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
                 input.worldPosition.x * 1.1 +
                 input.worldPosition.y * 1.7 +
                 input.worldPosition.z * 0.8);
-            const float waterDepth = max(6.45 - input.worldPosition.y, 0.0);
+            const float waterDepth = max(12.45 - input.worldPosition.y, 0.0);
             float3 rockLightDirection;
             float3 rockLightColor;
             float2 rockSurfacePosition;

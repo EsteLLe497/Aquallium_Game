@@ -256,6 +256,16 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
   closest point on the authored window rectangle once per dry pixel, while the
   depth atmosphere uses the already available world/camera distance. All color,
   intensity, extent, range and fog values are exposed in the F2 lighting editor.
+- Enlarged the Watatsumi hero tank to a 29.0 m-wide, 12.1 m-high flat-front
+  semi-elliptical volume and kept its CPU lighting bounds, HLSL absorption,
+  acrylic edge response, generated geometry and traversal collision in one
+  consistent meter-scale coordinate system.
+- Raised the two-storey hall and concealed ramp together instead of scaling the
+  render mesh alone. The 89.272 m route validates at a 17.31% maximum grade,
+  3.52 m usable width and 3.38 m player head clearance across 2,880 samples.
+- Replaced rectangular portal gaps with generated elliptical portal collars:
+  side shoulders and segmented curved spandrels meet the tunnel crown while
+  retaining 6.16 m lower-entry clearance and a clear upper landing.
 
 References:
 

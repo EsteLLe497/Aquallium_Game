@@ -120,9 +120,9 @@ def ramp_point(t):
         u = (t-0.20) / 0.60
         angle = math.pi*0.5 - math.pi*u
         return (17.8 + math.cos(angle)*17.8, y, math.sin(angle)*17.8)
-    if t < 0.94:
-        return line((17.8, -PORTAL_Z), (5.8, -PORTAL_Z), (t-0.80) / 0.14)
-    return line((5.8, -PORTAL_Z), (3.6, -PORTAL_Z), (t-0.94) / 0.06)
+    if t < 0.97:
+        return line((17.8, -PORTAL_Z), (5.8, -PORTAL_Z), (t-0.80) / 0.17)
+    return line((5.8, -PORTAL_Z), (3.6, -PORTAL_Z), (t-0.97) / 0.03)
 
 
 def ramp_strip(
@@ -145,7 +145,7 @@ def ramp_strip(
     for index in range(segments):
         quad("WatatsumiRamp", (left[index], right[index], right[index+1], left[index+1]), (0,1,0))
         midpoint_t = (index + 0.5) / segments
-        enclosed = 0.06 <= midpoint_t <= 0.94
+        enclosed = 0.06 <= midpoint_t <= 0.97
         for edge, sign in ((left, 1.0), (right, -1.0)):
             p0, p1 = edge[index], edge[index+1]
             normal = (sign*(p1[2]-p0[2]), 0.0, sign*(p0[0]-p1[0]))
@@ -267,11 +267,11 @@ def arch_portal_collar(center_z, floor_y, x=6.42, width=4.2,
 
 def build():
     # Enlarged two-storey central hall; the exhibit remains the only source.
-    box("WatatsumiArchitecture", (5.0,-0.18,0), (58,0.36,48))
-    box("WatatsumiArchitecture", (5.0,9.2,23.85), (58,18.4,0.30))
-    box("WatatsumiArchitecture", (5.0,9.2,-23.85), (58,18.4,0.30))
-    box("WatatsumiArchitecture", (-23.85,9.2,0), (0.30,18.4,48))
-    box("WatatsumiArchitecture", (5.0,HALL_CEILING_Y,0), (58,0.40,48))
+    box("WatatsumiArchitecture", (5.0,-0.18,0), (66,0.36,48))
+    box("WatatsumiArchitecture", (5.0,9.2,23.85), (66,18.4,0.30))
+    box("WatatsumiArchitecture", (5.0,9.2,-23.85), (66,18.4,0.30))
+    box("WatatsumiArchitecture", (-27.85,9.2,0), (0.30,18.4,48))
+    box("WatatsumiArchitecture", (5.0,HALL_CEILING_Y,0), (66,0.40,48))
 
     # Fill both unused outer-edge voids up to the enlarged 5.0 m portals.
     # Their inner faces now terminate on the same authored portal edge, so the
@@ -279,7 +279,7 @@ def build():
     box("WatatsumiArchitecture", (-8.4,9.1,21.55), (30.6,18.2,4.60))
     box("WatatsumiArchitecture", (-8.4,9.1,-21.55), (30.6,18.2,4.60))
 
-    # The 14 x 6.2 m acrylic view opens onto ~651 m3 of water.
+    # The enlarged 29 x 12.2 m acrylic view is the hall's dominant landmark.
     box("WatatsumiArchitecture", (7.0,0.18,0), (1.0,0.36,31.2))
     # A continuous opaque facade closes the entire void above the acrylic.
     # Narrow full-height jambs meet it exactly at the tank's side edges.
@@ -305,10 +305,13 @@ def build():
     # The 1F entrance and 2F exit are cut from the same facade grid. The lower
     # header begins above the complete arch crown; the upper opening remains
     # clear all the way to the raised hall ceiling.
-    box("WatatsumiArchitecture", (6.80,12.25,PORTAL_Z), (0.70,12.30,5.00))
-    box("WatatsumiArchitecture", (6.80,6.125,-PORTAL_Z), (0.70,12.25,5.00))
-    arch_portal_collar(PORTAL_Z, 0.18, top_clearance=5.90)
-    arch_portal_collar(-PORTAL_Z, UPPER_FLOOR_Y, top_clearance=5.90)
+    box("WatatsumiArchitecture", (6.80,12.28,PORTAL_Z), (0.70,12.24,5.00))
+    box("WatatsumiArchitecture", (6.80,5.975,-PORTAL_Z), (0.70,11.95,5.00))
+    arch_portal_collar(PORTAL_Z, 0.18, top_clearance=5.98)
+    arch_portal_collar(
+        -PORTAL_Z,
+        UPPER_FLOOR_Y,
+        top_clearance=HALL_CEILING_Y - 0.20 - UPPER_FLOOR_Y)
     ramp_strip()
 
     # Sparse blue practicals follow the enclosed ramp. They are navigation
@@ -377,8 +380,8 @@ def write_glb():
          "nodes":nodes,"meshes":meshes,"materials":materials,"accessors":accessors,
          "bufferViews":views,"buffers":[{"byteLength":len(binary)}],
          "extras":{"units":"meters","previewKey":6,"referenceVolumeTonnes":650,
-                   "inferredTankPlan":"flat-front semi-ellipse","inferredTankSize":[9.8,6.1,14.5],
-                   "inferredGrossVolumeM3":681.0,"rampWidth":4.2,"rampRise":6.02,
+                   "inferredTankPlan":"flat-front semi-ellipse","inferredTankSize":[14.7,12.1,29.0],
+                   "inferredGrossVolumeM3":4050.0,"rampWidth":4.2,"rampRise":12.22,
                    "tunnelWallHeight":2.2,"tunnelArchRise":3.0,
                    "rampSequence":["lower-right entry","concealed wall run",
                                    "rear half-helix tunnel","upper-left re-entry",

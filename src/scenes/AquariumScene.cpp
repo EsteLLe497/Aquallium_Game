@@ -31,7 +31,7 @@ AquariumScene::AquariumScene(
         {0.08f, 0.34f, 0.86f}, 26.0f, 46.0f,
         lighting::LocalLightType::Spot, true};
     settings_.localLighting.lights[2] = {
-        {6.4f, 6.8f, -10.0f}, 6.0f,
+        {6.4f, 13.2f, -17.8f}, 8.0f,
         {-0.45f, -0.72f, 0.0f}, 3.8f,
         {0.12f, 0.46f, 1.0f}, 20.0f, 38.0f,
         lighting::LocalLightType::Spot, true};
@@ -299,9 +299,9 @@ void AquariumScene::UpdateCamera(
         else if (settings_.watatsumiTankMode)
         {
             settings_.cameraPositionX =
-                std::clamp(settings_.cameraPositionX, -19.0f, 29.0f);
+                std::clamp(settings_.cameraPositionX, -27.0f, 37.0f);
             settings_.cameraPositionZ =
-                std::clamp(settings_.cameraPositionZ, -15.2f, 15.2f);
+                std::clamp(settings_.cameraPositionZ, -23.2f, 23.2f);
 
             // The Shikoku Aquarium reference enters on the tank's right,
             // disappears inside the wall, follows the rear perimeter and
@@ -310,7 +310,7 @@ void AquariumScene::UpdateCamera(
             auto evaluateRampPoint = [](float t)
             {
                 t = std::clamp(t, 0.0f, 1.0f);
-                const float y = 0.18f + 6.02f * t;
+                const float y = 0.18f + 12.22f * t;
                 auto line = [y](
                     float ax, float az,
                     float bx, float bz,
@@ -324,12 +324,12 @@ void AquariumScene::UpdateCamera(
                 };
                 if (t < 0.06f)
                 {
-                    return line(-0.5f, -10.0f, 5.8f, -10.0f,
+                    return line(-0.5f, -17.8f, 5.8f, -17.8f,
                         t / 0.06f);
                 }
                 if (t < 0.20f)
                 {
-                    return line(5.8f, -10.0f, 17.8f, -10.0f,
+                    return line(5.8f, -17.8f, 17.8f, -17.8f,
                         (t - 0.06f) / 0.14f);
                 }
                 if (t < 0.80f)
@@ -338,18 +338,18 @@ void AquariumScene::UpdateCamera(
                     const float angle =
                         -DirectX::XM_PIDIV2 + DirectX::XM_PI * u;
                     return DirectX::XMFLOAT3{
-                        17.8f + std::cos(angle) * 10.0f,
+                        17.8f + std::cos(angle) * 17.8f,
                         y,
-                        std::sin(angle) * 10.0f
+                        std::sin(angle) * 17.8f
                     };
                 }
-                if (t < 0.94f)
+                if (t < 0.97f)
                 {
-                    return line(17.8f, 10.0f, 5.8f, 10.0f,
-                        (t - 0.80f) / 0.14f);
+                    return line(17.8f, 17.8f, 5.8f, 17.8f,
+                        (t - 0.80f) / 0.17f);
                 }
-                return line(5.8f, 10.0f, 3.6f, 10.0f,
-                    (t - 0.94f) / 0.06f);
+                return line(5.8f, 17.8f, 3.6f, 17.8f,
+                    (t - 0.97f) / 0.03f);
             };
 
             constexpr float eyeHeight = 1.62f;
@@ -426,8 +426,8 @@ void AquariumScene::UpdateCamera(
                     proposedRamp.t < 0.075f &&
                     currentFloor < 0.85f;
                 const bool upperEntry =
-                    proposedRamp.t > 0.925f &&
-                    currentFloor > 5.35f;
+                    proposedRamp.t > 0.955f &&
+                    currentFloor > 11.55f;
                 watatsumiRampTracking_ =
                     (lowerEntry || upperEntry) &&
                     proposedRamp.distanceSquared < 2.15f * 2.15f;
@@ -495,16 +495,16 @@ void AquariumScene::UpdateCamera(
                     evaluateRampPoint(nearestRampT);
                 targetCameraY = rampPoint.y + eyeHeight;
             }
-            else if (settings_.cameraPositionY > 4.6f &&
-                     ((settings_.cameraPositionX > 1.75f &&
-                       settings_.cameraPositionX < 5.25f &&
-                       std::abs(settings_.cameraPositionZ) < 12.6f) ||
-                      (settings_.cameraPositionX > -11.2f &&
-                       settings_.cameraPositionX < 2.0f &&
-                       std::abs(settings_.cameraPositionZ) > 9.25f &&
-                       std::abs(settings_.cameraPositionZ) < 12.75f)))
+            else if (settings_.cameraPositionY > 9.0f &&
+                     ((settings_.cameraPositionX > -23.0f &&
+                       settings_.cameraPositionX < 4.5f &&
+                       std::abs(settings_.cameraPositionZ) > 15.3f &&
+                       std::abs(settings_.cameraPositionZ) < 20.4f) ||
+                      (settings_.cameraPositionX > -23.5f &&
+                       settings_.cameraPositionX < -18.5f &&
+                       std::abs(settings_.cameraPositionZ) < 20.4f)))
             {
-                targetCameraY = 7.82f;
+                targetCameraY = 13.90f;
             }
 
             // Critically damped frame-rate-independent convergence removes

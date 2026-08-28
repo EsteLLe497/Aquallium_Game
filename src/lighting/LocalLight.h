@@ -36,13 +36,13 @@ struct LocalLightingRig
 
     // Broad, shadow-free indirect light emitted by the public tank window.
     // This is intentionally separate from the underwater direct-light rig.
-    DirectX::XMFLOAT3 tankBounceCenter{6.90f, 3.35f, 0.0f};
-    float tankBounceRange = 18.0f;
+    DirectX::XMFLOAT3 tankBounceCenter{6.90f, 6.40f, 0.0f};
+    float tankBounceRange = 28.0f;
     DirectX::XMFLOAT3 tankBounceNormal{-1.0f, 0.0f, 0.0f};
-    float tankBounceHalfWidth = 7.35f;
+    float tankBounceHalfWidth = 14.62f;
     DirectX::XMFLOAT3 tankBounceColor{0.025f, 0.23f, 0.52f};
     float tankBounceIntensity = 0.34f;
-    float tankBounceHalfHeight = 3.05f;
+    float tankBounceHalfHeight = 6.10f;
 
     DirectX::XMFLOAT3 atmosphereColor{0.006f, 0.030f, 0.060f};
     float atmosphereDensity = 0.020f;

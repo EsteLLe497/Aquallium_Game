@@ -19,9 +19,9 @@ PLAYER_HEIGHT = 1.82
 WALL_HEIGHT = 2.20
 ARCH_RISE = 3.00
 PORTAL_WIDTH = 5.00
-LOWER_PORTAL_CLEAR_HEIGHT = 5.90
-UPPER_PORTAL_BOTTOM = 5.65
-HALL_CEILING_BOTTOM = 11.20
+LOWER_PORTAL_CLEAR_HEIGHT = 6.16
+UPPER_PORTAL_BOTTOM = 11.95
+HALL_CEILING_BOTTOM = 18.40
 
 
 def main() -> None:
@@ -87,11 +87,11 @@ def main() -> None:
     assert head_clearance >= 2.20, head_clearance
     assert PORTAL_WIDTH >= RAMP_WIDTH + 0.70, PORTAL_WIDTH
     assert LOWER_PORTAL_CLEAR_HEIGHT >= points[round(SAMPLES * 0.06)][1] + crown_height
-    assert UPPER_PORTAL_BOTTOM <= points[round(SAMPLES * 0.94)][1]
-    assert HALL_CEILING_BOTTOM >= points[round(SAMPLES * 0.94)][1] + crown_height
+    assert UPPER_PORTAL_BOTTOM <= points[round(SAMPLES * 0.97)][1]
+    assert HALL_CEILING_BOTTOM >= points[round(SAMPLES * 0.97)][1] + crown_height
     assert resolved_offset <= allowed_center_offset
     assert abs(points[0][1] - 0.18) < 1.0e-4
-    assert abs(points[-1][1] - 6.20) < 1.0e-4
+    assert abs(points[-1][1] - 12.40) < 1.0e-4
     assert reached_t >= 0.999
 
     print({
