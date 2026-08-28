@@ -96,9 +96,45 @@ AquariumScene::AquariumScene(
         {0.0f, -1.0f, 0.0f}, 2.4f,
         {0.16f, 0.38f, 0.72f}, 30.0f, 54.0f,
         lighting::LocalLightType::Spot, true};
+    BuildStageGlassCollision();
     BuildRouteCollision();
     BuildUnderwaterArchCollision();
     BuildWatatsumiCollision();
+}
+
+void AquariumScene::BuildStageGlassCollision()
+{
+    using physics::ColliderTag;
+    using physics::CollisionLayer;
+    using physics::LayerMask;
+
+    stageGlassCollision_.Clear();
+    stageGlassCollision_.AddWalkableRect({
+        L"StageGlass_PublicFloor",
+        -4.75f, 4.75f, -10.0f, -5.35f, -2.25f,
+        ColliderTag::Walkable,
+        LayerMask(CollisionLayer::World)});
+    stageGlassCollision_.AddBox({
+        L"StageGlass_AquariumPane",
+        {-5.10f, -2.25f, -5.35f},
+        {5.10f, 3.0f, -5.15f},
+        ColliderTag::Glass,
+        LayerMask(CollisionLayer::World)});
+    stageGlassCollision_.AddBox({
+        L"StageGlass_RearWall",
+        {-5.10f, -2.25f, -10.20f},
+        {5.10f, 3.0f, -10.0f},
+        ColliderTag::Solid,
+        LayerMask(CollisionLayer::World)});
+    for (const float x : {-4.85f, 4.85f})
+    {
+        stageGlassCollision_.AddBox({
+            L"StageGlass_SideWall",
+            {x - 0.10f, -2.25f, -10.0f},
+            {x + 0.10f, 3.0f, -5.35f},
+            ColliderTag::Solid,
+            LayerMask(CollisionLayer::World)});
+    }
 }
 
 void AquariumScene::BuildRouteCollision()
@@ -496,10 +532,11 @@ void AquariumScene::SelectStageGlassView()
     settings_.underwaterArchMode = false;
     settings_.watatsumiTankMode = false;
     settings_.cameraPositionX = 0.0f;
-    settings_.cameraPositionY = 0.10f;
+    settings_.cameraPositionY = -2.25f + playerCapsule_.eyeHeight;
     settings_.cameraPositionZ = -6.65f;
     settings_.cameraYaw = 0.0f;
     settings_.cameraPitch = -0.03f;
+    ResetPlayerCharacter();
 }
 
 void AquariumScene::SelectAquariumGreyboxView()
@@ -613,17 +650,17 @@ void AquariumScene::UpdateCamera(
             requestedMoveZ =
                 (forwardZ * moveForward + rightZ * moveRight) *
                 movementSpeed * deltaTime;
-            if (!settings_.greyboxMode)
+            if (!settings_.stageMode)
             {
                 settings_.cameraPositionX += requestedMoveX;
                 settings_.cameraPositionZ += requestedMoveZ;
             }
         }
-        if (!settings_.greyboxMode && input.IsDown('E'))
+        if (!settings_.stageMode && input.IsDown('E'))
         {
             settings_.cameraPositionY += movementSpeed * 0.65f * deltaTime;
         }
-        if (!settings_.greyboxMode && input.IsDown('Q'))
+        if (!settings_.stageMode && input.IsDown('Q'))
         {
             settings_.cameraPositionY -= movementSpeed * 0.65f * deltaTime;
         }
@@ -663,12 +700,13 @@ void AquariumScene::UpdateCamera(
         }
         else if (settings_.stageMode)
         {
-            settings_.cameraPositionX =
-                std::clamp(settings_.cameraPositionX, -25.0f, 65.0f);
-            settings_.cameraPositionY =
-                std::clamp(settings_.cameraPositionY, -1.75f, 6.0f);
-            settings_.cameraPositionZ =
-                std::clamp(settings_.cameraPositionZ, -25.0f, 85.0f);
+            stageGlassCollision_.MoveCharacter(
+                playerCharacter_,
+                {requestedMoveX, 0.0f, requestedMoveZ},
+                playerCapsule_);
+            settings_.cameraPositionX = playerCharacter_.eyePosition.x;
+            settings_.cameraPositionY = playerCharacter_.eyePosition.y;
+            settings_.cameraPositionZ = playerCharacter_.eyePosition.z;
         }
         else
         {

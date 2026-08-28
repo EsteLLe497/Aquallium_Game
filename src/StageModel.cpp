@@ -15,8 +15,10 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <bit>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #define CGLTF_IMPLEMENTATION
@@ -164,6 +166,7 @@ void StageModel::Initialize(
     std::vector<std::uint32_t> indices;
     drawBatches_.clear();
     meshCount_ = 0;
+    std::unordered_set<std::uint64_t> geometrySignatures;
 
     using namespace DirectX;
     for (cgltf_size nodeIndex = 0;
@@ -321,6 +324,46 @@ void StageModel::Initialize(
                         baseVertex +
                         static_cast<std::uint32_t>(index));
                 }
+            }
+
+            // Blender exports can contain several differently named nodes
+            // with byte-identical transformed geometry. Rendering all of them
+            // causes z-fighting and makes a single wall look doubled. Hash the
+            // complete baked primitive and remove exact duplicates only;
+            // nearby, coplanar, or differently materialed pieces remain.
+            constexpr std::uint64_t fnvOffset = 14695981039346656037ull;
+            constexpr std::uint64_t fnvPrime = 1099511628211ull;
+            std::uint64_t geometrySignature = fnvOffset;
+            const auto hashValue = [&geometrySignature](std::uint32_t value)
+            {
+                geometrySignature ^= value;
+                geometrySignature *= fnvPrime;
+            };
+            for (std::size_t vertexIndex = baseVertex;
+                 vertexIndex < vertices.size(); ++vertexIndex)
+            {
+                const Vertex& vertex = vertices[vertexIndex];
+                for (const float value : {
+                    vertex.position.x, vertex.position.y, vertex.position.z,
+                    vertex.normal.x, vertex.normal.y, vertex.normal.z,
+                    vertex.uv.x, vertex.uv.y})
+                {
+                    hashValue(std::bit_cast<std::uint32_t>(value));
+                }
+            }
+            for (const std::uint32_t index : primitiveIndices)
+            {
+                hashValue(index - baseVertex);
+            }
+            if (primitive.material)
+            {
+                hashValue(static_cast<std::uint32_t>(
+                    primitive.material - rawData->materials));
+            }
+            if (!geometrySignatures.insert(geometrySignature).second)
+            {
+                vertices.resize(baseVertex);
+                continue;
             }
 
             // Flipping Z changes handedness, so reverse triangle winding.

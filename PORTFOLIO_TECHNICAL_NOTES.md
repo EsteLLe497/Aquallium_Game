@@ -294,6 +294,10 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
   reachability probe verifies both directions through Route 01-02, while exact
   rail clearance and Watatsumi seam dimensions are checked alongside the
   existing 2,880-sample helical-ramp traversal.
+- Added capsule collision to the imported glass-side preview as well, including
+  a tagged acrylic boundary and dry-side perimeter walls. The GLB importer now
+  hashes fully baked vertices, indices and material identity to suppress exact
+  duplicate mesh instances while preserving merely adjacent or coplanar parts.
 
 References:
 

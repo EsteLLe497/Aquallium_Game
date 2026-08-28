@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENE_SOURCE = ROOT / "src" / "scenes" / "AquariumScene.cpp"
+STAGE_MODEL_SOURCE = ROOT / "src" / "StageModel.cpp"
 WATATSUMI_GENERATOR = ROOT / "tools" / "generate_watatsumi_hall.py"
 PLAYER_RADIUS = 0.34
 
@@ -75,6 +76,7 @@ def route_reaches(start: tuple[float, float], target: tuple[float, float]) -> bo
 
 def main() -> None:
     scene = SCENE_SOURCE.read_text(encoding="utf-8")
+    stage_model = STAGE_MODEL_SOURCE.read_text(encoding="utf-8")
     generator = WATATSUMI_GENERATOR.read_text(encoding="utf-8")
 
     assert route_reaches((-16.2, 0.0), (6.0, 0.0))
@@ -88,6 +90,7 @@ def main() -> None:
 
     # Required tagged worlds and authored boundaries must be present at runtime.
     for required in (
+        'BuildStageGlassCollision();',
         'BuildRouteCollision();',
         'BuildUnderwaterArchCollision();',
         'BuildWatatsumiCollision();',
@@ -97,6 +100,8 @@ def main() -> None:
         'Watatsumi_2F_RearRail',
     ):
         assert required in scene, required
+    assert 'geometrySignatures.insert(geometrySignature)' in stage_model
+    assert 'vertices.resize(baseVertex);' in stage_model
 
     # Exact Watatsumi seams: rear shell -> service fill -> portal -> tank.
     rear_inner_x = -27.70
@@ -122,6 +127,8 @@ def main() -> None:
         "watatsumi_service_fill_width_m": round(facade_rear_x - rear_inner_x, 2),
         "watatsumi_outer_seal_depth_m": round(outer_wall_inner_z - portal_outer_z, 2),
         "watatsumi_tank_portal_seal_m": round(portal_inner_z - tank_jamb_outer_z, 2),
+        "stage_glass_collision": True,
+        "exact_duplicate_mesh_filter": True,
     })
 
 

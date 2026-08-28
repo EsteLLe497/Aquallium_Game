@@ -46,6 +46,7 @@ private:
     void SelectWatatsumiTankView();
     void UpdateCamera(float deltaTime, const framework::InputSystem& input);
     void UpdateLightingTuning(float deltaTime, const framework::InputSystem& input);
+    void BuildStageGlassCollision();
     void BuildRouteCollision();
     void BuildUnderwaterArchCollision();
     void BuildWatatsumiCollision();
@@ -54,6 +55,7 @@ private:
     AquariumRenderer renderer_;
     AquariumSettings settings_;
     float simulationTime_ = 0.0f;
+    physics::CollisionWorld stageGlassCollision_;
     physics::CollisionWorld routeCollision_;
     physics::CollisionWorld underwaterArchCollision_;
     physics::CollisionWorld watatsumiCollision_;
