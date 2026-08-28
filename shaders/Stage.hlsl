@@ -180,16 +180,27 @@ float3 StageArchitecturalAlbedo(
     const float wallU = abs(normal.x) > abs(normal.z)
         ? worldPosition.z
         : worldPosition.x;
+    // Walls use tall matte architectural panels instead of repeating the
+    // floor treatment. The larger vertical rhythm reads clearly in dim light
+    // and separates the enclosure from the walking surface without textures.
     const float2 wallCoordinates = float2(
-        wallU / 2.35,
-        worldPosition.y / 1.18);
-    const float wallInterior = StagePanelInterior(wallCoordinates, 0.012);
+        wallU / 1.24,
+        worldPosition.y / 2.72);
+    const float2 wallRepeated = frac(wallCoordinates);
+    const float2 wallEdgeDistance = min(wallRepeated, 1.0 - wallRepeated);
+    const float wallNearestEdge = min(wallEdgeDistance.x, wallEdgeDistance.y);
+    const float wallInterior = smoothstep(0.010, 0.034, wallNearestEdge);
+    const float wallBevel = smoothstep(0.010, 0.020, wallNearestEdge) *
+        (1.0 - smoothstep(0.020, 0.052, wallNearestEdge));
     const float wallVariation = lerp(
-        0.91,
-        1.08,
+        0.90,
+        1.09,
         StageHash21(floor(wallCoordinates) + 7.3));
-    float3 wallColor = float3(0.030, 0.046, 0.059) *
-        wallVariation * lerp(0.56, 1.0, wallInterior);
+    const float wallCloud = 0.965 + 0.035 * sin(
+        wallU * 1.73 + worldPosition.y * 0.61);
+    float3 wallColor = float3(0.047, 0.058, 0.065) *
+        wallVariation * wallCloud * lerp(0.40, 1.0, wallInterior);
+    wallColor += float3(0.004, 0.010, 0.014) * wallBevel;
 
     const float authoredLuminance = dot(
         authoredColor,
@@ -197,7 +208,7 @@ float3 StageArchitecturalAlbedo(
     const float3 authoredTint = authoredLuminance > 0.025
         ? min(authoredColor * 0.34, float3(0.12, 0.16, 0.19))
         : wallColor;
-    wallColor = lerp(wallColor, max(wallColor, authoredTint), 0.32);
+    wallColor = lerp(wallColor, max(wallColor, authoredTint), 0.24);
     floorColor = lerp(floorColor, max(floorColor, authoredTint), 0.22);
 
     const float3 ceilingColor = float3(0.010, 0.017, 0.025);
