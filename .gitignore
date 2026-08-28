@@ -1,0 +1,15 @@
+.vs/
+build/
+*.user
+imgui.ini
+
+# Generated shader diagnostics and runtime probes
+*.cso
+*.pre
+.froxel-baseline/
+.greybox-runtime-probe/
+.runtime-baseline/
+
+# Python generator cache
+tools/__pycache__/
+*.py[cod]

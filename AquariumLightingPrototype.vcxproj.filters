@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="01 Platform">
+      <UniqueIdentifier>{8046B589-39BD-4E4E-9108-00EF19B51EF0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="02 Framework">
+      <UniqueIdentifier>{A84B0AD4-C6D2-44F8-9CD4-E28FDE8BBA50}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="02 Framework\Object Classes">
+      <UniqueIdentifier>{817B7E88-C389-43EF-A9F1-17D9A1BED102}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="03 Scenes">
+      <UniqueIdentifier>{E1A8B9F0-F53B-457C-A552-03F9C999F188}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="04 Rendering">
+      <UniqueIdentifier>{05238B26-6A9F-4386-96D9-9CF6ED0E9094}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="05 Shaders">
+      <UniqueIdentifier>{64D76DD5-E094-483A-B5A4-D443680B9B11}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="06 Models">
+      <UniqueIdentifier>{51898002-8B3F-4D04-A4DB-3167266A82EE}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="06 Models\Concept Art">
+      <UniqueIdentifier>{38F4D889-5C92-43DD-9CD7-BF99DB4C5A70}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="07 Third Party">
+      <UniqueIdentifier>{597911C6-3062-49AC-8A37-755EF3877B0B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="08 Documents">
+      <UniqueIdentifier>{F027755A-66B1-4E6C-965B-E1E4A708BE6C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="09 Tools">
+      <UniqueIdentifier>{771B23C8-4097-4B36-B4BB-A0790B15E936}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="04 Rendering\Lighting">
+      <UniqueIdentifier>{B512F514-34E8-4FF7-A34B-CE84F195EB0A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="10 ImGui">
+      <UniqueIdentifier>{F6864046-0BFC-44F8-BF5E-42DCC6334CE7}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.cpp">
+      <Filter>01 Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="src\D3D11App.cpp">
+      <Filter>01 Platform</Filter>
+    </ClCompile>
+    <ClCompile Include="src\framework\input.cpp">
+      <Filter>02 Framework</Filter>
+    </ClCompile>
+    <ClCompile Include="src\framework\manager.cpp">
+      <Filter>02 Framework</Filter>
+    </ClCompile>
+    <ClCompile Include="src\framework\renderer.cpp">
+      <Filter>02 Framework</Filter>
+    </ClCompile>
+    <ClCompile Include="src\framework\gameObject.cpp">
+      <Filter>02 Framework\Object Classes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\framework\ObjectWorld.cpp">
+      <Filter>02 Framework\Object Classes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\scenes\AquariumScene.cpp">
+      <Filter>03 Scenes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AquariumRenderer.cpp">
+      <Filter>04 Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="src\JellyfishRenderer.cpp">
+      <Filter>04 Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="src\StageModel.cpp">
+      <Filter>04 Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imgui\LightingEditor.cpp"><Filter>10 ImGui</Filter></ClCompile>
+    <ClCompile Include="third_party\imgui\imgui.cpp"><Filter>07 Third Party</Filter></ClCompile>
+    <ClCompile Include="third_party\imgui\imgui_draw.cpp"><Filter>07 Third Party</Filter></ClCompile>
+    <ClCompile Include="third_party\imgui\imgui_tables.cpp"><Filter>07 Third Party</Filter></ClCompile>
+    <ClCompile Include="third_party\imgui\imgui_widgets.cpp"><Filter>07 Third Party</Filter></ClCompile>
+    <ClCompile Include="third_party\imgui\imgui_impl_dx11.cpp"><Filter>07 Third Party</Filter></ClCompile>
+    <ClCompile Include="third_party\imgui\imgui_impl_win32.cpp"><Filter>07 Third Party</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\main.h">
+      <Filter>01 Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="src\D3D11App.h">
+      <Filter>01 Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imgui\LightingEditor.h"><Filter>10 ImGui</Filter></ClInclude>
+    <ClInclude Include="src\lighting\LocalLight.h"><Filter>04 Rendering\Lighting</Filter></ClInclude>
+    <ClInclude Include="third_party\imgui\imgui.h"><Filter>07 Third Party</Filter></ClInclude>
+    <ClInclude Include="third_party\imgui\imgui_internal.h"><Filter>07 Third Party</Filter></ClInclude>
+    <ClInclude Include="third_party\imgui\imgui_impl_dx11.h"><Filter>07 Third Party</Filter></ClInclude>
+    <ClInclude Include="third_party\imgui\imgui_impl_win32.h"><Filter>07 Third Party</Filter></ClInclude>
+    <ClInclude Include="src\framework\FrameContext.h">
+      <Filter>02 Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="src\framework\input.h">
+      <Filter>02 Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="src\framework\manager.h">
+      <Filter>02 Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="src\framework\renderer.h">
+      <Filter>02 Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="src\framework\RenderContext.h">
+      <Filter>02 Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="src\framework\scene.h">
+      <Filter>02 Framework</Filter>
+    </ClInclude>
+    <ClInclude Include="src\framework\component.h">
+      <Filter>02 Framework\Object Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\framework\gameObject.h">
+      <Filter>02 Framework\Object Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\framework\ObjectWorld.h">
+      <Filter>02 Framework\Object Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\scenes\AquariumScene.h">
+      <Filter>03 Scenes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AquariumRenderer.h">
+      <Filter>04 Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="src\JellyfishRenderer.h">
+      <Filter>04 Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="src\StageModel.h">
+      <Filter>04 Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\cgltf\cgltf.h">
+      <Filter>07 Third Party</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\AquariumFroxel.hlsl">
+      <Filter>05 Shaders</Filter>
+    </None>
+    <None Include="shaders\AquariumPrototype.hlsl">
+      <Filter>05 Shaders</Filter>
+    </None>
+    <None Include="shaders\Stage.hlsl">
+      <Filter>05 Shaders</Filter>
+    </None>
+    <None Include="shaders\Jellyfish.hlsl">
+      <Filter>05 Shaders</Filter>
+    </None>
+    <None Include="model\map.glb">
+      <Filter>06 Models</Filter>
+    </None>
+    <None Include="model\aquarium_greybox.glb">
+      <Filter>06 Models</Filter>
+    </None>
+    <None Include="model\aquarium_route_01_02.glb">
+      <Filter>06 Models</Filter>
+    </None>
+    <None Include="model\aquarium_underwater_arch.glb">
+      <Filter>06 Models</Filter>
+    </None>
+    <None Include="concepts\aquarium-floorplan-concept.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-floorplan-v2.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-floorplan-v3.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-floorplan-v4.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-floorplan-v5.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-area-detail-v1.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-greybox-plan.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-greybox-isometric.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-plan.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-isometric.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-runtime.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-tank-lighting.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-simple-water.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-box-water.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-jelly-columns.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-cylinder-volume.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-cylinder-volume-smooth.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-jellyfish-final.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\aquarium-route-01-02-jellyfish-49.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\jellyfish-reverse-mrt-fixed.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\underwater-arch-layout.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\underwater-arch-runtime.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="concepts\underwater-arch-runtime-deep.png">
+      <Filter>06 Models\Concept Art</Filter>
+    </None>
+    <None Include="third_party\cgltf\LICENSE">
+      <Filter>07 Third Party</Filter>
+    </None>
+    <None Include="FRAMEWORK_ARCHITECTURE.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="GLASS_VIEW_IMPLEMENTATION.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="PORTFOLIO_TECHNICAL_NOTES.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="REAL_AQUARIUM_REFERENCE_NOTES.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="REAL_AQUARIUM_REFERENCE_NOTES_V2.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="README.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="STAGE_IMPORT.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="GREYBOX_MODELING.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="JELLYFISH_VOLUME_IMPLEMENTATION.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="JELLYFISH_RENDERING_IMPLEMENTATION.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="AQUARIUM_LAYOUT_V2.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="AQUARIUM_LAYOUT_V3.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="AQUARIUM_LAYOUT_V4.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="AQUARIUM_LAYOUT_V5.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="AREA_FLOW_DETAIL_V1.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="AREA_FLOW_DETAIL_V2.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="EVENT_FLOW_V3.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="EVENT_FLOW_V4.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="EVENT_FLOW_V5.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="EVENT_FLOW_V6.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="GAMEPLAY_GIMMICK_PLAN_V1.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="GAMEPLAY_GIMMICK_PLAN_V2.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="shaders\lighting\LocalLighting.hlsli"><Filter>05 Shaders</Filter></None>
+    <None Include="third_party\imgui\LICENSE.txt"><Filter>07 Third Party</Filter></None>
+    <None Include="tools\generate_aquarium_greybox.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_route_01_02.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_underwater_arch.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_aquarium_floorplan_v2.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_aquarium_floorplan_v3.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_aquarium_floorplan_v4.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_aquarium_floorplan_v5.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_aquarium_area_detail_v1.py">
+      <Filter>09 Tools</Filter>
+    </None>
+  </ItemGroup>
+</Project>

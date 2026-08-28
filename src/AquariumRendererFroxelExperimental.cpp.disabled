@@ -1,0 +1,919 @@
+#include "AquariumRenderer.h"
+
+#include <d3dcompiler.h>
+#include <DirectXMath.h>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace
+{
+Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(
+    const std::filesystem::path& path,
+    const char* entryPoint,
+    const char* profile,
+    const D3D_SHADER_MACRO* defines = nullptr)
+{
+    UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
+#if defined(_DEBUG)
+    flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_OPTIMIZATION_LEVEL1;
+#else
+    flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+#endif
+
+    Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
+    Microsoft::WRL::ComPtr<ID3DBlob> errors;
+    const HRESULT hr = D3DCompileFromFile(
+        path.c_str(),
+        defines,
+        D3D_COMPILE_STANDARD_FILE_INCLUDE,
+        entryPoint,
+        profile,
+        flags,
+        0,
+        bytecode.GetAddressOf(),
+        errors.GetAddressOf());
+
+    if (FAILED(hr))
+    {
+        std::string message = "Shader compilation failed: ";
+        message += path.string();
+        if (errors)
+        {
+            message += "\n";
+            message.append(
+                static_cast<const char*>(errors->GetBufferPointer()),
+                errors->GetBufferSize());
+        }
+        throw std::runtime_error(message);
+    }
+
+    return bytecode;
+}
+
+void ThrowIfFailed(HRESULT hr, const char* operation)
+{
+    if (FAILED(hr))
+    {
+        throw std::runtime_error(std::string(operation) + " failed.");
+    }
+}
+
+#if defined(_DEBUG)
+void ThrowOnD3D11Warnings(ID3D11Device* device, const char* stage)
+{
+    Microsoft::WRL::ComPtr<ID3D11InfoQueue> infoQueue;
+    if (FAILED(device->QueryInterface(IID_PPV_ARGS(infoQueue.GetAddressOf()))))
+    {
+        return;
+    }
+
+    const UINT64 messageCount = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
+    std::string diagnostics;
+    for (UINT64 index = 0; index < messageCount; ++index)
+    {
+        SIZE_T messageLength = 0;
+        infoQueue->GetMessage(index, nullptr, &messageLength);
+        std::vector<std::uint8_t> storage(messageLength);
+        auto* message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
+        if (SUCCEEDED(infoQueue->GetMessage(index, message, &messageLength)) &&
+            message->Severity <= D3D11_MESSAGE_SEVERITY_WARNING)
+        {
+            diagnostics.append(message->pDescription, message->DescriptionByteLength);
+            diagnostics += "\n";
+        }
+    }
+    infoQueue->ClearStoredMessages();
+
+    if (!diagnostics.empty())
+    {
+        throw std::runtime_error(
+            std::string("D3D11 validation at ") + stage + ":\n" + diagnostics);
+    }
+}
+#endif
+}
+
+void AquariumRenderer::Initialize(ID3D11Device* device, const std::filesystem::path& shaderPath)
+{
+    const D3D_SHADER_MACRO injectionDefines[] = {
+        {"AQUARIUM_FROXEL_STAGE", "1"},
+        {"AQUARIUM_FROXEL_COMPUTE", "1"},
+        {"AQUARIUM_FROXEL_INJECTION", "1"},
+        {nullptr, nullptr}
+    };
+    const D3D_SHADER_MACRO integrationDefines[] = {
+        {"AQUARIUM_FROXEL_STAGE", "1"},
+        {"AQUARIUM_FROXEL_COMPUTE", "1"},
+        {"AQUARIUM_FROXEL_INTEGRATION", "1"},
+        {nullptr, nullptr}
+    };
+    const auto froxelShaderPath = shaderPath.parent_path() / "AquariumFroxel.hlsl";
+    const auto vertexBytecode = CompileShader(shaderPath, "VSMain", "vs_5_0");
+    const auto shadowVertexBytecode = CompileShader(shaderPath, "VSShadow", "vs_5_0");
+    const auto sceneBytecode = CompileShader(shaderPath, "PSScene", "ps_5_0");
+    const auto volumeBytecode = CompileShader(shaderPath, "PSVolume", "ps_5_0");
+    const auto temporalBytecode = CompileShader(shaderPath, "PSTemporal", "ps_5_0");
+    const auto compositeBytecode = CompileShader(shaderPath, "PSComposite", "ps_5_0");
+    const auto froxelInjectionBytecode = CompileShader(
+        froxelShaderPath, "CSInjectFroxel", "cs_5_0", injectionDefines);
+    const auto froxelIntegrationBytecode = CompileShader(
+        froxelShaderPath, "CSIntegrateFroxel", "cs_5_0", integrationDefines);
+
+    ThrowIfFailed(
+        device->CreateVertexShader(
+            vertexBytecode->GetBufferPointer(),
+            vertexBytecode->GetBufferSize(),
+            nullptr,
+            vertexShader_.GetAddressOf()),
+        "CreateVertexShader");
+
+    ThrowIfFailed(
+        device->CreateVertexShader(
+            shadowVertexBytecode->GetBufferPointer(),
+            shadowVertexBytecode->GetBufferSize(),
+            nullptr,
+            shadowVertexShader_.GetAddressOf()),
+        "CreateVertexShader (shadow)");
+
+    const D3D11_INPUT_ELEMENT_DESC shadowInputElement{
+        "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,
+        D3D11_INPUT_PER_VERTEX_DATA, 0
+    };
+    ThrowIfFailed(
+        device->CreateInputLayout(
+            &shadowInputElement,
+            1,
+            shadowVertexBytecode->GetBufferPointer(),
+            shadowVertexBytecode->GetBufferSize(),
+            shadowInputLayout_.GetAddressOf()),
+        "CreateInputLayout (shadow)");
+
+    ThrowIfFailed(
+        device->CreatePixelShader(
+            sceneBytecode->GetBufferPointer(),
+            sceneBytecode->GetBufferSize(),
+            nullptr,
+            scenePixelShader_.GetAddressOf()),
+        "CreatePixelShader (scene)");
+
+    ThrowIfFailed(
+        device->CreatePixelShader(
+            volumeBytecode->GetBufferPointer(),
+            volumeBytecode->GetBufferSize(),
+            nullptr,
+            volumePixelShader_.GetAddressOf()),
+        "CreatePixelShader (volume)");
+
+    ThrowIfFailed(
+        device->CreatePixelShader(
+            temporalBytecode->GetBufferPointer(),
+            temporalBytecode->GetBufferSize(),
+            nullptr,
+            temporalPixelShader_.GetAddressOf()),
+        "CreatePixelShader (temporal)");
+
+    ThrowIfFailed(
+        device->CreatePixelShader(
+            compositeBytecode->GetBufferPointer(),
+            compositeBytecode->GetBufferSize(),
+            nullptr,
+            compositePixelShader_.GetAddressOf()),
+        "CreatePixelShader (composite)");
+
+    ThrowIfFailed(
+        device->CreateComputeShader(
+            froxelInjectionBytecode->GetBufferPointer(),
+            froxelInjectionBytecode->GetBufferSize(),
+            nullptr,
+            froxelInjectionComputeShader_.GetAddressOf()),
+        "CreateComputeShader (froxel injection)");
+    ThrowIfFailed(
+        device->CreateComputeShader(
+            froxelIntegrationBytecode->GetBufferPointer(),
+            froxelIntegrationBytecode->GetBufferSize(),
+            nullptr,
+            froxelIntegrationComputeShader_.GetAddressOf()),
+        "CreateComputeShader (froxel integration)");
+
+    D3D11_BUFFER_DESC bufferDesc{};
+    bufferDesc.ByteWidth = sizeof(FrameConstants);
+    bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
+    bufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+    ThrowIfFailed(
+        device->CreateBuffer(&bufferDesc, nullptr, frameConstantBuffer_.GetAddressOf()),
+        "CreateBuffer");
+
+    bufferDesc.ByteWidth = sizeof(ShadowConstants);
+    ThrowIfFailed(
+        device->CreateBuffer(&bufferDesc, nullptr, shadowConstantBuffer_.GetAddressOf()),
+        "CreateBuffer (shadow constants)");
+
+    bufferDesc.ByteWidth = sizeof(FroxelConstants);
+    ThrowIfFailed(
+        device->CreateBuffer(
+            &bufferDesc,
+            nullptr,
+            froxelConstantBuffer_.GetAddressOf()),
+        "CreateBuffer (froxel constants)");
+
+    CreateStaticResources(device);
+}
+
+void AquariumRenderer::Render(
+    ID3D11DeviceContext* context,
+    ID3D11RenderTargetView* target,
+    UINT width,
+    UINT height,
+    float time,
+    float deltaTime,
+    const AquariumSettings& settings)
+{
+    Microsoft::WRL::ComPtr<ID3D11Device> device;
+    context->GetDevice(device.GetAddressOf());
+    EnsureSizeResources(device.Get(), width, height);
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    ThrowIfFailed(
+        context->Map(frameConstantBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
+        "Map");
+
+    auto* constants = static_cast<FrameConstants*>(mapped.pData);
+    *constants = {
+        time,
+        deltaTime,
+        static_cast<float>(width),
+        static_cast<float>(height),
+        settings.cameraYaw,
+        settings.cameraPitch,
+        settings.causticsStrength,
+        settings.volumeStrength,
+        settings.exposure,
+        settings.waterClarity,
+        settings.anisotropy,
+        settings.historyWeight,
+        previousCameraYaw_,
+        previousCameraPitch_,
+        historyValid_ ? 1.0f : 0.0f,
+        static_cast<float>(frameIndex_)
+    };
+    context->Unmap(frameConstantBuffer_.Get(), 0);
+
+    constexpr float froxelNearDistance = 0.08f;
+    constexpr float froxelFarDistance = 15.0f;
+    ThrowIfFailed(
+        context->Map(
+            froxelConstantBuffer_.Get(),
+            0,
+            D3D11_MAP_WRITE_DISCARD,
+            0,
+            &mapped),
+        "Map (froxel constants)");
+    *static_cast<FroxelConstants*>(mapped.pData) = {
+        froxelWidth_,
+        froxelHeight_,
+        kFroxelDepth,
+        froxelNearDistance,
+        froxelFarDistance,
+        std::log(froxelFarDistance / froxelNearDistance),
+        {0.0f, 0.0f}
+    };
+    context->Unmap(froxelConstantBuffer_.Get(), 0);
+
+    using namespace DirectX;
+    const std::array<XMVECTOR, 3> lightOrigins{
+        XMVectorSet(-2.9f, 3.5f, 1.4f, 1.0f),
+        XMVectorSet(0.2f, 3.5f, 2.6f, 1.0f),
+        XMVectorSet(3.35f, 3.5f, 3.9f, 1.0f)
+    };
+    const std::array<XMVECTOR, 3> lightAxes{
+        XMVector3Normalize(XMVectorSet(0.14f, -1.0f, 0.10f, 0.0f)),
+        XMVector3Normalize(XMVectorSet(-0.05f, -1.0f, 0.02f, 0.0f)),
+        XMVector3Normalize(XMVectorSet(-0.16f, -1.0f, -0.08f, 0.0f))
+    };
+
+    ShadowConstants shadowConstants{};
+    for (UINT lightIndex = 0; lightIndex < 3; ++lightIndex)
+    {
+        const float axisY = XMVectorGetY(lightAxes[lightIndex]);
+        float surfaceDistance =
+            (2.65f - XMVectorGetY(lightOrigins[lightIndex])) / axisY;
+        XMVECTOR surfacePoint =
+            lightOrigins[lightIndex] + lightAxes[lightIndex] * surfaceDistance;
+
+        const float surfaceX = XMVectorGetX(surfacePoint);
+        const float surfaceZ = XMVectorGetZ(surfacePoint);
+        const float waveA = surfaceX * 1.4f + time * 0.63f;
+        const float waveB =
+            (surfaceX * 0.7f + surfaceZ * 1.1f) * 2.2f -
+            time * 0.48f;
+        const float waveC = surfaceZ * 1.7f - time * 0.54f;
+        const float waveD =
+            (-surfaceX * 1.2f + surfaceZ * 0.6f) * 2.5f +
+            time * 0.39f;
+        const float surfaceHeight =
+            2.65f +
+            std::sin(waveA) * 0.055f +
+            std::sin(waveB) * 0.028f +
+            std::sin(waveC) * 0.045f +
+            std::sin(waveD) * 0.022f;
+        surfaceDistance =
+            (surfaceHeight - XMVectorGetY(lightOrigins[lightIndex])) / axisY;
+        surfacePoint =
+            lightOrigins[lightIndex] + lightAxes[lightIndex] * surfaceDistance;
+
+        const float derivativeX =
+            std::cos(waveA) * 0.055f * 1.4f +
+            std::cos(waveB) * 0.028f * 0.7f * 2.2f +
+            std::cos(waveD) * 0.022f * -1.2f * 2.5f;
+        const float derivativeZ =
+            std::cos(waveB) * 0.028f * 1.1f * 2.2f +
+            std::cos(waveC) * 0.045f * 1.7f +
+            std::cos(waveD) * 0.022f * 0.6f * 2.5f;
+        const XMVECTOR surfaceNormal = XMVector3Normalize(
+            XMVectorSet(-derivativeX, 1.0f, -derivativeZ, 0.0f));
+        const XMVECTOR refractedAxis = XMVector3Normalize(
+            XMVector3Refract(
+                lightAxes[lightIndex],
+                surfaceNormal,
+                1.0f / 1.333f));
+        const float focus =
+            std::clamp(
+                (1.0f - XMVectorGetY(surfaceNormal)) * 9.0f,
+                0.0f,
+                1.0f);
+
+        XMStoreFloat4(
+            &shadowConstants.lightSurfaceOrigin[lightIndex],
+            XMVectorSetW(surfacePoint, 1.0f));
+        XMStoreFloat4(
+            &shadowConstants.lightRefractedAxis[lightIndex],
+            XMVectorSetW(refractedAxis, focus));
+
+        const XMMATRIX view = XMMatrixLookToLH(
+            surfacePoint,
+            refractedAxis,
+            XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+        const XMMATRIX projection = XMMatrixPerspectiveFovLH(
+            XMConvertToRadians(34.0f), 1.0f, 0.03f, 15.0f);
+        XMStoreFloat4x4(
+            &shadowConstants.lightViewProjection[lightIndex],
+            view * projection);
+    }
+
+    // Pass 0: render actual occluder meshes into one shadow-map slice per light.
+    ID3D11ShaderResourceView* shadowNullView = nullptr;
+    context->PSSetShaderResources(5, 1, &shadowNullView);
+    const D3D11_VIEWPORT shadowViewport{
+        0.0f, 0.0f, 512.0f, 512.0f, 0.0f, 1.0f
+    };
+    context->RSSetViewports(1, &shadowViewport);
+    context->RSSetState(shadowRasterizerState_.Get());
+    context->IASetInputLayout(shadowInputLayout_.Get());
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    const UINT shadowStride = sizeof(DirectX::XMFLOAT3);
+    const UINT shadowOffset = 0;
+    ID3D11Buffer* shadowVertexBuffer = shadowVertexBuffer_.Get();
+    context->IASetVertexBuffers(0, 1, &shadowVertexBuffer, &shadowStride, &shadowOffset);
+    context->IASetIndexBuffer(shadowIndexBuffer_.Get(), DXGI_FORMAT_R32_UINT, 0);
+    context->VSSetShader(shadowVertexShader_.Get(), nullptr, 0);
+    ID3D11Buffer* frameBuffer = frameConstantBuffer_.Get();
+    ID3D11Buffer* shadowBuffer = shadowConstantBuffer_.Get();
+    context->VSSetConstantBuffers(0, 1, &frameBuffer);
+    context->VSSetConstantBuffers(1, 1, &shadowBuffer);
+    context->PSSetShader(nullptr, nullptr, 0);
+
+    for (UINT lightIndex = 0; lightIndex < 3; ++lightIndex)
+    {
+        shadowConstants.currentLightIndex = static_cast<float>(lightIndex);
+        ThrowIfFailed(
+            context->Map(shadowConstantBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
+            "Map (shadow constants)");
+        *static_cast<ShadowConstants*>(mapped.pData) = shadowConstants;
+        context->Unmap(shadowConstantBuffer_.Get(), 0);
+        context->ClearDepthStencilView(
+            shadowDepthViews_[lightIndex].Get(),
+            D3D11_CLEAR_DEPTH,
+            1.0f,
+            0);
+        context->OMSetRenderTargets(0, nullptr, shadowDepthViews_[lightIndex].Get());
+        context->DrawIndexedInstanced(shadowIndexCount_, 3, 0, 0, 0);
+    }
+    context->OMSetRenderTargets(0, nullptr, nullptr);
+    context->RSSetState(nullptr);
+
+    const D3D11_VIEWPORT fullViewport{
+        0.0f,
+        0.0f,
+        static_cast<float>(width),
+        static_cast<float>(height),
+        0.0f,
+        1.0f
+    };
+
+    context->IASetInputLayout(nullptr);
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context->VSSetShader(vertexShader_.Get(), nullptr, 0);
+
+    ID3D11Buffer* constantBuffer = frameConstantBuffer_.Get();
+    context->PSSetConstantBuffers(0, 1, &constantBuffer);
+    context->PSSetConstantBuffers(1, 1, &shadowBuffer);
+
+    // Pass 1: full-resolution HDR scene and analytic linear depth.
+    context->RSSetViewports(1, &fullViewport);
+    ID3D11RenderTargetView* sceneTargets[] = {
+        sceneColorTarget_.Get(),
+        sceneDepthTarget_.Get(),
+        motionTarget_.Get()
+    };
+    context->OMSetRenderTargets(3, sceneTargets, nullptr);
+    context->PSSetShader(scenePixelShader_.Get(), nullptr, 0);
+    context->Draw(3, 0);
+#if defined(_DEBUG)
+    if (frameIndex_ == 0)
+    {
+        ThrowOnD3D11Warnings(device.Get(), "scene pass");
+    }
+#endif
+
+    // Pass 2: inject lights and participating media into a camera-aligned
+    // froxel grid, then integrate scattering front-to-back along each column.
+    ID3D11RenderTargetView* nullTargets[] = {nullptr, nullptr, nullptr};
+    context->OMSetRenderTargets(3, nullTargets, nullptr);
+
+    ID3D11Buffer* froxelBuffer = froxelConstantBuffer_.Get();
+    ID3D11Buffer* computeConstantBuffers[] = {
+        frameConstantBuffer_.Get(),
+        shadowConstantBuffer_.Get(),
+        froxelConstantBuffer_.Get()
+    };
+    context->CSSetConstantBuffers(0, 3, computeConstantBuffers);
+
+    ID3D11ShaderResourceView* computeInputs[9] = {};
+    computeInputs[0] = noiseTextureView_.Get();
+    computeInputs[5] = shadowTextureView_.Get();
+    context->CSSetShaderResources(0, 9, computeInputs);
+    ID3D11SamplerState* samplers[] = {
+        linearWrapSampler_.Get(),
+        linearClampSampler_.Get(),
+        shadowComparisonSampler_.Get()
+    };
+    context->CSSetSamplers(0, 3, samplers);
+    context->CSSetShader(froxelInjectionComputeShader_.Get(), nullptr, 0);
+    ID3D11UnorderedAccessView* injectionUav = froxelInjectionUav_.Get();
+    context->CSSetUnorderedAccessViews(0, 1, &injectionUav, nullptr);
+    constexpr bool enableExperimentalFroxel = false;
+    if constexpr (enableExperimentalFroxel)
+    {
+        context->Dispatch(
+            (froxelWidth_ + 3) / 4,
+            (froxelHeight_ + 3) / 4,
+            (kFroxelDepth + 3) / 4);
+    }
+
+    ID3D11UnorderedAccessView* nullUav = nullptr;
+    context->CSSetUnorderedAccessViews(0, 1, &nullUav, nullptr);
+    ID3D11ShaderResourceView* nullComputeViews[9] = {};
+    context->CSSetShaderResources(0, 9, nullComputeViews);
+
+    ID3D11ShaderResourceView* injectionView = froxelInjectionView_.Get();
+    context->CSSetShaderResources(7, 1, &injectionView);
+    context->CSSetShader(froxelIntegrationComputeShader_.Get(), nullptr, 0);
+    ID3D11UnorderedAccessView* integratedUav = froxelIntegratedUav_.Get();
+    context->CSSetUnorderedAccessViews(0, 1, &integratedUav, nullptr);
+    if constexpr (enableExperimentalFroxel)
+    {
+        context->Dispatch(
+            (froxelWidth_ + 7) / 8,
+            (froxelHeight_ + 7) / 8,
+            1);
+    }
+    context->CSSetUnorderedAccessViews(0, 1, &nullUav, nullptr);
+    ID3D11ShaderResourceView* nullInjectionView = nullptr;
+    context->CSSetShaderResources(7, 1, &nullInjectionView);
+    context->CSSetShader(nullptr, nullptr, 0);
+#if defined(_DEBUG)
+    if (frameIndex_ == 0)
+    {
+        ThrowOnD3D11Warnings(device.Get(), "froxel compute passes");
+    }
+#endif
+
+    // Pass 3: extract the integrated froxel column at scene depth into the
+    // existing half-resolution temporal pipeline.
+
+    const UINT volumeWidth = (width + 1) / 2;
+    const UINT volumeHeight = (height + 1) / 2;
+    const D3D11_VIEWPORT volumeViewport{
+        0.0f,
+        0.0f,
+        static_cast<float>(volumeWidth),
+        static_cast<float>(volumeHeight),
+        0.0f,
+        1.0f
+    };
+    context->RSSetViewports(1, &volumeViewport);
+    ID3D11RenderTargetView* volumeTarget = volumeTarget_.Get();
+    context->OMSetRenderTargets(1, &volumeTarget, nullptr);
+    context->PSSetShader(volumePixelShader_.Get(), nullptr, 0);
+
+    ID3D11ShaderResourceView* volumeInputs[9] = {};
+    volumeInputs[0] = noiseTextureView_.Get();
+    volumeInputs[2] = sceneDepthView_.Get();
+    volumeInputs[5] = shadowTextureView_.Get();
+    context->PSSetShaderResources(0, 9, volumeInputs);
+    context->PSSetConstantBuffers(2, 1, &froxelBuffer);
+    context->PSSetSamplers(0, 3, samplers);
+    context->Draw(3, 0);
+
+    // Pass 4: temporal reprojection into a ping-pong history buffer.
+    ID3D11ShaderResourceView* nullViews[9] = {};
+    context->PSSetShaderResources(0, 9, nullViews);
+    context->OMSetRenderTargets(0, nullptr, nullptr);
+
+    const UINT historyWriteIndex = 1u - historyReadIndex_;
+    ID3D11RenderTargetView* historyTarget = historyTargets_[historyWriteIndex].Get();
+    context->OMSetRenderTargets(1, &historyTarget, nullptr);
+    context->PSSetShader(temporalPixelShader_.Get(), nullptr, 0);
+    ID3D11ShaderResourceView* temporalInputs[] = {
+        nullptr,
+        nullptr,
+        sceneDepthView_.Get(),
+        volumeView_.Get(),
+        historyViews_[historyReadIndex_].Get(),
+        nullptr,
+        motionView_.Get()
+    };
+    context->PSSetShaderResources(0, 7, temporalInputs);
+    context->Draw(3, 0);
+
+    // Pass 5: depth-aware volume upsample, HDR composite and tone mapping.
+    context->PSSetShaderResources(0, 9, nullViews);
+    context->OMSetRenderTargets(0, nullptr, nullptr);
+    context->RSSetViewports(1, &fullViewport);
+    context->OMSetRenderTargets(1, &target, nullptr);
+    context->PSSetShader(compositePixelShader_.Get(), nullptr, 0);
+    ID3D11ShaderResourceView* compositeInputs[] = {
+        nullptr,
+        sceneColorView_.Get(),
+        sceneDepthView_.Get(),
+        historyViews_[historyWriteIndex].Get()
+    };
+    context->PSSetShaderResources(0, 4, compositeInputs);
+    context->PSSetSamplers(0, 3, samplers);
+    context->Draw(3, 0);
+
+    context->PSSetShaderResources(0, 9, nullViews);
+
+    historyReadIndex_ = historyWriteIndex;
+    historyValid_ = true;
+    previousCameraYaw_ = settings.cameraYaw;
+    previousCameraPitch_ = settings.cameraPitch;
+    ++frameIndex_;
+}
+
+void AquariumRenderer::CreateStaticResources(ID3D11Device* device)
+{
+    constexpr UINT latitudeSegments = 18;
+    constexpr UINT longitudeSegments = 24;
+    std::vector<DirectX::XMFLOAT3> sphereVertices;
+    std::vector<std::uint32_t> sphereIndices;
+    sphereVertices.reserve((latitudeSegments + 1) * (longitudeSegments + 1));
+    for (UINT latitude = 0; latitude <= latitudeSegments; ++latitude)
+    {
+        const float theta = DirectX::XM_PI * static_cast<float>(latitude) / latitudeSegments;
+        for (UINT longitude = 0; longitude <= longitudeSegments; ++longitude)
+        {
+            const float phi = DirectX::XM_2PI * static_cast<float>(longitude) / longitudeSegments;
+            sphereVertices.emplace_back(
+                std::sin(theta) * std::cos(phi),
+                std::cos(theta),
+                std::sin(theta) * std::sin(phi));
+        }
+    }
+    for (UINT latitude = 0; latitude < latitudeSegments; ++latitude)
+    {
+        for (UINT longitude = 0; longitude < longitudeSegments; ++longitude)
+        {
+            const UINT row = longitudeSegments + 1;
+            const UINT a = latitude * row + longitude;
+            const UINT b = a + row;
+            sphereIndices.insert(
+                sphereIndices.end(),
+                {a, b, a + 1, a + 1, b, b + 1});
+        }
+    }
+    shadowIndexCount_ = static_cast<UINT>(sphereIndices.size());
+
+    D3D11_BUFFER_DESC meshBufferDesc{};
+    meshBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    meshBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    meshBufferDesc.ByteWidth = static_cast<UINT>(
+        sphereVertices.size() * sizeof(DirectX::XMFLOAT3));
+    D3D11_SUBRESOURCE_DATA meshInitialData{sphereVertices.data()};
+    ThrowIfFailed(
+        device->CreateBuffer(&meshBufferDesc, &meshInitialData, shadowVertexBuffer_.GetAddressOf()),
+        "CreateBuffer (shadow vertices)");
+    meshBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    meshBufferDesc.ByteWidth = static_cast<UINT>(
+        sphereIndices.size() * sizeof(std::uint32_t));
+    meshInitialData.pSysMem = sphereIndices.data();
+    ThrowIfFailed(
+        device->CreateBuffer(&meshBufferDesc, &meshInitialData, shadowIndexBuffer_.GetAddressOf()),
+        "CreateBuffer (shadow indices)");
+
+    constexpr UINT noiseSize = 64;
+    std::vector<std::uint8_t> noiseData(noiseSize * noiseSize * noiseSize);
+
+    auto hash = [](std::uint32_t value)
+    {
+        value ^= value >> 16;
+        value *= 0x7feb352du;
+        value ^= value >> 15;
+        value *= 0x846ca68bu;
+        value ^= value >> 16;
+        return value;
+    };
+
+    for (UINT z = 0; z < noiseSize; ++z)
+    {
+        for (UINT y = 0; y < noiseSize; ++y)
+        {
+            for (UINT x = 0; x < noiseSize; ++x)
+            {
+                const std::uint32_t seed =
+                    x + y * noiseSize + z * noiseSize * noiseSize;
+                noiseData[seed] = static_cast<std::uint8_t>(hash(seed) & 0xffu);
+            }
+        }
+    }
+
+    D3D11_TEXTURE3D_DESC noiseDesc{};
+    noiseDesc.Width = noiseSize;
+    noiseDesc.Height = noiseSize;
+    noiseDesc.Depth = noiseSize;
+    noiseDesc.MipLevels = 1;
+    noiseDesc.Format = DXGI_FORMAT_R8_UNORM;
+    noiseDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    noiseDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA noiseInitialData{};
+    noiseInitialData.pSysMem = noiseData.data();
+    noiseInitialData.SysMemPitch = noiseSize;
+    noiseInitialData.SysMemSlicePitch = noiseSize * noiseSize;
+
+    ThrowIfFailed(
+        device->CreateTexture3D(&noiseDesc, &noiseInitialData, noiseTexture_.GetAddressOf()),
+        "CreateTexture3D (noise)");
+    ThrowIfFailed(
+        device->CreateShaderResourceView(noiseTexture_.Get(), nullptr, noiseTextureView_.GetAddressOf()),
+        "CreateShaderResourceView (noise)");
+
+    D3D11_SAMPLER_DESC samplerDesc{};
+    samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+    ThrowIfFailed(
+        device->CreateSamplerState(&samplerDesc, linearWrapSampler_.GetAddressOf()),
+        "CreateSamplerState (wrap)");
+
+    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    ThrowIfFailed(
+        device->CreateSamplerState(&samplerDesc, linearClampSampler_.GetAddressOf()),
+        "CreateSamplerState (clamp)");
+
+    D3D11_SAMPLER_DESC shadowSamplerDesc{};
+    shadowSamplerDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
+    shadowSamplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+    shadowSamplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+    shadowSamplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+    shadowSamplerDesc.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
+    shadowSamplerDesc.BorderColor[0] = 1.0f;
+    shadowSamplerDesc.BorderColor[1] = 1.0f;
+    shadowSamplerDesc.BorderColor[2] = 1.0f;
+    shadowSamplerDesc.BorderColor[3] = 1.0f;
+    shadowSamplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+    ThrowIfFailed(
+        device->CreateSamplerState(
+            &shadowSamplerDesc,
+            shadowComparisonSampler_.GetAddressOf()),
+        "CreateSamplerState (shadow comparison)");
+
+    D3D11_RASTERIZER_DESC rasterizerDesc{};
+    rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+    rasterizerDesc.CullMode = D3D11_CULL_NONE;
+    rasterizerDesc.DepthClipEnable = TRUE;
+    rasterizerDesc.DepthBias = 180;
+    rasterizerDesc.SlopeScaledDepthBias = 1.5f;
+    ThrowIfFailed(
+        device->CreateRasterizerState(&rasterizerDesc, shadowRasterizerState_.GetAddressOf()),
+        "CreateRasterizerState (shadow)");
+
+    D3D11_TEXTURE2D_DESC shadowTextureDesc{};
+    shadowTextureDesc.Width = 512;
+    shadowTextureDesc.Height = 512;
+    shadowTextureDesc.MipLevels = 1;
+    shadowTextureDesc.ArraySize = 3;
+    shadowTextureDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+    shadowTextureDesc.SampleDesc.Count = 1;
+    shadowTextureDesc.Usage = D3D11_USAGE_DEFAULT;
+    shadowTextureDesc.BindFlags =
+        D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
+    ThrowIfFailed(
+        device->CreateTexture2D(&shadowTextureDesc, nullptr, shadowTexture_.GetAddressOf()),
+        "CreateTexture2D (shadow array)");
+
+    for (UINT lightIndex = 0; lightIndex < 3; ++lightIndex)
+    {
+        D3D11_DEPTH_STENCIL_VIEW_DESC depthViewDesc{};
+        depthViewDesc.Format = DXGI_FORMAT_D32_FLOAT;
+        depthViewDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
+        depthViewDesc.Texture2DArray.MipSlice = 0;
+        depthViewDesc.Texture2DArray.FirstArraySlice = lightIndex;
+        depthViewDesc.Texture2DArray.ArraySize = 1;
+        ThrowIfFailed(
+            device->CreateDepthStencilView(
+                shadowTexture_.Get(),
+                &depthViewDesc,
+                shadowDepthViews_[lightIndex].GetAddressOf()),
+            "CreateDepthStencilView (shadow slice)");
+    }
+    D3D11_SHADER_RESOURCE_VIEW_DESC shadowViewDesc{};
+    shadowViewDesc.Format = DXGI_FORMAT_R32_FLOAT;
+    shadowViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+    shadowViewDesc.Texture2DArray.MostDetailedMip = 0;
+    shadowViewDesc.Texture2DArray.MipLevels = 1;
+    shadowViewDesc.Texture2DArray.FirstArraySlice = 0;
+    shadowViewDesc.Texture2DArray.ArraySize = 3;
+    ThrowIfFailed(
+        device->CreateShaderResourceView(
+            shadowTexture_.Get(),
+            &shadowViewDesc,
+            shadowTextureView_.GetAddressOf()),
+        "CreateShaderResourceView (shadow array)");
+}
+
+void AquariumRenderer::EnsureSizeResources(ID3D11Device* device, UINT width, UINT height)
+{
+    if (resourceWidth_ == width && resourceHeight_ == height)
+    {
+        return;
+    }
+
+    sceneColorTexture_.Reset();
+    sceneColorTarget_.Reset();
+    sceneColorView_.Reset();
+    sceneDepthTexture_.Reset();
+    sceneDepthTarget_.Reset();
+    sceneDepthView_.Reset();
+    motionTexture_.Reset();
+    motionTarget_.Reset();
+    motionView_.Reset();
+    froxelInjectionTexture_.Reset();
+    froxelInjectionView_.Reset();
+    froxelInjectionUav_.Reset();
+    froxelIntegratedTexture_.Reset();
+    froxelIntegratedView_.Reset();
+    froxelIntegratedUav_.Reset();
+    volumeTexture_.Reset();
+    volumeTarget_.Reset();
+    volumeView_.Reset();
+    for (UINT index = 0; index < 2; ++index)
+    {
+        historyTextures_[index].Reset();
+        historyTargets_[index].Reset();
+        historyViews_[index].Reset();
+    }
+
+    D3D11_TEXTURE2D_DESC textureDesc{};
+    textureDesc.Width = width;
+    textureDesc.Height = height;
+    textureDesc.MipLevels = 1;
+    textureDesc.ArraySize = 1;
+    textureDesc.SampleDesc.Count = 1;
+    textureDesc.Usage = D3D11_USAGE_DEFAULT;
+    textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+    textureDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    ThrowIfFailed(
+        device->CreateTexture2D(&textureDesc, nullptr, sceneColorTexture_.GetAddressOf()),
+        "CreateTexture2D (scene color)");
+    ThrowIfFailed(
+        device->CreateRenderTargetView(sceneColorTexture_.Get(), nullptr, sceneColorTarget_.GetAddressOf()),
+        "CreateRenderTargetView (scene color)");
+    ThrowIfFailed(
+        device->CreateShaderResourceView(sceneColorTexture_.Get(), nullptr, sceneColorView_.GetAddressOf()),
+        "CreateShaderResourceView (scene color)");
+
+    textureDesc.Format = DXGI_FORMAT_R32_FLOAT;
+    ThrowIfFailed(
+        device->CreateTexture2D(&textureDesc, nullptr, sceneDepthTexture_.GetAddressOf()),
+        "CreateTexture2D (scene depth)");
+    ThrowIfFailed(
+        device->CreateRenderTargetView(sceneDepthTexture_.Get(), nullptr, sceneDepthTarget_.GetAddressOf()),
+        "CreateRenderTargetView (scene depth)");
+    ThrowIfFailed(
+        device->CreateShaderResourceView(sceneDepthTexture_.Get(), nullptr, sceneDepthView_.GetAddressOf()),
+        "CreateShaderResourceView (scene depth)");
+
+    textureDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+    ThrowIfFailed(
+        device->CreateTexture2D(&textureDesc, nullptr, motionTexture_.GetAddressOf()),
+        "CreateTexture2D (motion vectors)");
+    ThrowIfFailed(
+        device->CreateRenderTargetView(motionTexture_.Get(), nullptr, motionTarget_.GetAddressOf()),
+        "CreateRenderTargetView (motion vectors)");
+    ThrowIfFailed(
+        device->CreateShaderResourceView(motionTexture_.Get(), nullptr, motionView_.GetAddressOf()),
+        "CreateShaderResourceView (motion vectors)");
+
+    froxelWidth_ = (width + 7) / 8;
+    froxelHeight_ = (height + 7) / 8;
+    D3D11_TEXTURE3D_DESC froxelDesc{};
+    froxelDesc.Width = froxelWidth_;
+    froxelDesc.Height = froxelHeight_;
+    froxelDesc.Depth = kFroxelDepth;
+    froxelDesc.MipLevels = 1;
+    froxelDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    froxelDesc.Usage = D3D11_USAGE_DEFAULT;
+    froxelDesc.BindFlags =
+        D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+    ThrowIfFailed(
+        device->CreateTexture3D(
+            &froxelDesc,
+            nullptr,
+            froxelInjectionTexture_.GetAddressOf()),
+        "CreateTexture3D (froxel injection)");
+    ThrowIfFailed(
+        device->CreateShaderResourceView(
+            froxelInjectionTexture_.Get(),
+            nullptr,
+            froxelInjectionView_.GetAddressOf()),
+        "CreateShaderResourceView (froxel injection)");
+    ThrowIfFailed(
+        device->CreateUnorderedAccessView(
+            froxelInjectionTexture_.Get(),
+            nullptr,
+            froxelInjectionUav_.GetAddressOf()),
+        "CreateUnorderedAccessView (froxel injection)");
+
+    ThrowIfFailed(
+        device->CreateTexture3D(
+            &froxelDesc,
+            nullptr,
+            froxelIntegratedTexture_.GetAddressOf()),
+        "CreateTexture3D (froxel integrated)");
+    ThrowIfFailed(
+        device->CreateShaderResourceView(
+            froxelIntegratedTexture_.Get(),
+            nullptr,
+            froxelIntegratedView_.GetAddressOf()),
+        "CreateShaderResourceView (froxel integrated)");
+    ThrowIfFailed(
+        device->CreateUnorderedAccessView(
+            froxelIntegratedTexture_.Get(),
+            nullptr,
+            froxelIntegratedUav_.GetAddressOf()),
+        "CreateUnorderedAccessView (froxel integrated)");
+
+    textureDesc.Width = (width + 1) / 2;
+    textureDesc.Height = (height + 1) / 2;
+    textureDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    ThrowIfFailed(
+        device->CreateTexture2D(&textureDesc, nullptr, volumeTexture_.GetAddressOf()),
+        "CreateTexture2D (volume)");
+    ThrowIfFailed(
+        device->CreateRenderTargetView(volumeTexture_.Get(), nullptr, volumeTarget_.GetAddressOf()),
+        "CreateRenderTargetView (volume)");
+    ThrowIfFailed(
+        device->CreateShaderResourceView(volumeTexture_.Get(), nullptr, volumeView_.GetAddressOf()),
+        "CreateShaderResourceView (volume)");
+
+    for (UINT index = 0; index < 2; ++index)
+    {
+        ThrowIfFailed(
+            device->CreateTexture2D(&textureDesc, nullptr, historyTextures_[index].GetAddressOf()),
+            "CreateTexture2D (volume history)");
+        ThrowIfFailed(
+            device->CreateRenderTargetView(historyTextures_[index].Get(), nullptr, historyTargets_[index].GetAddressOf()),
+            "CreateRenderTargetView (volume history)");
+        ThrowIfFailed(
+            device->CreateShaderResourceView(historyTextures_[index].Get(), nullptr, historyViews_[index].GetAddressOf()),
+            "CreateShaderResourceView (volume history)");
+    }
+
+    resourceWidth_ = width;
+    resourceHeight_ = height;
+    historyReadIndex_ = 0;
+    frameIndex_ = 0;
+    historyValid_ = false;
+}
