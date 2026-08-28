@@ -12,16 +12,18 @@ from generate_watatsumi_hall import ramp_point
 
 
 SAMPLES = 2880
-RAMP_WIDTH = 4.20
+RAMP_WIDTH = 5.40
 PLAYER_RADIUS = 0.34
+WALL_SAFETY_INSET = 0.12
 EYE_HEIGHT = 1.62
 PLAYER_HEIGHT = 1.82
-WALL_HEIGHT = 2.20
-ARCH_RISE = 3.00
-PORTAL_WIDTH = 5.00
-LOWER_PORTAL_CLEAR_HEIGHT = 6.16
-UPPER_PORTAL_BOTTOM = 11.95
-HALL_CEILING_BOTTOM = 18.40
+WALL_HEIGHT = 2.60
+ARCH_RISE = 3.50
+PORTAL_WIDTH = 6.20
+LOWER_PORTAL_CLEAR_HEIGHT = 7.35
+UPPER_PORTAL_BOTTOM = 11.70
+HALL_CEILING_BOTTOM = 19.60
+STAGE_FLOOR_OFFSET = -2.25
 
 
 def main() -> None:
@@ -48,7 +50,9 @@ def main() -> None:
     # Simulate a player trying to push sideways through the wall along the
     # complete route. Runtime collision permits only this centre offset after
     # subtracting the capsule radius from the modeled half-width.
-    allowed_center_offset = RAMP_WIDTH * 0.5 - PLAYER_RADIUS
+    allowed_center_offset = (
+        RAMP_WIDTH * 0.5 - PLAYER_RADIUS - WALL_SAFETY_INSET
+    )
     attempted_offset = allowed_center_offset + 1.0
     resolved_offset = min(attempted_offset, allowed_center_offset)
 
@@ -87,7 +91,7 @@ def main() -> None:
     assert maximum_step < 0.01, maximum_step
     assert maximum_grade < 0.20, maximum_grade
     assert usable_width >= 2.60, usable_width
-    assert head_clearance >= 2.20, head_clearance
+    assert head_clearance >= 4.0, head_clearance
     assert PORTAL_WIDTH >= RAMP_WIDTH + 0.70, PORTAL_WIDTH
     assert LOWER_PORTAL_CLEAR_HEIGHT >= points[round(SAMPLES * 0.06)][1] + crown_height
     assert UPPER_PORTAL_BOTTOM <= points[round(SAMPLES * 0.97)][1]
@@ -97,6 +101,7 @@ def main() -> None:
     assert abs(points[-1][1] - 12.40) < 1.0e-4
     assert abs(rendered_points[0][2] + 17.8) < 1.0e-4
     assert abs(rendered_points[-1][2] - 17.8) < 1.0e-4
+    assert abs((rendered_points[0][1] + STAGE_FLOOR_OFFSET) - (-2.07)) < 1.0e-4
     assert reached_t >= 0.999
 
     print({
@@ -117,6 +122,7 @@ def main() -> None:
         "simulation_reached_t": round(reached_t, 4),
         "simulation_max_wall_offset_m": round(maximum_resolved_offset, 3),
         "eye_height_m": EYE_HEIGHT,
+        "stage_floor_offset_m": STAGE_FLOOR_OFFSET,
         "rendered_lower_entrance_z_m": rendered_points[0][2],
         "rendered_upper_exit_z_m": rendered_points[-1][2],
     })

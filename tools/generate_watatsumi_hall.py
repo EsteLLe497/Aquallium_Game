@@ -99,9 +99,13 @@ TANK_DEPTH = 14.70
 TANK_WATER_BOTTOM = 0.35
 TANK_WATER_SURFACE = 12.45
 UPPER_FLOOR_Y = 12.28
-HALL_CEILING_Y = 18.60
+HALL_CEILING_Y = 19.80
 PORTAL_Z = 17.80
 RAMP_RISE = 12.22
+RAMP_WIDTH = 5.40
+PORTAL_WIDTH = 6.20
+RAMP_WALL_HEIGHT = 2.60
+RAMP_ARCH_RISE = 3.50
 
 
 def ramp_point(t):
@@ -127,9 +131,9 @@ def ramp_point(t):
 
 def ramp_strip(
         segments=144,
-        width=4.2,
-        wall_height=2.2,
-        arch_rise=3.0,
+        width=RAMP_WIDTH,
+        wall_height=RAMP_WALL_HEIGHT,
+        arch_rise=RAMP_ARCH_RISE,
         arch_segments=8):
     left, right = [], []
     for index in range(segments + 1):
@@ -237,9 +241,11 @@ def curved_tank_wall(material, segments=40):
         quad(material, (p0,p1,p2,p3), (normal[0]*inv,0,normal[2]*inv))
 
 
-def arch_portal_collar(center_z, floor_y, x=6.40, width=4.2,
-                       wall_height=2.2, arch_rise=3.0,
-                       outer_width=5.0, top_clearance=5.9, segments=12):
+def arch_portal_collar(center_z, floor_y, x=6.40, width=RAMP_WIDTH,
+                       wall_height=RAMP_WALL_HEIGHT,
+                       arch_rise=RAMP_ARCH_RISE,
+                       outer_width=PORTAL_WIDTH,
+                       top_clearance=7.4, segments=12):
     """Frame the authored opening without duplicating the structural wall."""
     normal = (-1.0, 0.0, 0.0)
     half_width = width * 0.5
@@ -268,9 +274,11 @@ def arch_portal_collar(center_z, floor_y, x=6.40, width=4.2,
 def build():
     # Enlarged two-storey central hall; the exhibit remains the only source.
     box("WatatsumiArchitecture", (5.0,-0.18,0), (66,0.36,48))
-    box("WatatsumiArchitecture", (5.0,9.2,23.85), (66,18.4,0.30))
-    box("WatatsumiArchitecture", (5.0,9.2,-23.85), (66,18.4,0.30))
-    box("WatatsumiArchitecture", (-27.85,9.2,0), (0.30,18.4,48))
+    wall_height = HALL_CEILING_Y - 0.20
+    wall_center_y = wall_height * 0.5
+    box("WatatsumiArchitecture", (5.0,wall_center_y,23.85), (66,wall_height,0.30))
+    box("WatatsumiArchitecture", (5.0,wall_center_y,-23.85), (66,wall_height,0.30))
+    box("WatatsumiArchitecture", (-27.85,wall_center_y,0), (0.30,wall_height,48))
     box("WatatsumiArchitecture", (5.0,HALL_CEILING_Y,0), (66,0.40,48))
 
     # Seal the service voids with non-overlapping solids. The previous 30.6 m
@@ -282,21 +290,26 @@ def build():
     service_fill_size_x = 6.45 - (-27.70)
     for side in (-1.0, 1.0):
         box("WatatsumiArchitecture",
-            (service_fill_center_x,9.1,side*22.0),
-            (service_fill_size_x,18.2,3.40))
+            (service_fill_center_x,wall_center_y,side*22.30),
+            (service_fill_size_x,wall_height,2.80))
 
     # The enlarged 29 x 12.2 m acrylic view is the hall's dominant landmark.
     box("WatatsumiArchitecture", (7.0,0.18,0), (1.0,0.36,31.2))
     # A continuous opaque facade closes the entire void above the acrylic.
     # Narrow full-height jambs meet it exactly at the tank's side edges.
-    box("WatatsumiArchitecture", (7.0,15.425,0), (1.0,5.95,29.0))
-    box("WatatsumiArchitecture", (7.0,9.275,-14.575), (1.0,18.2,0.15))
-    box("WatatsumiArchitecture", (7.0,9.275,14.575), (1.0,18.2,0.15))
+    facade_top = HALL_CEILING_Y - 0.20
+    header_bottom = 12.50
+    box("WatatsumiArchitecture", (7.0,(header_bottom+facade_top)*0.5,0),
+        (1.0,facade_top-header_bottom,29.0))
+    box("WatatsumiArchitecture", (7.0,facade_top*0.5,-14.575),
+        (1.0,facade_top,0.15))
+    box("WatatsumiArchitecture", (7.0,facade_top*0.5,14.575),
+        (1.0,facade_top,0.15))
     # Narrow closures bridge the tank jambs to the portal trim. They replace
     # the former accidental 0.65 m slots without stacking another room wall.
     for side in (-1.0, 1.0):
-        box("WatatsumiArchitecture", (6.80,9.20,side*14.975),
-            (0.70,18.40,0.65))
+        box("WatatsumiArchitecture", (6.80,facade_top*0.5,side*14.675),
+            (0.70,facade_top,0.05))
     curved_tank_wall("WatatsumiWater")
     half_ellipse_cap("WatatsumiRock", 0.20, 1.0)
     # Front water interface then acrylic; both are separate transparent batches.
@@ -316,9 +329,14 @@ def build():
     # The 1F entrance and 2F exit are cut from the same facade grid. The lower
     # header begins above the complete arch crown; the upper opening remains
     # clear all the way to the raised hall ceiling.
-    box("WatatsumiArchitecture", (6.80,12.28,PORTAL_Z), (0.70,12.24,5.00))
-    box("WatatsumiArchitecture", (6.80,5.975,-PORTAL_Z), (0.70,11.95,5.00))
-    arch_portal_collar(PORTAL_Z, 0.18, top_clearance=5.98)
+    lower_header_bottom = 7.35
+    box("WatatsumiArchitecture",
+        (6.80,(lower_header_bottom+facade_top)*0.5,PORTAL_Z),
+        (0.70,facade_top-lower_header_bottom,PORTAL_WIDTH))
+    upper_lower_wall_top = 11.70
+    box("WatatsumiArchitecture", (6.80,upper_lower_wall_top*0.5,-PORTAL_Z),
+        (0.70,upper_lower_wall_top,PORTAL_WIDTH))
+    arch_portal_collar(PORTAL_Z, 0.95, top_clearance=6.45)
     arch_portal_collar(
         -PORTAL_Z,
         UPPER_FLOOR_Y,
@@ -329,28 +347,31 @@ def build():
     # cues, not general hall lighting, and sit near the arch crown.
     for t in (0.075, 0.16, 0.34, 0.52, 0.70, 0.88):
         light = ramp_point(t)
-        box("WatatsumiEmitter", (light[0], light[1]+4.72, light[2]),
+        box("WatatsumiEmitter", (light[0], light[1]+5.72, light[2]),
             (1.15,0.06,0.18))
 
     # 2F layout: remove the deck directly in front of the acrylic and relocate
     # circulation to the opposite side of the atrium. Two side arms connect
     # the portal ends to a rear cross-passage, leaving the tank sightline open.
-    box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y,-PORTAL_Z), (25.0,0.24,4.2))
-    box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y,PORTAL_Z), (25.0,0.24,4.2))
-    box("WatatsumiRamp", (-21.0,UPPER_FLOOR_Y,0.0), (4.2,0.24,39.8))
+    box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y,-PORTAL_Z),
+        (25.0,0.24,RAMP_WIDTH))
+    box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y,PORTAL_Z),
+        (25.0,0.24,RAMP_WIDTH))
+    box("WatatsumiRamp", (-20.40,UPPER_FLOOR_Y,0.0),
+        (RAMP_WIDTH,0.24,41.0))
 
     # Low solid fascias and slim rails protect every open atrium edge without
     # restoring the former tank-front deck.
-    for z in (-19.9, -15.7, 15.7, 19.9):
+    for z in (-20.5, -15.1, 15.1, 20.5):
         box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y+0.17,z), (25.0,0.34,0.12))
         box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y+1.12,z), (25.0,0.08,0.10))
         for x in (-19.0, -15.5, -12.0, -8.5, -5.0, -1.5, 2.0):
             box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z), (0.07,0.96,0.07))
     # The rear cross-passage used to end in two unprotected floor edges. Match
     # the side-arm language with continuous fascias, rails, and sparse posts.
-    for x in (-23.10, -18.90):
-        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.17,0.0), (0.12,0.34,31.4))
-        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+1.12,0.0), (0.10,0.08,31.4))
+    for x in (-23.10, -17.70):
+        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.17,0.0), (0.12,0.34,30.2))
+        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+1.12,0.0), (0.10,0.08,30.2))
         for z in (-14.0, -10.5, -7.0, -3.5, 0.0, 3.5, 7.0, 10.5, 14.0):
             box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z), (0.07,0.96,0.07))
     # A single restrained practical at the upper landing. The tank remains
@@ -410,8 +431,10 @@ def write_glb():
          "bufferViews":views,"buffers":[{"byteLength":len(binary)}],
          "extras":{"units":"meters","previewKey":6,"referenceVolumeTonnes":650,
                    "inferredTankPlan":"flat-front semi-ellipse","inferredTankSize":[14.7,12.1,29.0],
-                   "inferredGrossVolumeM3":4050.0,"rampWidth":4.2,"rampRise":12.22,
-                   "tunnelWallHeight":2.2,"tunnelArchRise":3.0,
+                   "inferredGrossVolumeM3":4050.0,
+                   "rampWidth":RAMP_WIDTH,"rampRise":RAMP_RISE,
+                   "tunnelWallHeight":RAMP_WALL_HEIGHT,
+                   "tunnelArchRise":RAMP_ARCH_RISE,
                    "rampSequence":["lower-right entry","concealed wall run",
                                    "rear half-helix tunnel","upper-left re-entry",
                                    "deep side platforms"],

@@ -298,6 +298,18 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
   a tagged acrylic boundary and dry-side perimeter walls. The GLB importer now
   hashes fully baked vertices, indices and material identity to suppress exact
   duplicate mesh instances while preserving merely adjacent or coplanar parts.
+- Unified generated-stage rendering and collision under the same -2.25 m world
+  floor offset. Entrance, jellyfish, underwater-arch and Watatsumi eye heights,
+  wall volumes, ramp points and upper-floor rails now share one coordinate
+  convention, eliminating the apparent 2.25 m player hover.
+- Expanded the Watatsumi concealed arch from 4.20 m to 5.40 m wide and from
+  5.20 m to 6.10 m high. Entrance/exit portals grew to 6.20 m, both upper side
+  walks and the rear cross-passage grew to 5.40 m, and the hall ceiling rose
+  to preserve a 4.28 m head-clearance margin above the player capsule.
+- Added a 0.12 m camera/body safety inset to path-wall resolution. Static and
+  live wall-push probes keep the underwater-arch centre within 2.60 m and the
+  widened Watatsumi ramp within 2.24 m, preventing near-plane peeks outside
+  the rendered glass/architecture without adding per-frame render work.
 
 References:
 

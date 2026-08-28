@@ -83,9 +83,16 @@ def main() -> None:
     assert route_reaches((6.0, -6.15), (-12.0, 0.0))
     assert 4.0 - PLAYER_RADIUS * 2.0 >= 3.0
 
-    # The arch path is 6.4 m wide, but the visible rail's inner face is 3.06 m.
-    assert abs((3.06 - PLAYER_RADIUS) - 2.72) < 1.0e-6
+    # Keep the camera/body inside the authored rail with an additional visual
+    # safety margin, preventing near-plane peeks outside the glass shell.
+    wall_safety_inset = 0.12
+    arch_center_limit = 3.06 - PLAYER_RADIUS - wall_safety_inset
+    watatsumi_center_limit = 5.40 * 0.5 - PLAYER_RADIUS - wall_safety_inset
+    assert abs(arch_center_limit - 2.60) < 1.0e-6
+    assert abs(watatsumi_center_limit - 2.24) < 1.0e-6
     assert 'route.halfWidth = 3.06f;' in scene
+    assert 'ramp.halfWidth = 2.70f;' in scene
+    assert 'constexpr float kStageFloorOffset = -2.25f;' in scene
     assert 'playerCharacter_.activePath = 0;' in scene
 
     # Required tagged worlds and authored boundaries must be present at runtime.
@@ -106,16 +113,19 @@ def main() -> None:
     # Exact Watatsumi seams: rear shell -> service fill -> portal -> tank.
     rear_inner_x = -27.70
     facade_rear_x = 6.45
-    portal_outer_z = 20.30
+    portal_outer_z = 20.90
     outer_wall_inner_z = 23.70
     tank_jamb_outer_z = 14.65
-    portal_inner_z = 15.30
+    portal_inner_z = 14.70
     assert facade_rear_x > rear_inner_x
     assert outer_wall_inner_z > portal_outer_z
     assert portal_inner_z > tank_jamb_outer_z
     assert '(-8.4,9.1,21.55)' not in generator
     assert 'service_fill_center_x = (-27.70 + 6.45) * 0.5' in generator
-    assert '(0.70,18.40,0.65)' in generator
+    assert 'RAMP_WIDTH = 5.40' in generator
+    assert 'PORTAL_WIDTH = 6.20' in generator
+    assert 'RAMP_WALL_HEIGHT = 2.60' in generator
+    assert 'RAMP_ARCH_RISE = 3.50' in generator
     assert 'quad("WatatsumiRamp"' in generator
 
     print({
@@ -123,7 +133,8 @@ def main() -> None:
         "route_forward_reachable": True,
         "route_reverse_reachable": True,
         "route_door_clearance_m": round(4.0 - PLAYER_RADIUS * 2.0, 2),
-        "arch_player_center_limit_m": 2.72,
+        "arch_player_center_limit_m": arch_center_limit,
+        "watatsumi_player_center_limit_m": watatsumi_center_limit,
         "watatsumi_service_fill_width_m": round(facade_rear_x - rear_inner_x, 2),
         "watatsumi_outer_seal_depth_m": round(outer_wall_inner_z - portal_outer_z, 2),
         "watatsumi_tank_portal_seal_m": round(portal_inner_z - tank_jamb_outer_z, 2),

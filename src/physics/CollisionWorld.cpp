@@ -10,6 +10,7 @@ namespace
 {
 constexpr std::uint32_t kPlayerWorldMask =
     LayerMask(CollisionLayer::World);
+constexpr float kPathWallSafetyInset = 0.12f;
 
 float LengthSquared2D(float x, float z)
 {
@@ -262,7 +263,8 @@ void CollisionWorld::MoveCharacterStep(
         const float offsetLength = std::sqrt(
             LengthSquared2D(offsetX, offsetZ));
         const float allowedOffset = std::max(
-            path.halfWidth - capsule.radius, 0.05f);
+            path.halfWidth - capsule.radius - kPathWallSafetyInset,
+            0.05f);
         const float scale = offsetLength > allowedOffset
             ? allowedOffset / std::max(offsetLength, 1.0e-6f)
             : 1.0f;
@@ -298,7 +300,9 @@ void CollisionWorld::MoveCharacterStep(
         PathQuery query = first.distanceSquared <= last.distanceSquared
             ? first
             : last;
-        const float allowedOffset = path.halfWidth - capsule.radius;
+        const float allowedOffset = std::max(
+            path.halfWidth - capsule.radius - kPathWallSafetyInset,
+            0.05f);
         if (query.distanceSquared <= allowedOffset * allowedOffset &&
             std::abs(query.point.y - currentFootY) <= capsule.stepHeight)
         {
