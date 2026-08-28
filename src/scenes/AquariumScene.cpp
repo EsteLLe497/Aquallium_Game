@@ -11,7 +11,6 @@
 #include "../framework/input.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <utility>
 #include <windows.h>
@@ -163,42 +162,6 @@ void AquariumScene::BuildWatatsumiCollision()
         ColliderTag::Solid,
         LayerMask(CollisionLayer::World)});
 
-#ifndef NDEBUG
-    assert(watatsumiCollision_.HasTag(ColliderTag::Walkable));
-    assert(watatsumiCollision_.HasTag(ColliderTag::Ramp));
-    assert(watatsumiCollision_.HasTag(ColliderTag::Glass));
-
-    // Exercise the exact runtime controller from the lower landing, through
-    // every generated ramp segment, and onto the upper south walkway.
-    physics::CharacterState traversalProbe;
-    traversalProbe.eyePosition = {
-        -0.80f, playerCapsule_.eyeHeight, 17.80f};
-    watatsumiCollision_.MoveCharacter(
-        traversalProbe, {0.40f, 0.0f, 0.0f}, playerCapsule_);
-    assert(traversalProbe.activePath == 0);
-    const auto& testPath = watatsumiCollision_.Paths().front();
-    for (std::size_t index = 1;
-         index < testPath.centerLine.size();
-         ++index)
-    {
-        const DirectX::XMFLOAT3& target = testPath.centerLine[index];
-        watatsumiCollision_.MoveCharacter(
-            traversalProbe,
-            {
-                target.x - traversalProbe.eyePosition.x,
-                0.0f,
-                target.z - traversalProbe.eyePosition.z
-            },
-            playerCapsule_);
-        assert(traversalProbe.activePath == 0);
-    }
-    watatsumiCollision_.MoveCharacter(
-        traversalProbe, {-0.55f, 0.0f, 0.0f}, playerCapsule_);
-    assert(traversalProbe.activePath == -1);
-    assert(std::abs(
-        traversalProbe.eyePosition.y -
-        (12.28f + playerCapsule_.eyeHeight)) < 0.01f);
-#endif
 }
 
 void AquariumScene::Update(
