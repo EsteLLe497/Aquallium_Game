@@ -1537,7 +1537,11 @@ float4 PSComposite(VSOutput input) : SV_TARGET
         gLinearClampSampler,
         input.uv,
         0);
-    const float3 volume = UpsampleVolume(input.uv, sceneDepth);
+    // Watatsumi and plain greybox modes intentionally set volume strength to
+    // zero. Keep that a true fast path instead of issuing five null SRV taps.
+    const float3 volume = gVolumeStrength > 0.0001
+        ? UpsampleVolume(input.uv, sceneDepth)
+        : 0.0;
     sceneColor += volume;
     sceneColor += HighlightBloom(input.uv);
 

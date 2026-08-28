@@ -31,8 +31,8 @@ struct LocalLightingRig
 {
     std::array<LocalLight, kMaximumLocalLights> lights{};
     std::uint32_t lightCount = 0;
-    DirectX::XMFLOAT3 ambientColor{0.030f, 0.075f, 0.115f};
-    float ambientStrength = 0.045f;
+    DirectX::XMFLOAT3 ambientColor{0.040f, 0.082f, 0.108f};
+    float ambientStrength = 0.072f;
 
     // Broad, shadow-free indirect light emitted by the public tank window.
     // This is intentionally separate from the underwater direct-light rig.

@@ -706,66 +706,75 @@ void AquariumRenderer::Render(
         }
     }
 
-    // Pass 2: half-resolution volumetric lighting.
+    // Full-screen setup is shared by the optional volume path and composite.
     ID3D11RenderTargetView* nullTargets[] = {nullptr, nullptr, nullptr};
     context->OMSetRenderTargets(3, nullTargets, nullptr);
     context->IASetInputLayout(nullptr);
     context->IASetPrimitiveTopology(
         D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     context->VSSetShader(vertexShader_.Get(), nullptr, 0);
-
-    const UINT volumeWidth = (width + 2) / 3;
-    const UINT volumeHeight = (height + 2) / 3;
-    const D3D11_VIEWPORT volumeViewport{
-        0.0f,
-        0.0f,
-        static_cast<float>(volumeWidth),
-        static_cast<float>(volumeHeight),
-        0.0f,
-        1.0f
-    };
-    context->RSSetViewports(1, &volumeViewport);
-    ID3D11RenderTargetView* volumeTarget = volumeTarget_.Get();
-    context->OMSetRenderTargets(1, &volumeTarget, nullptr);
-    context->PSSetShader(volumePixelShader_.Get(), nullptr, 0);
-
-    ID3D11ShaderResourceView* volumeInputs[] = {
-        noiseTextureView_.Get(),
-        nullptr,
-        sceneDepthView_.Get(),
-        nullptr,
-        nullptr,
-        shadowTextureView_.Get()
-    };
-    context->PSSetShaderResources(0, 6, volumeInputs);
     ID3D11SamplerState* samplers[] = {
         linearWrapSampler_.Get(),
         linearClampSampler_.Get(),
         shadowComparisonSampler_.Get()
     };
-    context->PSSetSamplers(0, 3, samplers);
-    context->Draw(3, 0);
-
-    // Pass 3: temporal reprojection into a ping-pong history buffer.
     ID3D11ShaderResourceView* nullViews[] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-    context->PSSetShaderResources(0, 7, nullViews);
-    context->OMSetRenderTargets(0, nullptr, nullptr);
-
     const UINT historyWriteIndex = 1u - historyReadIndex_;
-    ID3D11RenderTargetView* historyTarget = historyTargets_[historyWriteIndex].Get();
-    context->OMSetRenderTargets(1, &historyTarget, nullptr);
-    context->PSSetShader(temporalPixelShader_.Get(), nullptr, 0);
-    ID3D11ShaderResourceView* temporalInputs[] = {
-        nullptr,
-        nullptr,
-        sceneDepthView_.Get(),
-        volumeView_.Get(),
-        historyViews_[historyReadIndex_].Get(),
-        nullptr,
-        motionView_.Get()
-    };
-    context->PSSetShaderResources(0, 7, temporalInputs);
-    context->Draw(3, 0);
+    const bool volumePassEnabled =
+        settings.volumeStrength > 0.001f &&
+        !settings.watatsumiTankMode &&
+        !(settings.greyboxMode && !settings.underwaterArchMode);
+
+    if (volumePassEnabled)
+    {
+        // Pass 2: one-third-resolution volumetric lighting.
+        const UINT volumeWidth = (width + 2) / 3;
+        const UINT volumeHeight = (height + 2) / 3;
+        const D3D11_VIEWPORT volumeViewport{
+            0.0f,
+            0.0f,
+            static_cast<float>(volumeWidth),
+            static_cast<float>(volumeHeight),
+            0.0f,
+            1.0f
+        };
+        context->RSSetViewports(1, &volumeViewport);
+        ID3D11RenderTargetView* volumeTarget = volumeTarget_.Get();
+        context->OMSetRenderTargets(1, &volumeTarget, nullptr);
+        context->PSSetShader(volumePixelShader_.Get(), nullptr, 0);
+
+        ID3D11ShaderResourceView* volumeInputs[] = {
+            noiseTextureView_.Get(),
+            nullptr,
+            sceneDepthView_.Get(),
+            nullptr,
+            nullptr,
+            shadowTextureView_.Get()
+        };
+        context->PSSetShaderResources(0, 6, volumeInputs);
+        context->PSSetSamplers(0, 3, samplers);
+        context->Draw(3, 0);
+
+        // Pass 3: temporal reprojection into a ping-pong history buffer.
+        context->PSSetShaderResources(0, 7, nullViews);
+        context->OMSetRenderTargets(0, nullptr, nullptr);
+
+        ID3D11RenderTargetView* historyTarget =
+            historyTargets_[historyWriteIndex].Get();
+        context->OMSetRenderTargets(1, &historyTarget, nullptr);
+        context->PSSetShader(temporalPixelShader_.Get(), nullptr, 0);
+        ID3D11ShaderResourceView* temporalInputs[] = {
+            nullptr,
+            nullptr,
+            sceneDepthView_.Get(),
+            volumeView_.Get(),
+            historyViews_[historyReadIndex_].Get(),
+            nullptr,
+            motionView_.Get()
+        };
+        context->PSSetShaderResources(0, 7, temporalInputs);
+        context->Draw(3, 0);
+    }
 
     // Pass 4: depth-aware volume upsample, HDR composite and tone mapping.
     context->PSSetShaderResources(0, 7, nullViews);
@@ -777,7 +786,9 @@ void AquariumRenderer::Render(
         nullptr,
         sceneColorView_.Get(),
         sceneDepthView_.Get(),
-        historyViews_[historyWriteIndex].Get()
+        volumePassEnabled
+            ? historyViews_[historyWriteIndex].Get()
+            : nullptr
     };
     context->PSSetShaderResources(0, 4, compositeInputs);
     context->PSSetSamplers(0, 3, samplers);
@@ -785,8 +796,11 @@ void AquariumRenderer::Render(
 
     context->PSSetShaderResources(0, 7, nullViews);
 
-    historyReadIndex_ = historyWriteIndex;
-    historyValid_ = true;
+    if (volumePassEnabled)
+    {
+        historyReadIndex_ = historyWriteIndex;
+    }
+    historyValid_ = volumePassEnabled;
     previousCameraYaw_ = settings.cameraYaw;
     previousCameraPitch_ = settings.cameraPitch;
     previousViewMode_ = settings.viewMode;

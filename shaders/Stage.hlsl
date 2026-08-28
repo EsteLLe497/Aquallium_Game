@@ -146,6 +146,102 @@ float StageHash31(float3 value)
     return frac((value.x + value.y) * value.z);
 }
 
+float StagePanelInterior(float2 coordinates, float seamWidth)
+{
+    const float2 repeated = frac(coordinates);
+    const float2 edgeDistance = min(repeated, 1.0 - repeated);
+    return smoothstep(
+        seamWidth,
+        seamWidth * 2.8,
+        min(edgeDistance.x, edgeDistance.y));
+}
+
+float3 StageArchitecturalAlbedo(
+    float3 worldPosition,
+    float3 normal,
+    float3 authoredColor,
+    bool metallicTrim)
+{
+    // A texture-free architectural palette keeps the dark aquarium mood but
+    // restores material hierarchy. Large, irregular modules avoid the cheap
+    // checkerboard look and cost no texture fetches or extra draw passes.
+    const float floorWeight = smoothstep(0.58, 0.82, normal.y);
+    const float ceilingWeight = smoothstep(0.58, 0.82, -normal.y);
+
+    const float2 floorCoordinates = worldPosition.xz / 1.85;
+    const float floorInterior = StagePanelInterior(floorCoordinates, 0.018);
+    const float floorVariation = lerp(
+        0.88,
+        1.10,
+        StageHash21(floor(floorCoordinates) + 19.7));
+    float3 floorColor = float3(0.026, 0.043, 0.056) *
+        floorVariation * lerp(0.48, 1.0, floorInterior);
+
+    const float wallU = abs(normal.x) > abs(normal.z)
+        ? worldPosition.z
+        : worldPosition.x;
+    const float2 wallCoordinates = float2(
+        wallU / 2.35,
+        worldPosition.y / 1.18);
+    const float wallInterior = StagePanelInterior(wallCoordinates, 0.012);
+    const float wallVariation = lerp(
+        0.91,
+        1.08,
+        StageHash21(floor(wallCoordinates) + 7.3));
+    float3 wallColor = float3(0.030, 0.046, 0.059) *
+        wallVariation * lerp(0.56, 1.0, wallInterior);
+
+    const float authoredLuminance = dot(
+        authoredColor,
+        float3(0.2126, 0.7152, 0.0722));
+    const float3 authoredTint = authoredLuminance > 0.025
+        ? min(authoredColor * 0.34, float3(0.12, 0.16, 0.19))
+        : wallColor;
+    wallColor = lerp(wallColor, max(wallColor, authoredTint), 0.32);
+    floorColor = lerp(floorColor, max(floorColor, authoredTint), 0.22);
+
+    const float3 ceilingColor = float3(0.010, 0.017, 0.025);
+    float3 materialColor = lerp(wallColor, floorColor, floorWeight);
+    materialColor = lerp(materialColor, ceilingColor, ceilingWeight);
+    if (metallicTrim)
+    {
+        const float brushed = 0.92 + 0.08 * sin(
+            worldPosition.x * 5.1 + worldPosition.z * 4.3);
+        materialColor = lerp(
+            materialColor,
+            float3(0.024, 0.058, 0.078) * brushed,
+            0.58);
+    }
+    return materialColor;
+}
+
+float3 StageShadeDryArchitecture(
+    float3 worldPosition,
+    float3 normal,
+    float3 viewDirection,
+    float3 authoredColor,
+    bool metallicTrim)
+{
+    const float3 materialColor = StageArchitecturalAlbedo(
+        worldPosition,
+        normal,
+        authoredColor,
+        metallicTrim);
+    const float3 localLight = EvaluateLocalLighting(worldPosition, normal);
+    const float3 ambient = EvaluateAmbientLighting(normal);
+    const float3 tankBounce = EvaluateTankBounce(worldPosition, normal);
+    const float grazing = pow(
+        1.0 - saturate(abs(dot(normal, -viewDirection))), 3.0);
+
+    // Stable low-frequency visibility replaces global fill light. The room
+    // stays dark, while panel seams, floor modules and silhouettes survive.
+    return materialColor * 0.145 +
+        ambient * (0.64 + materialColor * 3.2) +
+        localLight * (0.46 + materialColor * 2.8) +
+        tankBounce * (0.54 + materialColor * 2.4) +
+        float3(0.0025, 0.0080, 0.0135) * grazing;
+}
+
 float StageArchSuspendedParticle(float3 samplePosition, float layer)
 {
     // A sparse analytic particle field avoids transparent particle cards and
@@ -1077,19 +1173,12 @@ StagePixelOutput PSStage(StageVertexOutput input)
         }
         else
         {
-            // Dry architecture is nearly black unless an authored local light
-            // reaches it. This preserves depth while water remains on its
-            // dedicated absorption/caustics/refraction shader branch.
-            const float edge = pow(
-                1.0 - saturate(abs(dot(normal, -viewDirection))), 3.0);
-            const float3 localLight = EvaluateLocalLighting(
-                input.worldPosition, normal);
-            const float3 ambient = EvaluateAmbientLighting(normal);
-            const float3 tankBounce = EvaluateTankBounce(
-                input.worldPosition, normal);
-            finalColor = gStageBaseColor.rgb * 0.016 +
-                ambient + localLight + tankBounce +
-                localLight * edge * (isRamp ? 0.055 : 0.025);
+            finalColor = StageShadeDryArchitecture(
+                input.worldPosition,
+                normal,
+                viewDirection,
+                gStageBaseColor.rgb,
+                isRamp);
             finalColor = ApplyDryAtmosphere(
                 finalColor,
                 length(input.worldPosition - gStageCameraPosition.xyz));
@@ -1137,11 +1226,6 @@ StagePixelOutput PSStage(StageVertexOutput input)
     }
     else
     {
-        const float3 localLight = EvaluateLocalLighting(
-            input.worldPosition, normal);
-        const float3 ambient = EvaluateAmbientLighting(normal);
-        const float3 tankBounce = EvaluateTankBounce(
-            input.worldPosition, normal);
         const float floorMask =
             (!preserveAnalyticAquarium &&
              normal.y > 0.75 &&
@@ -1149,8 +1233,12 @@ StagePixelOutput PSStage(StageVertexOutput input)
              input.worldPosition.x < 15.2)
             ? 1.0
             : 0.0;
-        finalColor = gStageBaseColor.rgb * 0.012 +
-            ambient + localLight + tankBounce +
+        finalColor = StageShadeDryArchitecture(
+                input.worldPosition,
+                normal,
+                viewDirection,
+                gStageBaseColor.rgb,
+                false) +
             JellyfishFloorBounce(input.worldPosition) * floorMask;
         finalColor = ApplyDryAtmosphere(
             finalColor,

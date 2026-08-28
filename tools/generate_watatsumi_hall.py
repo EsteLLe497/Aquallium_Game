@@ -341,6 +341,17 @@ def build():
     # A restrained waterline source lets the hall be lit by the exhibit only.
     box("WatatsumiEmitter", (6.82,TANK_WATER_SURFACE+0.17,0), (0.10,0.08,28.6))
 
+    # Architectural trim borrows the existing ramp material, keeping this to
+    # one already-issued draw batch. Dark skirting and a framed tank reveal
+    # give the hall a deliberate VR social-world finish without extra lights.
+    for z in (-23.62, 23.62):
+        box("WatatsumiRamp", (4.8,0.24,z), (65.2,0.30,0.12))
+    box("WatatsumiRamp", (-27.62,0.24,0.0), (0.12,0.30,47.2))
+    box("WatatsumiRamp", (6.72,0.46,0.0), (0.18,0.56,29.35))
+    box("WatatsumiRamp", (6.72,12.58,0.0), (0.18,0.20,29.35))
+    for z in (-14.70, 14.70):
+        box("WatatsumiRamp", (6.72,6.45,z), (0.18,12.30,0.18))
+
 
 def pad4(data, value=0):
     while len(data)%4: data.append(value)

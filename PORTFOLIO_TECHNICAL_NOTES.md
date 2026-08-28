@@ -266,6 +266,20 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
 - Replaced rectangular portal gaps with generated elliptical portal collars:
   side shoulders and segmented curved spandrels meet the tunnel crown while
   retaining 6.16 m lower-entry clearance and a clear upper landing.
+- Added a texture-free architectural material hierarchy inspired by optimized
+  social-VR aquarium worlds. World-space hashed stone modules, large wall
+  panels, dark ceilings and brushed trim share the existing Stage shader and
+  require no new textures, samplers, lights or render passes.
+- Rebalanced dark-scene visibility with low-level hemispherical ambience and
+  material-aware tank/local-light response instead of a global fill light.
+  This preserves silhouettes and navigation seams without flattening depth.
+- Reused the existing Watatsumi ramp batch for skirting and the hero-window
+  reveal frame, so the added architectural detail introduces no new material
+  batch. Disabled/empty local-light rigs now exit before entering the GPU loop.
+- Added zero-contribution pass elimination: Watatsumi and plain-greybox modes
+  no longer execute the one-third-resolution six-step volume ray march or its
+  temporal history pass when their authored volume strength is zero. The final
+  composite also skips its five bilateral volume taps through a uniform branch.
 
 References:
 
