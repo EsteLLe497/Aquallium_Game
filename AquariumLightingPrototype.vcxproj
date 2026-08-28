@@ -88,6 +88,7 @@
     <ClCompile Include="src\framework\gameObject.cpp" />
     <ClCompile Include="src\framework\input.cpp" />
     <ClCompile Include="src\framework\ObjectWorld.cpp" />
+    <ClCompile Include="src\physics\CollisionWorld.cpp" />
     <ClCompile Include="src\framework\manager.cpp" />
     <ClCompile Include="src\framework\renderer.cpp" />
     <ClCompile Include="src\main.cpp" />
@@ -111,6 +112,7 @@
     <ClInclude Include="src\framework\gameObject.h" />
     <ClInclude Include="src\framework\input.h" />
     <ClInclude Include="src\framework\ObjectWorld.h" />
+    <ClInclude Include="src\physics\CollisionWorld.h" />
     <ClInclude Include="src\framework\RenderContext.h" />
     <ClInclude Include="src\framework\scene.h" />
     <ClInclude Include="src\framework\manager.h" />
@@ -161,6 +163,7 @@
     <None Include="third_party\cgltf\LICENSE" />
     <None Include="third_party\imgui\LICENSE.txt" />
     <None Include="FRAMEWORK_ARCHITECTURE.md" />
+    <None Include="COLLISION_SYSTEM.md" />
     <None Include="GLASS_VIEW_IMPLEMENTATION.md" />
     <None Include="PORTFOLIO_TECHNICAL_NOTES.md" />
     <None Include="REAL_AQUARIUM_REFERENCE_NOTES.md" />

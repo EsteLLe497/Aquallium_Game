@@ -11,8 +11,58 @@
 #include "../framework/input.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <utility>
 #include <windows.h>
+
+namespace
+{
+DirectX::XMFLOAT3 EvaluateWatatsumiRampPoint(float t)
+{
+    t = std::clamp(t, 0.0f, 1.0f);
+    const float y = 0.18f + 12.22f * t;
+    const auto line = [y](
+        float ax, float az,
+        float bx, float bz,
+        float u)
+    {
+        return DirectX::XMFLOAT3{
+            ax + (bx - ax) * u,
+            y,
+            az + (bz - az) * u};
+    };
+    if (t < 0.06f)
+    {
+        return line(-0.5f, 17.8f, 5.8f, 17.8f, t / 0.06f);
+    }
+    if (t < 0.20f)
+    {
+        return line(
+            5.8f, 17.8f, 17.8f, 17.8f,
+            (t - 0.06f) / 0.14f);
+    }
+    if (t < 0.80f)
+    {
+        const float u = (t - 0.20f) / 0.60f;
+        const float angle =
+            DirectX::XM_PIDIV2 - DirectX::XM_PI * u;
+        return DirectX::XMFLOAT3{
+            17.8f + std::cos(angle) * 17.8f,
+            y,
+            std::sin(angle) * 17.8f};
+    }
+    if (t < 0.97f)
+    {
+        return line(
+            17.8f, -17.8f, 5.8f, -17.8f,
+            (t - 0.80f) / 0.17f);
+    }
+    return line(
+        5.8f, -17.8f, 3.6f, -17.8f,
+        (t - 0.97f) / 0.03f);
+}
+}
 
 AquariumScene::AquariumScene(
     ID3D11Device* device,
@@ -40,6 +90,115 @@ AquariumScene::AquariumScene(
         {0.0f, -1.0f, 0.0f}, 2.4f,
         {0.16f, 0.38f, 0.72f}, 30.0f, 54.0f,
         lighting::LocalLightType::Spot, true};
+    BuildWatatsumiCollision();
+}
+
+void AquariumScene::BuildWatatsumiCollision()
+{
+    using physics::ColliderTag;
+    using physics::CollisionLayer;
+    using physics::LayerMask;
+
+    watatsumiCollision_.Clear();
+    watatsumiCollision_.AddWalkableRect({
+        L"Watatsumi_1F_PublicFloor",
+        -27.55f, 6.20f, -23.55f, 23.55f, 0.0f,
+        ColliderTag::Walkable,
+        LayerMask(CollisionLayer::World)});
+    watatsumiCollision_.AddWalkableRect({
+        L"Watatsumi_2F_NorthWalkway",
+        -21.0f, 4.0f, 15.70f, 19.90f, 12.28f,
+        ColliderTag::Walkable,
+        LayerMask(CollisionLayer::World)});
+    watatsumiCollision_.AddWalkableRect({
+        L"Watatsumi_2F_SouthWalkway",
+        -21.0f, 4.0f, -19.90f, -15.70f, 12.28f,
+        ColliderTag::Walkable,
+        LayerMask(CollisionLayer::World)});
+    watatsumiCollision_.AddWalkableRect({
+        L"Watatsumi_2F_RearWalkway",
+        -23.10f, -18.90f, -19.90f, 19.90f, 12.28f,
+        ColliderTag::Walkable,
+        LayerMask(CollisionLayer::World)});
+
+    physics::PathSurface ramp;
+    ramp.name = L"Watatsumi_RightHelixRamp";
+    ramp.halfWidth = 2.10f;
+    ramp.tag = ColliderTag::Ramp;
+    ramp.layer = LayerMask(CollisionLayer::World);
+    constexpr int rampSegments = 144;
+    ramp.centerLine.reserve(rampSegments + 1);
+    for (int index = 0; index <= rampSegments; ++index)
+    {
+        ramp.centerLine.push_back(EvaluateWatatsumiRampPoint(
+            index / static_cast<float>(rampSegments)));
+    }
+    watatsumiCollision_.AddPathSurface(std::move(ramp));
+
+    // Named and tagged blockers are kept separate from visual meshes. This
+    // makes interaction queries deterministic and lets a future navmesh build
+    // consume Walkable/Ramp surfaces without treating glass or rails as floor.
+    watatsumiCollision_.AddBox({
+        L"Watatsumi_HeroTankGlass",
+        {6.38f, 0.0f, -14.75f},
+        {7.50f, 18.40f, 14.75f},
+        ColliderTag::Glass,
+        LayerMask(CollisionLayer::World)});
+    watatsumiCollision_.AddBox({
+        L"Watatsumi_RearWall",
+        {-28.10f, -0.2f, -24.0f},
+        {-27.55f, 18.6f, 24.0f},
+        ColliderTag::Solid,
+        LayerMask(CollisionLayer::World)});
+    watatsumiCollision_.AddBox({
+        L"Watatsumi_NorthWall",
+        {-28.0f, -0.2f, 23.55f},
+        {38.0f, 18.6f, 24.10f},
+        ColliderTag::Solid,
+        LayerMask(CollisionLayer::World)});
+    watatsumiCollision_.AddBox({
+        L"Watatsumi_SouthWall",
+        {-28.0f, -0.2f, -24.10f},
+        {38.0f, 18.6f, -23.55f},
+        ColliderTag::Solid,
+        LayerMask(CollisionLayer::World)});
+
+#ifndef NDEBUG
+    assert(watatsumiCollision_.HasTag(ColliderTag::Walkable));
+    assert(watatsumiCollision_.HasTag(ColliderTag::Ramp));
+    assert(watatsumiCollision_.HasTag(ColliderTag::Glass));
+
+    // Exercise the exact runtime controller from the lower landing, through
+    // every generated ramp segment, and onto the upper south walkway.
+    physics::CharacterState traversalProbe;
+    traversalProbe.eyePosition = {
+        -0.80f, playerCapsule_.eyeHeight, 17.80f};
+    watatsumiCollision_.MoveCharacter(
+        traversalProbe, {0.40f, 0.0f, 0.0f}, playerCapsule_);
+    assert(traversalProbe.activePath == 0);
+    const auto& testPath = watatsumiCollision_.Paths().front();
+    for (std::size_t index = 1;
+         index < testPath.centerLine.size();
+         ++index)
+    {
+        const DirectX::XMFLOAT3& target = testPath.centerLine[index];
+        watatsumiCollision_.MoveCharacter(
+            traversalProbe,
+            {
+                target.x - traversalProbe.eyePosition.x,
+                0.0f,
+                target.z - traversalProbe.eyePosition.z
+            },
+            playerCapsule_);
+        assert(traversalProbe.activePath == 0);
+    }
+    watatsumiCollision_.MoveCharacter(
+        traversalProbe, {-0.55f, 0.0f, 0.0f}, playerCapsule_);
+    assert(traversalProbe.activePath == -1);
+    assert(std::abs(
+        traversalProbe.eyePosition.y -
+        (12.28f + playerCapsule_.eyeHeight)) < 0.01f);
+#endif
 }
 
 void AquariumScene::Update(
@@ -129,14 +288,12 @@ void AquariumScene::ResetSettings()
     const lighting::LocalLightingRig localLighting = settings_.localLighting;
     settings_ = {};
     settings_.localLighting = localLighting;
-    watatsumiRampTracking_ = false;
-    watatsumiRampT_ = 0.0f;
-    watatsumiRampMaximumT_ = 0.0f;
+    playerCharacter_.activePath = -1;
+    playerCharacter_.activeSegment = 0;
 }
 
 void AquariumScene::SelectUnderwaterView()
 {
-    watatsumiRampTracking_ = false;
     settings_.viewMode = 0.0f;
     settings_.stageMode = false;
     settings_.greyboxMode = false;
@@ -146,7 +303,6 @@ void AquariumScene::SelectUnderwaterView()
 
 void AquariumScene::SelectStageGlassView()
 {
-    watatsumiRampTracking_ = false;
     settings_.viewMode = 1.0f;
     settings_.stageMode = true;
     settings_.greyboxMode = false;
@@ -161,7 +317,6 @@ void AquariumScene::SelectStageGlassView()
 
 void AquariumScene::SelectAquariumGreyboxView()
 {
-    watatsumiRampTracking_ = false;
     settings_.viewMode = 1.0f;
     settings_.stageMode = true;
     settings_.greyboxMode = true;
@@ -178,7 +333,6 @@ void AquariumScene::SelectAquariumGreyboxView()
 
 void AquariumScene::SelectUnderwaterArchView()
 {
-    watatsumiRampTracking_ = false;
     settings_.viewMode = 1.0f;
     settings_.stageMode = true;
     settings_.greyboxMode = true;
@@ -193,7 +347,6 @@ void AquariumScene::SelectUnderwaterArchView()
 
 void AquariumScene::SelectJellyfishReverseValidationView()
 {
-    watatsumiRampTracking_ = false;
     settings_.viewMode = 1.0f;
     settings_.stageMode = true;
     settings_.greyboxMode = true;
@@ -208,9 +361,6 @@ void AquariumScene::SelectJellyfishReverseValidationView()
 
 void AquariumScene::SelectWatatsumiTankView()
 {
-    watatsumiRampTracking_ = false;
-    watatsumiRampT_ = 0.0f;
-    watatsumiRampMaximumT_ = 0.0f;
     settings_.viewMode = 1.0f;
     settings_.stageMode = true;
     settings_.greyboxMode = true;
@@ -223,6 +373,12 @@ void AquariumScene::SelectWatatsumiTankView()
     settings_.cameraPositionZ = -3.0f;
     settings_.cameraYaw = 1.505f;
     settings_.cameraPitch = -0.065f;
+    playerCharacter_.eyePosition = {
+        settings_.cameraPositionX,
+        settings_.cameraPositionY,
+        settings_.cameraPositionZ};
+    playerCharacter_.activePath = -1;
+    playerCharacter_.activeSegment = 0;
 }
 
 void AquariumScene::UpdateCamera(
@@ -259,16 +415,23 @@ void AquariumScene::UpdateCamera(
 
         const float moveLength = std::sqrt(
             moveForward * moveForward + moveRight * moveRight);
+        float requestedMoveX = 0.0f;
+        float requestedMoveZ = 0.0f;
         if (moveLength > 0.0f)
         {
             moveForward /= moveLength;
             moveRight /= moveLength;
-            settings_.cameraPositionX +=
+            requestedMoveX =
                 (forwardX * moveForward + rightX * moveRight) *
                 movementSpeed * deltaTime;
-            settings_.cameraPositionZ +=
+            requestedMoveZ =
                 (forwardZ * moveForward + rightZ * moveRight) *
                 movementSpeed * deltaTime;
+            if (!settings_.watatsumiTankMode)
+            {
+                settings_.cameraPositionX += requestedMoveX;
+                settings_.cameraPositionZ += requestedMoveZ;
+            }
         }
         if (!settings_.underwaterArchMode &&
             !settings_.watatsumiTankMode && input.IsDown('E'))
@@ -298,223 +461,16 @@ void AquariumScene::UpdateCamera(
         }
         else if (settings_.watatsumiTankMode)
         {
+            watatsumiCollision_.MoveCharacter(
+                playerCharacter_,
+                {requestedMoveX, 0.0f, requestedMoveZ},
+                playerCapsule_);
             settings_.cameraPositionX =
-                std::clamp(settings_.cameraPositionX, -27.0f, 37.0f);
+                playerCharacter_.eyePosition.x;
+            settings_.cameraPositionY =
+                playerCharacter_.eyePosition.y;
             settings_.cameraPositionZ =
-                std::clamp(settings_.cameraPositionZ, -23.2f, 23.2f);
-
-            // The Shikoku Aquarium reference enters on the tank's right,
-            // disappears inside the wall, follows the rear perimeter and
-            // re-enters the atrium at the upper viewing level. Keep camera
-            // height on the same authored centre line used by the GLB.
-            auto evaluateRampPoint = [](float t)
-            {
-                t = std::clamp(t, 0.0f, 1.0f);
-                const float y = 0.18f + 12.22f * t;
-                auto line = [y](
-                    float ax, float az,
-                    float bx, float bz,
-                    float u)
-                {
-                    return DirectX::XMFLOAT3{
-                        ax + (bx - ax) * u,
-                        y,
-                        az + (bz - az) * u
-                    };
-                };
-                if (t < 0.06f)
-                {
-                    return line(-0.5f, -17.8f, 5.8f, -17.8f,
-                        t / 0.06f);
-                }
-                if (t < 0.20f)
-                {
-                    return line(5.8f, -17.8f, 17.8f, -17.8f,
-                        (t - 0.06f) / 0.14f);
-                }
-                if (t < 0.80f)
-                {
-                    const float u = (t - 0.20f) / 0.60f;
-                    const float angle =
-                        -DirectX::XM_PIDIV2 + DirectX::XM_PI * u;
-                    return DirectX::XMFLOAT3{
-                        17.8f + std::cos(angle) * 17.8f,
-                        y,
-                        std::sin(angle) * 17.8f
-                    };
-                }
-                if (t < 0.97f)
-                {
-                    return line(17.8f, 17.8f, 5.8f, 17.8f,
-                        (t - 0.80f) / 0.17f);
-                }
-                return line(5.8f, 17.8f, 3.6f, 17.8f,
-                    (t - 0.97f) / 0.03f);
-            };
-
-            constexpr float eyeHeight = 1.62f;
-            constexpr float rampHalfWidth = 2.10f;
-            constexpr float playerRadius = 0.34f;
-            constexpr float allowedCenterOffset =
-                rampHalfWidth - playerRadius;
-
-            struct RampQuery
-            {
-                float score = 100000.0f;
-                float distanceSquared = 100000.0f;
-                float t = 0.0f;
-                DirectX::XMFLOAT3 point{};
-            };
-            auto queryRamp = [&evaluateRampPoint](
-                float positionX,
-                float positionZ,
-                float centerT,
-                float halfRange,
-                int sampleCount)
-            {
-                RampQuery result;
-                const float minimumT = std::clamp(
-                    centerT - halfRange, 0.0f, 1.0f);
-                const float maximumT = std::clamp(
-                    centerT + halfRange, 0.0f, 1.0f);
-                for (int sampleIndex = 0;
-                     sampleIndex <= sampleCount;
-                     ++sampleIndex)
-                {
-                    const float sampleAlpha =
-                        sampleIndex / static_cast<float>(sampleCount);
-                    const float t = std::lerp(
-                        minimumT, maximumT, sampleAlpha);
-                    const DirectX::XMFLOAT3 point = evaluateRampPoint(t);
-                    const float dx = positionX - point.x;
-                    const float dz = positionZ - point.z;
-                    const float distanceSquared = dx * dx + dz * dz;
-                    if (distanceSquared < result.score)
-                    {
-                        result.score = distanceSquared;
-                        result.distanceSquared = distanceSquared;
-                        result.t = t;
-                        result.point = point;
-                    }
-                }
-                return result;
-            };
-
-            // Stateful swept-corridor collision. Once the player enters, the
-            // previous route parameter disambiguates overlapping helix turns.
-            RampQuery proposedRamp;
-            if (watatsumiRampTracking_)
-            {
-                proposedRamp = queryRamp(
-                    settings_.cameraPositionX,
-                    settings_.cameraPositionZ,
-                    watatsumiRampT_,
-                    0.035f,
-                    72);
-            }
-            else
-            {
-                proposedRamp = queryRamp(
-                    settings_.cameraPositionX,
-                    settings_.cameraPositionZ,
-                    0.5f,
-                    0.5f,
-                    384);
-                const float currentFloor =
-                    settings_.cameraPositionY - eyeHeight;
-                const bool lowerEntry =
-                    proposedRamp.t < 0.075f &&
-                    currentFloor < 0.85f;
-                const bool upperEntry =
-                    proposedRamp.t > 0.955f &&
-                    currentFloor > 11.55f;
-                watatsumiRampTracking_ =
-                    (lowerEntry || upperEntry) &&
-                    proposedRamp.distanceSquared < 2.15f * 2.15f;
-                if (watatsumiRampTracking_)
-                {
-                    watatsumiRampT_ = proposedRamp.t;
-                    watatsumiRampMaximumT_ = proposedRamp.t;
-                }
-            }
-
-            if (watatsumiRampTracking_)
-            {
-                // Preserve route continuity even where the helix overlaps in
-                // XZ. Small backwards movement remains possible, but a noisy
-                // nearest-point switch can never jump to a distant turn.
-                proposedRamp.t = std::clamp(
-                    proposedRamp.t,
-                    watatsumiRampT_ - 0.025f,
-                    watatsumiRampT_ + 0.025f);
-                watatsumiRampT_ = proposedRamp.t;
-                watatsumiRampMaximumT_ = std::max(
-                    watatsumiRampMaximumT_, watatsumiRampT_);
-                proposedRamp.point = evaluateRampPoint(watatsumiRampT_);
-
-                const float offsetX =
-                    settings_.cameraPositionX - proposedRamp.point.x;
-                const float offsetZ =
-                    settings_.cameraPositionZ - proposedRamp.point.z;
-                const float offsetLength = std::sqrt(
-                    offsetX * offsetX + offsetZ * offsetZ);
-                if (offsetLength > allowedCenterOffset)
-                {
-                    const float correctionScale =
-                        allowedCenterOffset /
-                        std::max(offsetLength, 0.0001f);
-                    settings_.cameraPositionX =
-                        proposedRamp.point.x + offsetX * correctionScale;
-                    settings_.cameraPositionZ =
-                        proposedRamp.point.z + offsetZ * correctionScale;
-                    proposedRamp.distanceSquared =
-                        allowedCenterOffset * allowedCenterOffset;
-                }
-                else
-                {
-                    proposedRamp.distanceSquared =
-                        offsetLength * offsetLength;
-                }
-
-                const bool exitedAtLowerEnd =
-                    watatsumiRampT_ < 0.012f &&
-                    watatsumiRampMaximumT_ > 0.04f;
-                const bool exitedAtUpperEnd =
-                    watatsumiRampT_ > 0.988f;
-                if (exitedAtLowerEnd || exitedAtUpperEnd)
-                {
-                    watatsumiRampTracking_ = false;
-                }
-            }
-
-            const float nearestRampT = proposedRamp.t;
-            float targetCameraY = 1.62f;
-            if (watatsumiRampTracking_)
-            {
-                const DirectX::XMFLOAT3 rampPoint =
-                    evaluateRampPoint(nearestRampT);
-                targetCameraY = rampPoint.y + eyeHeight;
-            }
-            else if (settings_.cameraPositionY > 9.0f &&
-                     ((settings_.cameraPositionX > -23.0f &&
-                       settings_.cameraPositionX < 4.5f &&
-                       std::abs(settings_.cameraPositionZ) > 15.3f &&
-                       std::abs(settings_.cameraPositionZ) < 20.4f) ||
-                      (settings_.cameraPositionX > -23.5f &&
-                       settings_.cameraPositionX < -18.5f &&
-                       std::abs(settings_.cameraPositionZ) < 20.4f)))
-            {
-                targetCameraY = 13.90f;
-            }
-
-            // Critically damped frame-rate-independent convergence removes
-            // the stair-step caused by a fixed per-frame vertical clamp.
-            const float verticalBlend =
-                1.0f - std::exp(-10.0f * deltaTime);
-            settings_.cameraPositionY = std::lerp(
-                settings_.cameraPositionY,
-                targetCameraY,
-                verticalBlend);
+                playerCharacter_.eyePosition.z;
         }
         else if (settings_.stageMode)
         {

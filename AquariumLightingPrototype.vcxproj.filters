@@ -10,6 +10,9 @@
     <Filter Include="02 Framework\Object Classes">
       <UniqueIdentifier>{817B7E88-C389-43EF-A9F1-17D9A1BED102}</UniqueIdentifier>
     </Filter>
+    <Filter Include="02 Framework\Physics">
+      <UniqueIdentifier>{60A6B6F5-ED16-4E78-908C-772A70A54FA2}</UniqueIdentifier>
+    </Filter>
     <Filter Include="03 Scenes">
       <UniqueIdentifier>{E1A8B9F0-F53B-457C-A552-03F9C999F188}</UniqueIdentifier>
     </Filter>
@@ -62,6 +65,9 @@
     </ClCompile>
     <ClCompile Include="src\framework\ObjectWorld.cpp">
       <Filter>02 Framework\Object Classes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\physics\CollisionWorld.cpp">
+      <Filter>02 Framework\Physics</Filter>
     </ClCompile>
     <ClCompile Include="src\scenes\AquariumScene.cpp">
       <Filter>03 Scenes</Filter>
@@ -122,6 +128,9 @@
     </ClInclude>
     <ClInclude Include="src\framework\ObjectWorld.h">
       <Filter>02 Framework\Object Classes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\physics\CollisionWorld.h">
+      <Filter>02 Framework\Physics</Filter>
     </ClInclude>
     <ClInclude Include="src\scenes\AquariumScene.h">
       <Filter>03 Scenes</Filter>
@@ -237,6 +246,9 @@
       <Filter>07 Third Party</Filter>
     </None>
     <None Include="FRAMEWORK_ARCHITECTURE.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="COLLISION_SYSTEM.md">
       <Filter>08 Documents</Filter>
     </None>
     <None Include="GLASS_VIEW_IMPLEMENTATION.md">

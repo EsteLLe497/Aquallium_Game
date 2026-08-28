@@ -10,6 +10,7 @@
 
 #include "../AquariumRenderer.h"
 #include "../framework/scene.h"
+#include "../physics/CollisionWorld.h"
 
 #include <filesystem>
 
@@ -45,11 +46,12 @@ private:
     void SelectWatatsumiTankView();
     void UpdateCamera(float deltaTime, const framework::InputSystem& input);
     void UpdateLightingTuning(float deltaTime, const framework::InputSystem& input);
+    void BuildWatatsumiCollision();
 
     AquariumRenderer renderer_;
     AquariumSettings settings_;
     float simulationTime_ = 0.0f;
-    bool watatsumiRampTracking_ = false;
-    float watatsumiRampT_ = 0.0f;
-    float watatsumiRampMaximumT_ = 0.0f;
+    physics::CollisionWorld watatsumiCollision_;
+    physics::CharacterCapsule playerCapsule_;
+    physics::CharacterState playerCharacter_;
 };

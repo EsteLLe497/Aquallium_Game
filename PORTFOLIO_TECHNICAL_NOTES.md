@@ -286,3 +286,14 @@ References:
 - https://shikoku-aquarium.jp/special/blog/archive/8/
 - https://shikoku-aquarium.jp/information/
 - https://www.taisei-design.jp/de/works/2020/shikokuaquarium.html
+# Tagged capsule collision and NavMesh-ready traversal
+
+- Implemented a reusable player capsule controller with sub-stepped movement
+  to prevent tunnelling and axis-separated wall sliding.
+- Replaced brute-force helical-ramp sampling with stateful local polyline
+  projection, preventing vertically overlapping turns from being confused.
+- Separated render geometry from tagged collision records (`Walkable`, `Ramp`,
+  `Glass`, `Rail`, `Water`, and `Trigger`) and layer masks.
+- Added tag queries to the reusable `GameObject` / `ObjectWorld` framework.
+- Authored walkable and ramp surfaces so the same semantic data can later feed
+  an enemy-AI NavMesh without coupling player collision to pathfinding.
