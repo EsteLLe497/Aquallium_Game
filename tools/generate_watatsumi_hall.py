@@ -101,17 +101,55 @@ TANK_WATER_SURFACE = 12.45
 UPPER_FLOOR_Y = 12.28
 HALL_CEILING_Y = 19.80
 PORTAL_Z = 17.80
-RAMP_RISE = 12.22
+RAMP_RISE = UPPER_FLOOR_Y
 RAMP_WIDTH = 5.40
 PORTAL_WIDTH = 6.20
 RAMP_WALL_HEIGHT = 2.60
 RAMP_ARCH_RISE = 3.50
+UPPER_ARM_MIN_X = -21.00
+UPPER_ARM_MAX_X = 4.00
+UPPER_ARM_CENTER_X = (UPPER_ARM_MIN_X + UPPER_ARM_MAX_X) * 0.5
+UPPER_CROSS_CENTER_X = -8.50
+UPPER_CROSS_WIDTH = RAMP_WIDTH
+UPPER_OUTER_Z = 20.50
+UPPER_INNER_Z = 15.10
+
+
+def ramp_horizontal_distance(t):
+    """Horizontal travel after the flat lower landing, in metres."""
+    if t <= 0.06:
+        return 0.0
+    straight = 12.0
+    arc = math.pi * 17.8
+    if t < 0.20:
+        return straight * ((t - 0.06) / 0.14)
+    if t < 0.80:
+        return straight + arc * ((t - 0.20) / 0.60)
+    if t < 0.97:
+        return straight + arc + straight * ((t - 0.80) / 0.17)
+    return straight * 2.0 + arc
+
+
+def ramp_height(t):
+    """C1 landing blend: zero grade at both floors, constant grade inside."""
+    travel = ramp_horizontal_distance(t)
+    total = 24.0 + math.pi * 17.8
+    blend = 2.0
+    effective = total - blend
+    if travel <= blend:
+        integrated = 0.5 * travel * travel / blend
+    elif travel < total - blend:
+        integrated = travel - blend * 0.5
+    else:
+        remaining = total - travel
+        integrated = effective - 0.5 * remaining * remaining / blend
+    return RAMP_RISE * integrated / effective
 
 
 def ramp_point(t):
     """Lower-right portal to upper-left portal via a concealed half helix."""
     t = max(0.0, min(1.0, t))
-    y = 0.18 + RAMP_RISE * t
+    y = ramp_height(t)
 
     def line(a, b, u):
         return (a[0] + (b[0]-a[0])*u, y, a[1] + (b[1]-a[1])*u)
@@ -336,7 +374,7 @@ def build():
     upper_lower_wall_top = 11.70
     box("WatatsumiArchitecture", (6.80,upper_lower_wall_top*0.5,-PORTAL_Z),
         (0.70,upper_lower_wall_top,PORTAL_WIDTH))
-    arch_portal_collar(PORTAL_Z, 0.95, top_clearance=6.45)
+    arch_portal_collar(PORTAL_Z, 0.0, top_clearance=7.35)
     arch_portal_collar(
         -PORTAL_Z,
         UPPER_FLOOR_Y,
@@ -350,30 +388,57 @@ def build():
         box("WatatsumiEmitter", (light[0], light[1]+5.72, light[2]),
             (1.15,0.06,0.18))
 
-    # 2F layout: remove the deck directly in front of the acrylic and relocate
-    # circulation to the opposite side of the atrium. Two side arms connect
-    # the portal ends to a rear cross-passage, leaving the tank sightline open.
-    box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y,-PORTAL_Z),
-        (25.0,0.24,RAMP_WIDTH))
-    box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y,PORTAL_Z),
-        (25.0,0.24,RAMP_WIDTH))
-    box("WatatsumiRamp", (-20.40,UPPER_FLOOR_Y,0.0),
-        (RAMP_WIDTH,0.24,41.0))
+    # 2F layout: two complete longitudinal arms and one centred cross-passage
+    # form a legible H. All floors and rails below use these shared extents so
+    # a rail can never continue through a junction or outlive its platform.
+    arm_length = UPPER_ARM_MAX_X - UPPER_ARM_MIN_X
+    box("WatatsumiRamp", (UPPER_ARM_CENTER_X,UPPER_FLOOR_Y,-PORTAL_Z),
+        (arm_length,0.24,RAMP_WIDTH))
+    box("WatatsumiRamp", (UPPER_ARM_CENTER_X,UPPER_FLOOR_Y,PORTAL_Z),
+        (arm_length,0.24,RAMP_WIDTH))
+    box("WatatsumiRamp", (UPPER_CROSS_CENTER_X,UPPER_FLOOR_Y,0.0),
+        (UPPER_CROSS_WIDTH,0.24,UPPER_OUTER_Z*2.0))
 
-    # Low solid fascias and slim rails protect every open atrium edge without
-    # restoring the former tank-front deck.
-    for z in (-20.5, -15.1, 15.1, 20.5):
-        box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y+0.17,z), (25.0,0.34,0.12))
-        box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y+1.12,z), (25.0,0.08,0.10))
-        for x in (-19.0, -15.5, -12.0, -8.5, -5.0, -1.5, 2.0):
-            box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z), (0.07,0.96,0.07))
-    # The rear cross-passage used to end in two unprotected floor edges. Match
-    # the side-arm language with continuous fascias, rails, and sparse posts.
-    for x in (-23.10, -17.70):
-        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.17,0.0), (0.12,0.34,30.2))
-        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+1.12,0.0), (0.10,0.08,30.2))
-        for z in (-14.0, -10.5, -7.0, -3.5, 0.0, 3.5, 7.0, 10.5, 14.0):
-            box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z), (0.07,0.96,0.07))
+    def horizontal_rail(x0, x1, z):
+        length = x1 - x0
+        center = (x0 + x1) * 0.5
+        box("WatatsumiRamp", (center,UPPER_FLOOR_Y+0.17,z),
+            (length,0.34,0.12))
+        box("WatatsumiRamp", (center,UPPER_FLOOR_Y+1.12,z),
+            (length,0.08,0.10))
+        post_count = max(1, math.ceil(length / 3.5))
+        for index in range(post_count + 1):
+            x = x0 + length * index / post_count
+            box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z),
+                (0.07,0.96,0.07))
+
+    def vertical_rail(x, z0, z1):
+        length = z1 - z0
+        center = (z0 + z1) * 0.5
+        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.17,center),
+            (0.12,0.34,length))
+        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+1.12,center),
+            (0.10,0.08,length))
+        post_count = max(1, math.ceil(length / 3.5))
+        for index in range(post_count + 1):
+            z = z0 + length * index / post_count
+            box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z),
+                (0.07,0.96,0.07))
+
+    cross_min_x = UPPER_CROSS_CENTER_X - UPPER_CROSS_WIDTH * 0.5
+    cross_max_x = UPPER_CROSS_CENTER_X + UPPER_CROSS_WIDTH * 0.5
+    for z in (-UPPER_OUTER_Z, UPPER_OUTER_Z):
+        horizontal_rail(UPPER_ARM_MIN_X, UPPER_ARM_MAX_X, z)
+    for z in (-UPPER_INNER_Z, UPPER_INNER_Z):
+        horizontal_rail(UPPER_ARM_MIN_X, cross_min_x, z)
+        horizontal_rail(cross_max_x, UPPER_ARM_MAX_X, z)
+    for x in (cross_min_x, cross_max_x):
+        vertical_rail(x, -UPPER_INNER_Z, UPPER_INNER_Z)
+    # Close the three dead ends. The south-east end remains open because it is
+    # the flush hand-off from the concealed ramp's upper portal.
+    vertical_rail(UPPER_ARM_MIN_X, -UPPER_OUTER_Z, -UPPER_INNER_Z)
+    vertical_rail(UPPER_ARM_MIN_X, UPPER_INNER_Z, UPPER_OUTER_Z)
+    vertical_rail(UPPER_ARM_MAX_X, UPPER_INNER_Z, UPPER_OUTER_Z)
     # A single restrained practical at the upper landing. The tank remains
     # the dominant source; this only gives visitors a distant navigation cue.
     box("WatatsumiEmitter", (3.8,UPPER_FLOOR_Y+2.2,-PORTAL_Z), (1.2,0.04,0.05))

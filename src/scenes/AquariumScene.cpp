@@ -18,11 +18,64 @@
 namespace
 {
 constexpr float kStageFloorOffset = -2.25f;
+constexpr float kWatatsumiUpperFloorY = 12.28f;
+constexpr float kWatatsumiRampRadius = 17.8f;
+constexpr float kWatatsumiRampStraightLength = 12.0f;
+
+float EvaluateWatatsumiRampHeight(float t)
+{
+    float travel = 0.0f;
+    const float arcLength = DirectX::XM_PI * kWatatsumiRampRadius;
+    if (t > 0.06f && t < 0.20f)
+    {
+        travel = kWatatsumiRampStraightLength *
+            ((t - 0.06f) / 0.14f);
+    }
+    else if (t >= 0.20f && t < 0.80f)
+    {
+        travel = kWatatsumiRampStraightLength +
+            arcLength * ((t - 0.20f) / 0.60f);
+    }
+    else if (t >= 0.80f && t < 0.97f)
+    {
+        travel = kWatatsumiRampStraightLength + arcLength +
+            kWatatsumiRampStraightLength *
+                ((t - 0.80f) / 0.17f);
+    }
+    else if (t >= 0.97f)
+    {
+        travel = kWatatsumiRampStraightLength * 2.0f + arcLength;
+    }
+
+    // Integrate a two-metre linear grade blend at each landing. Height and
+    // first derivative both meet the flat floor, avoiding camera bobble when
+    // CollisionWorld hands the capsule between a path and a walkable rect.
+    constexpr float blendLength = 2.0f;
+    const float totalLength =
+        kWatatsumiRampStraightLength * 2.0f + arcLength;
+    const float effectiveLength = totalLength - blendLength;
+    float integrated = 0.0f;
+    if (travel <= blendLength)
+    {
+        integrated = 0.5f * travel * travel / blendLength;
+    }
+    else if (travel < totalLength - blendLength)
+    {
+        integrated = travel - blendLength * 0.5f;
+    }
+    else
+    {
+        const float remaining = totalLength - travel;
+        integrated = effectiveLength -
+            0.5f * remaining * remaining / blendLength;
+    }
+    return kWatatsumiUpperFloorY * integrated / effectiveLength;
+}
 
 DirectX::XMFLOAT3 EvaluateWatatsumiRampPoint(float t)
 {
     t = std::clamp(t, 0.0f, 1.0f);
-    const float y = kStageFloorOffset + 0.18f + 12.22f * t;
+    const float y = kStageFloorOffset + EvaluateWatatsumiRampHeight(t);
     const auto line = [y](
         float ax, float az,
         float bx, float bz,
@@ -297,8 +350,8 @@ void AquariumScene::BuildWatatsumiCollision()
         ColliderTag::Walkable,
         LayerMask(CollisionLayer::World)});
     watatsumiCollision_.AddWalkableRect({
-        L"Watatsumi_2F_RearWalkway",
-        -23.10f, -17.70f, -20.50f, 20.50f,
+        L"Watatsumi_2F_CentreCrossWalkway",
+        -11.20f, -5.80f, -20.50f, 20.50f,
         kStageFloorOffset + 12.28f,
         ColliderTag::Walkable,
         LayerMask(CollisionLayer::World)});
@@ -405,26 +458,42 @@ void AquariumScene::BuildWatatsumiCollision()
         ColliderTag::Solid,
         LayerMask(CollisionLayer::World)});
 
-    // All four exposed edges of the upper side arms and both long edges of
-    // the rear cross-passage are physical rails, not merely visual trim.
-    for (const float z : {-20.50f, -15.10f, 15.10f, 20.50f})
+    // Match the generated H exactly. Inner arm rails stop at the cross-passage
+    // instead of piercing its walking surface, and each dead end is capped.
+    const auto horizontalRail = [this](
+        const wchar_t* name, float x0, float x1, float z)
     {
         watatsumiCollision_.AddBox({
-            L"Watatsumi_2F_SideArmRail",
-            {-21.0f, kStageFloorOffset + 12.28f, z - 0.06f},
-            {4.0f, kStageFloorOffset + 13.44f, z + 0.06f},
+            name,
+            {x0, kStageFloorOffset + 12.28f, z - 0.06f},
+            {x1, kStageFloorOffset + 13.44f, z + 0.06f},
             ColliderTag::Rail,
             LayerMask(CollisionLayer::World)});
-    }
-    for (const float x : {-23.10f, -17.70f})
+    };
+    const auto verticalRail = [this](
+        const wchar_t* name, float x, float z0, float z1)
     {
         watatsumiCollision_.AddBox({
-            L"Watatsumi_2F_RearRail",
-            {x - 0.06f, kStageFloorOffset + 12.28f, -15.10f},
-            {x + 0.06f, kStageFloorOffset + 13.44f, 15.10f},
+            name,
+            {x - 0.06f, kStageFloorOffset + 12.28f, z0},
+            {x + 0.06f, kStageFloorOffset + 13.44f, z1},
             ColliderTag::Rail,
             LayerMask(CollisionLayer::World)});
+    };
+    horizontalRail(L"Watatsumi_2F_SouthOuterRail", -21.0f, 4.0f, -20.50f);
+    horizontalRail(L"Watatsumi_2F_NorthOuterRail", -21.0f, 4.0f, 20.50f);
+    for (const float z : {-15.10f, 15.10f})
+    {
+        horizontalRail(L"Watatsumi_2F_InnerRailWest", -21.0f, -11.20f, z);
+        horizontalRail(L"Watatsumi_2F_InnerRailEast", -5.80f, 4.0f, z);
     }
+    verticalRail(L"Watatsumi_2F_CrossRailWest", -11.20f, -15.10f, 15.10f);
+    verticalRail(L"Watatsumi_2F_CrossRailEast", -5.80f, -15.10f, 15.10f);
+    verticalRail(L"Watatsumi_2F_SouthWestEndRail", -21.0f, -20.50f, -15.10f);
+    verticalRail(L"Watatsumi_2F_NorthWestEndRail", -21.0f, 15.10f, 20.50f);
+    // glTF Z is negated by StageModel: the visual south-east cap appears on
+    // rendered -Z, while rendered +Z remains open to the upper ramp landing.
+    verticalRail(L"Watatsumi_2F_SouthEastEndRail", 4.0f, -20.50f, -15.10f);
 
 }
 

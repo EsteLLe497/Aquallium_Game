@@ -13,10 +13,10 @@ from generate_watatsumi_hall import ramp_point
 
 SAMPLES = 2880
 RAMP_WIDTH = 5.40
-PLAYER_RADIUS = 0.34
+PLAYER_RADIUS = 0.32
 WALL_SAFETY_INSET = 0.12
-EYE_HEIGHT = 1.62
-PLAYER_HEIGHT = 1.82
+EYE_HEIGHT = 1.59
+PLAYER_HEIGHT = 1.70
 WALL_HEIGHT = 2.60
 ARCH_RISE = 3.50
 PORTAL_WIDTH = 6.20
@@ -97,11 +97,13 @@ def main() -> None:
     assert UPPER_PORTAL_BOTTOM <= points[round(SAMPLES * 0.97)][1]
     assert HALL_CEILING_BOTTOM >= points[round(SAMPLES * 0.97)][1] + crown_height
     assert resolved_offset <= allowed_center_offset
-    assert abs(points[0][1] - 0.18) < 1.0e-4
-    assert abs(points[-1][1] - 12.40) < 1.0e-4
+    assert abs(points[0][1]) < 1.0e-4
+    assert abs(points[round(SAMPLES * 0.06)][1]) < 1.0e-4
+    assert abs(points[round(SAMPLES * 0.97)][1] - 12.28) < 1.0e-4
+    assert abs(points[-1][1] - 12.28) < 1.0e-4
     assert abs(rendered_points[0][2] + 17.8) < 1.0e-4
     assert abs(rendered_points[-1][2] - 17.8) < 1.0e-4
-    assert abs((rendered_points[0][1] + STAGE_FLOOR_OFFSET) - (-2.07)) < 1.0e-4
+    assert abs(rendered_points[0][1] + STAGE_FLOOR_OFFSET - (-2.25)) < 1.0e-4
     assert reached_t >= 0.999
 
     print({
@@ -122,6 +124,9 @@ def main() -> None:
         "simulation_reached_t": round(reached_t, 4),
         "simulation_max_wall_offset_m": round(maximum_resolved_offset, 3),
         "eye_height_m": EYE_HEIGHT,
+        "player_height_m": PLAYER_HEIGHT,
+        "lower_landing_grade_percent": 0.0,
+        "upper_landing_grade_percent": 0.0,
         "stage_floor_offset_m": STAGE_FLOOR_OFFSET,
         "rendered_lower_entrance_z_m": rendered_points[0][2],
         "rendered_upper_exit_z_m": rendered_points[-1][2],

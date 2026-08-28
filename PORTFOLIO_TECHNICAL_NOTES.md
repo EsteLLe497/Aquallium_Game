@@ -310,6 +310,19 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
   live wall-push probes keep the underwater-arch centre within 2.60 m and the
   widened Watatsumi ramp within 2.24 m, preventing near-plane peeks outside
   the rendered glass/architecture without adding per-frame render work.
+- Rebuilt the Watatsumi upper gallery as a dimension-driven H plan: two
+  complete 25.0 x 5.4 m arms joined by a centred 5.4 m cross-passage. Rails
+  are emitted only along exposed perimeter segments, split at every walkway
+  junction, and mirrored by named collision rails so geometry cannot pierce
+  an opening or extend beyond its supporting floor.
+- Reparameterized the concealed ramp height from horizontal travel distance.
+  A two-metre integrated grade blend produces zero slope and exact floor
+  height at both portals while holding the internal maximum grade to 15.76%,
+  removing the former 0.18 m / 0.12 m landing snaps.
+- Calibrated the first-person capsule to an approximately 1.70 m adult:
+  1.70 m body height, 1.59 m eye height, 0.32 m radius and 0.32 m step height.
+  Rendering, collision clearance and all preview spawn heights consume the
+  same capsule values.
 
 References:
 
