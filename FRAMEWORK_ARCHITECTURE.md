@@ -150,7 +150,8 @@ Add these only when a real feature needs them:
    volumetric, glass, and post-processing resources.
 3. `AquariumZone`: data describing water bounds, optical coefficients, lights,
    and quality tier per tank.
-4. `CollisionWorld`: replace broad authoring camera clamps with stage proxies.
+4. `CollisionAsset`: serialize the existing tagged `CollisionWorld` proxies
+   from DCC-authored scene metadata instead of duplicating dimensions in C++.
 5. Data serialization: scene and exhibit definitions outside C++.
 
 Keeping those additions demand-driven prevents a speculative framework from

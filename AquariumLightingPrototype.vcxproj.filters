@@ -325,6 +325,12 @@
     <None Include="tools\generate_underwater_arch.py">
       <Filter>09 Tools</Filter>
     </None>
+    <None Include="tools\generate_watatsumi_hall.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\validate_aquarium_collision_layout.py">
+      <Filter>09 Tools</Filter>
+    </None>
     <None Include="tools\generate_aquarium_floorplan_v2.py">
       <Filter>09 Tools</Filter>
     </None>

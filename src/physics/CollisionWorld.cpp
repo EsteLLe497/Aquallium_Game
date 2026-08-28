@@ -119,10 +119,14 @@ bool CollisionWorld::TryFlatPosition(
         {
             continue;
         }
-        const float minimumX = surface.minimumX + capsule.radius;
-        const float maximumX = surface.maximumX - capsule.radius;
-        const float minimumZ = surface.minimumZ + capsule.radius;
-        const float maximumZ = surface.maximumZ - capsule.radius;
+        // Walkable rectangles describe authored floor coverage, not walls.
+        // Do not inset every rectangle by the capsule radius: adjacent rooms
+        // would otherwise acquire an invisible gap at each doorway seam.
+        // Boundary clearance is supplied by the tagged wall/rail colliders.
+        const float minimumX = surface.minimumX;
+        const float maximumX = surface.maximumX;
+        const float minimumZ = surface.minimumZ;
+        const float maximumZ = surface.maximumZ;
         if (desiredEye.x < minimumX || desiredEye.x > maximumX ||
             desiredEye.z < minimumZ || desiredEye.z > maximumZ)
         {

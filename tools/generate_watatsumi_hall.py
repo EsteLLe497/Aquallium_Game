@@ -237,10 +237,10 @@ def curved_tank_wall(material, segments=40):
         quad(material, (p0,p1,p2,p3), (normal[0]*inv,0,normal[2]*inv))
 
 
-def arch_portal_collar(center_z, floor_y, x=6.42, width=4.2,
+def arch_portal_collar(center_z, floor_y, x=6.40, width=4.2,
                        wall_height=2.2, arch_rise=3.0,
                        outer_width=5.0, top_clearance=5.9, segments=12):
-    """Close the rectangular facade void tightly around an arch section."""
+    """Frame the authored opening without duplicating the structural wall."""
     normal = (-1.0, 0.0, 0.0)
     half_width = width * 0.5
     outer_half = outer_width * 0.5
@@ -249,7 +249,7 @@ def arch_portal_collar(center_z, floor_y, x=6.42, width=4.2,
         z0 = center_z + side * half_width
         z1 = center_z + side * outer_half
         lo, hi = min(z0, z1), max(z0, z1)
-        quad("WatatsumiArchitecture",
+        quad("WatatsumiRamp",
              ((x,floor_y,lo),(x,floor_y+top_clearance,lo),
               (x,floor_y+top_clearance,hi),(x,floor_y,hi)), normal)
     # Curved spandrel fills the space above the elliptical crown.
@@ -261,7 +261,7 @@ def arch_portal_collar(center_z, floor_y, x=6.42, width=4.2,
         inner0 = floor_y + wall_height + math.sin(math.pi*u0) * arch_rise
         inner1 = floor_y + wall_height + math.sin(math.pi*u1) * arch_rise
         top = floor_y + top_clearance
-        quad("WatatsumiArchitecture",
+        quad("WatatsumiRamp",
              ((x,inner0,z0),(x,top,z0),(x,top,z1),(x,inner1,z1)), normal)
 
 
@@ -273,11 +273,17 @@ def build():
     box("WatatsumiArchitecture", (-27.85,9.2,0), (0.30,18.4,48))
     box("WatatsumiArchitecture", (5.0,HALL_CEILING_Y,0), (66,0.40,48))
 
-    # Fill both unused outer-edge voids up to the enlarged 5.0 m portals.
-    # Their inner faces now terminate on the same authored portal edge, so the
-    # facade no longer contains the thin slits left by the former patchwork.
-    box("WatatsumiArchitecture", (-8.4,9.1,21.55), (30.6,18.2,4.60))
-    box("WatatsumiArchitecture", (-8.4,9.1,-21.55), (30.6,18.2,4.60))
+    # Seal the service voids with non-overlapping solids. The previous 30.6 m
+    # patch blocks crossed both the portal frame and the exterior shell while
+    # still leaving a four-metre rear gap, which read as doubled walls and let
+    # the player enter unmodelled space. Every face now terminates exactly on
+    # the rear wall, facade plane, portal edge, or exterior wall inner face.
+    service_fill_center_x = (-27.70 + 6.45) * 0.5
+    service_fill_size_x = 6.45 - (-27.70)
+    for side in (-1.0, 1.0):
+        box("WatatsumiArchitecture",
+            (service_fill_center_x,9.1,side*22.0),
+            (service_fill_size_x,18.2,3.40))
 
     # The enlarged 29 x 12.2 m acrylic view is the hall's dominant landmark.
     box("WatatsumiArchitecture", (7.0,0.18,0), (1.0,0.36,31.2))
@@ -286,6 +292,11 @@ def build():
     box("WatatsumiArchitecture", (7.0,15.425,0), (1.0,5.95,29.0))
     box("WatatsumiArchitecture", (7.0,9.275,-14.575), (1.0,18.2,0.15))
     box("WatatsumiArchitecture", (7.0,9.275,14.575), (1.0,18.2,0.15))
+    # Narrow closures bridge the tank jambs to the portal trim. They replace
+    # the former accidental 0.65 m slots without stacking another room wall.
+    for side in (-1.0, 1.0):
+        box("WatatsumiArchitecture", (6.80,9.20,side*14.975),
+            (0.70,18.40,0.65))
     curved_tank_wall("WatatsumiWater")
     half_ellipse_cap("WatatsumiRock", 0.20, 1.0)
     # Front water interface then acrylic; both are separate transparent batches.
@@ -334,6 +345,13 @@ def build():
         box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y+0.17,z), (25.0,0.34,0.12))
         box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y+1.12,z), (25.0,0.08,0.10))
         for x in (-19.0, -15.5, -12.0, -8.5, -5.0, -1.5, 2.0):
+            box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z), (0.07,0.96,0.07))
+    # The rear cross-passage used to end in two unprotected floor edges. Match
+    # the side-arm language with continuous fascias, rails, and sparse posts.
+    for x in (-23.10, -18.90):
+        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.17,0.0), (0.12,0.34,31.4))
+        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+1.12,0.0), (0.10,0.08,31.4))
+        for z in (-14.0, -10.5, -7.0, -3.5, 0.0, 3.5, 7.0, 10.5, 14.0):
             box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z), (0.07,0.96,0.07))
     # A single restrained practical at the upper landing. The tank remains
     # the dominant source; this only gives visitors a distant navigation cue.

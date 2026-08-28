@@ -280,6 +280,20 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
   no longer execute the one-third-resolution six-step volume ray march or its
   temporal history pass when their authored volume strength is zero. The final
   composite also skips its five bilateral volume taps through a uniform branch.
+- Extended the tagged capsule controller from the hero hall to the entrance,
+  vestibule, jellyfish gallery and descending underwater arch. Adjacent floor
+  rectangles now meet without artificial capsule-radius seams; authored wall,
+  furniture, acrylic, rail and ramp tags provide the physical boundaries.
+- Re-authored the Watatsumi facade as exact non-overlapping intervals. The rear
+  shell, sealed service voids, portal shoulders and tank jambs now share edge
+  coordinates, removing the former four-metre hidden gap and portal overlap.
+- Completed the upper-floor safety envelope with rendered and collidable rear
+  cross-passage rails. Portal collars reuse the existing brushed ramp material,
+  adding contrast and wayfinding without another material batch or light pass.
+- Added external regression validation instead of startup assertions: a grid
+  reachability probe verifies both directions through Route 01-02, while exact
+  rail clearance and Watatsumi seam dimensions are checked alongside the
+  existing 2,880-sample helical-ramp traversal.
 
 References:
 

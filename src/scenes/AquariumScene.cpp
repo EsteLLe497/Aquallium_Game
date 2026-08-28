@@ -61,6 +61,13 @@ DirectX::XMFLOAT3 EvaluateWatatsumiRampPoint(float t)
         5.8f, 17.8f, 3.6f, 17.8f,
         (t - 0.97f) / 0.03f);
 }
+
+DirectX::XMFLOAT3 EvaluateUnderwaterArchPoint(float t)
+{
+    t = std::clamp(t, 0.0f, 1.0f);
+    const float smooth = t * t * (3.0f - 2.0f * t);
+    return {48.0f * t, -4.70f * smooth, 0.0f};
+}
 }
 
 AquariumScene::AquariumScene(
@@ -89,7 +96,137 @@ AquariumScene::AquariumScene(
         {0.0f, -1.0f, 0.0f}, 2.4f,
         {0.16f, 0.38f, 0.72f}, 30.0f, 54.0f,
         lighting::LocalLightType::Spot, true};
+    BuildRouteCollision();
+    BuildUnderwaterArchCollision();
     BuildWatatsumiCollision();
+}
+
+void AquariumScene::BuildRouteCollision()
+{
+    using physics::ColliderTag;
+    using physics::CollisionLayer;
+    using physics::LayerMask;
+
+    routeCollision_.Clear();
+    const auto addBox = [this](
+        const wchar_t* name,
+        float centerX, float centerY, float centerZ,
+        float sizeX, float sizeY, float sizeZ,
+        ColliderTag tag = ColliderTag::Solid)
+    {
+        routeCollision_.AddBox({
+            name,
+            {centerX - sizeX * 0.5f, centerY - sizeY * 0.5f,
+             centerZ - sizeZ * 0.5f},
+            {centerX + sizeX * 0.5f, centerY + sizeY * 0.5f,
+             centerZ + sizeZ * 0.5f},
+            tag,
+            LayerMask(CollisionLayer::World)});
+    };
+    const auto wallX = [&addBox](
+        const wchar_t* name, float x0, float x1, float z, float height)
+    {
+        addBox(name, (x0 + x1) * 0.5f, height * 0.5f, z,
+            x1 - x0, height, 0.28f);
+    };
+    const auto wallZ = [&addBox](
+        const wchar_t* name, float x, float z0, float z1, float height)
+    {
+        addBox(name, x, height * 0.5f, (z0 + z1) * 0.5f,
+            0.28f, height, z1 - z0);
+    };
+
+    // The three rectangles meet at authored door openings. CollisionWorld
+    // treats them as floor coverage, while the boxes below are the walls.
+    routeCollision_.AddWalkableRect({
+        L"Route01_EntranceFloor", -18.0f, -6.0f, -4.5f, 4.5f, 0.0f,
+        ColliderTag::Walkable, LayerMask(CollisionLayer::World)});
+    routeCollision_.AddWalkableRect({
+        L"Route01_VestibuleFloor", -6.0f, -3.0f, -2.0f, 2.0f, 0.0f,
+        ColliderTag::Walkable, LayerMask(CollisionLayer::World)});
+    routeCollision_.AddWalkableRect({
+        L"Route02_JellyfishFloor", -3.0f, 15.0f, -7.5f, 7.5f, 0.0f,
+        ColliderTag::Walkable, LayerMask(CollisionLayer::World)});
+
+    wallX(L"Entrance_NorthWall", -18.0f, -6.0f, 4.5f, 4.0f);
+    wallX(L"Entrance_SouthWall", -18.0f, -6.0f, -4.5f, 4.0f);
+    wallZ(L"Entrance_WestWall_North", -18.0f, 2.0f, 4.5f, 4.0f);
+    wallZ(L"Entrance_WestWall_South", -18.0f, -4.5f, -2.0f, 4.0f);
+    wallZ(L"Entrance_EastWall_North", -6.0f, 2.0f, 4.5f, 4.0f);
+    wallZ(L"Entrance_EastWall_South", -6.0f, -4.5f, -2.0f, 4.0f);
+    wallX(L"Vestibule_NorthWall", -6.0f, -3.0f, 2.0f, 3.2f);
+    wallX(L"Vestibule_SouthWall", -6.0f, -3.0f, -2.0f, 3.2f);
+    wallX(L"Jellyfish_NorthWall", -3.0f, 15.0f, 7.5f, 5.2f);
+    wallX(L"Jellyfish_SouthWall", -3.0f, 15.0f, -7.5f, 5.2f);
+    wallZ(L"Jellyfish_WestWall_North", -3.0f, 2.0f, 7.5f, 5.2f);
+    wallZ(L"Jellyfish_WestWall_South", -3.0f, -7.5f, -2.0f, 5.2f);
+    wallZ(L"Jellyfish_EastWall_North", 15.0f, 1.6f, 7.5f, 5.2f);
+    wallZ(L"Jellyfish_EastWall_South", 15.0f, -7.5f, -1.6f, 5.2f);
+
+    // Event doors, furniture and tanks use distinct tags so interaction and a
+    // future navmesh bake can filter them without geometry-name heuristics.
+    addBox(L"Entrance_AutomaticDoor", -17.86f, 1.40f, 0.0f,
+        0.12f, 2.80f, 4.0f);
+    addBox(L"Entrance_InfoCounter", -13.6f, 0.62f, 3.65f,
+        4.8f, 1.24f, 1.15f);
+    addBox(L"Entrance_InfoBackPanel", -13.6f, 2.25f, 4.30f,
+        5.4f, 2.45f, 0.22f);
+    addBox(L"Entrance_MapPedestal", -10.2f, 0.72f, -0.6f,
+        1.55f, 1.44f, 1.05f);
+    for (const float z : {-2.8f, 2.8f})
+    {
+        addBox(L"Entrance_Bench", -8.0f, 0.48f, z,
+            2.8f, 0.96f, 0.72f);
+    }
+
+    struct JellyColumn
+    {
+        float x;
+        float z;
+        float radius;
+        float height;
+    };
+    constexpr JellyColumn columns[] = {
+        {-0.2f, 3.55f, 0.72f, 3.85f},
+        {2.0f, -3.45f, 0.64f, 3.35f},
+        {4.3f, 3.20f, 0.70f, 4.05f},
+        {6.6f, -3.65f, 0.74f, 3.75f},
+        {8.8f, 3.45f, 0.62f, 3.40f},
+        {11.0f, -3.25f, 0.70f, 4.00f},
+        {13.0f, 3.55f, 0.66f, 3.55f}};
+    for (const JellyColumn& column : columns)
+    {
+        addBox(L"Jellyfish_DisplayGlass", column.x,
+            (column.height + 0.58f) * 0.5f, column.z,
+            column.radius * 2.0f, column.height + 0.58f,
+            column.radius * 2.0f, ColliderTag::Glass);
+    }
+    addBox(L"Jellyfish_StartBench", -0.3f, 0.48f, -5.65f,
+        3.2f, 0.96f, 0.78f);
+}
+
+void AquariumScene::BuildUnderwaterArchCollision()
+{
+    using physics::ColliderTag;
+    using physics::CollisionLayer;
+    using physics::LayerMask;
+
+    underwaterArchCollision_.Clear();
+    physics::PathSurface route;
+    route.name = L"DescendingUnderwaterArch_Walkway";
+    // The visible rail begins at 3.06 m. Subtracting the capsule radius in
+    // CollisionWorld leaves the player's body tangent to that rail.
+    route.halfWidth = 3.06f;
+    route.tag = ColliderTag::Ramp;
+    route.layer = LayerMask(CollisionLayer::World);
+    constexpr int routeSegments = 192;
+    route.centerLine.reserve(routeSegments + 1);
+    for (int index = 0; index <= routeSegments; ++index)
+    {
+        route.centerLine.push_back(EvaluateUnderwaterArchPoint(
+            index / static_cast<float>(routeSegments)));
+    }
+    underwaterArchCollision_.AddPathSurface(std::move(route));
 }
 
 void AquariumScene::BuildWatatsumiCollision()
@@ -177,6 +314,28 @@ void AquariumScene::BuildWatatsumiCollision()
             ColliderTag::Solid,
             LayerMask(CollisionLayer::World)});
     }
+    // Exact facade closures match the generator: tank jamb -> portal trim,
+    // then portal outer edge -> exterior wall. Unlike the old patch blocks,
+    // these volumes neither overlap the doorway nor leave a hidden rear gap.
+    for (const float side : {-1.0f, 1.0f})
+    {
+        watatsumiCollision_.AddBox({
+            side < 0.0f
+                ? L"Watatsumi_TankToSouthPortalClosure"
+                : L"Watatsumi_TankToNorthPortalClosure",
+            {6.38f, 0.0f, side < 0.0f ? -15.30f : 14.65f},
+            {7.50f, 18.40f, side < 0.0f ? -14.65f : 15.30f},
+            ColliderTag::Solid,
+            LayerMask(CollisionLayer::World)});
+        watatsumiCollision_.AddBox({
+            side < 0.0f
+                ? L"Watatsumi_SouthServiceVoid"
+                : L"Watatsumi_NorthServiceVoid",
+            {-27.70f, 0.0f, side < 0.0f ? -23.70f : 20.30f},
+            {6.45f, 18.20f, side < 0.0f ? -20.30f : 23.70f},
+            ColliderTag::Solid,
+            LayerMask(CollisionLayer::World)});
+    }
     watatsumiCollision_.AddBox({
         L"Watatsumi_RearWall",
         {-28.10f, -0.2f, -24.0f},
@@ -195,6 +354,27 @@ void AquariumScene::BuildWatatsumiCollision()
         {38.0f, 18.6f, -23.55f},
         ColliderTag::Solid,
         LayerMask(CollisionLayer::World)});
+
+    // All four exposed edges of the upper side arms and both long edges of
+    // the rear cross-passage are physical rails, not merely visual trim.
+    for (const float z : {-19.90f, -15.70f, 15.70f, 19.90f})
+    {
+        watatsumiCollision_.AddBox({
+            L"Watatsumi_2F_SideArmRail",
+            {-21.0f, 12.28f, z - 0.06f},
+            {4.0f, 13.44f, z + 0.06f},
+            ColliderTag::Rail,
+            LayerMask(CollisionLayer::World)});
+    }
+    for (const float x : {-23.10f, -18.90f})
+    {
+        watatsumiCollision_.AddBox({
+            L"Watatsumi_2F_RearRail",
+            {x - 0.06f, 12.28f, -15.70f},
+            {x + 0.06f, 13.44f, 15.70f},
+            ColliderTag::Rail,
+            LayerMask(CollisionLayer::World)});
+    }
 
 }
 
@@ -289,6 +469,16 @@ void AquariumScene::ResetSettings()
     playerCharacter_.activeSegment = 0;
 }
 
+void AquariumScene::ResetPlayerCharacter()
+{
+    playerCharacter_.eyePosition = {
+        settings_.cameraPositionX,
+        settings_.cameraPositionY,
+        settings_.cameraPositionZ};
+    playerCharacter_.activePath = -1;
+    playerCharacter_.activeSegment = 0;
+}
+
 void AquariumScene::SelectUnderwaterView()
 {
     settings_.viewMode = 0.0f;
@@ -322,10 +512,11 @@ void AquariumScene::SelectAquariumGreyboxView()
     // Enter from the public doors and look through the lobby toward the
     // Jellyfish Theater. The generated route runs along +X.
     settings_.cameraPositionX = -16.2f;
-    settings_.cameraPositionY = 0.10f;
+    settings_.cameraPositionY = playerCapsule_.eyeHeight;
     settings_.cameraPositionZ = 0.0f;
     settings_.cameraYaw = 1.57079633f;
     settings_.cameraPitch = -0.04f;
+    ResetPlayerCharacter();
 }
 
 void AquariumScene::SelectUnderwaterArchView()
@@ -336,10 +527,12 @@ void AquariumScene::SelectUnderwaterArchView()
     settings_.underwaterArchMode = true;
     settings_.watatsumiTankMode = false;
     settings_.cameraPositionX = 0.85f;
-    settings_.cameraPositionY = 1.58f;
+    settings_.cameraPositionY = playerCapsule_.eyeHeight;
     settings_.cameraPositionZ = 0.0f;
     settings_.cameraYaw = 1.57079633f;
     settings_.cameraPitch = -0.055f;
+    ResetPlayerCharacter();
+    playerCharacter_.activePath = 0;
 }
 
 void AquariumScene::SelectJellyfishReverseValidationView()
@@ -350,10 +543,11 @@ void AquariumScene::SelectJellyfishReverseValidationView()
     settings_.underwaterArchMode = false;
     settings_.watatsumiTankMode = false;
     settings_.cameraPositionX = 6.0f;
-    settings_.cameraPositionY = 0.10f;
+    settings_.cameraPositionY = playerCapsule_.eyeHeight;
     settings_.cameraPositionZ = -6.15f;
     settings_.cameraYaw = 0.0f;
     settings_.cameraPitch = -0.03f;
+    ResetPlayerCharacter();
 }
 
 void AquariumScene::SelectWatatsumiTankView()
@@ -370,12 +564,7 @@ void AquariumScene::SelectWatatsumiTankView()
     settings_.cameraPositionZ = -3.0f;
     settings_.cameraYaw = 1.505f;
     settings_.cameraPitch = -0.065f;
-    playerCharacter_.eyePosition = {
-        settings_.cameraPositionX,
-        settings_.cameraPositionY,
-        settings_.cameraPositionZ};
-    playerCharacter_.activePath = -1;
-    playerCharacter_.activeSegment = 0;
+    ResetPlayerCharacter();
 }
 
 void AquariumScene::UpdateCamera(
@@ -424,37 +613,30 @@ void AquariumScene::UpdateCamera(
             requestedMoveZ =
                 (forwardZ * moveForward + rightZ * moveRight) *
                 movementSpeed * deltaTime;
-            if (!settings_.watatsumiTankMode)
+            if (!settings_.greyboxMode)
             {
                 settings_.cameraPositionX += requestedMoveX;
                 settings_.cameraPositionZ += requestedMoveZ;
             }
         }
-        if (!settings_.underwaterArchMode &&
-            !settings_.watatsumiTankMode && input.IsDown('E'))
+        if (!settings_.greyboxMode && input.IsDown('E'))
         {
             settings_.cameraPositionY += movementSpeed * 0.65f * deltaTime;
         }
-        if (!settings_.underwaterArchMode &&
-            !settings_.watatsumiTankMode && input.IsDown('Q'))
+        if (!settings_.greyboxMode && input.IsDown('Q'))
         {
             settings_.cameraPositionY -= movementSpeed * 0.65f * deltaTime;
         }
 
         if (settings_.underwaterArchMode)
         {
-            settings_.cameraPositionX =
-                std::clamp(settings_.cameraPositionX, 0.55f, 47.45f);
-            settings_.cameraPositionZ =
-                std::clamp(settings_.cameraPositionZ, -2.72f, 2.72f);
-            const float routeT = std::clamp(
-                settings_.cameraPositionX / 48.0f,
-                0.0f,
-                1.0f);
-            const float smoothDescent =
-                routeT * routeT * (3.0f - 2.0f * routeT);
-            settings_.cameraPositionY =
-                1.58f - 4.7f * smoothDescent;
+            underwaterArchCollision_.MoveCharacter(
+                playerCharacter_,
+                {requestedMoveX, 0.0f, requestedMoveZ},
+                playerCapsule_);
+            settings_.cameraPositionX = playerCharacter_.eyePosition.x;
+            settings_.cameraPositionY = playerCharacter_.eyePosition.y;
+            settings_.cameraPositionZ = playerCharacter_.eyePosition.z;
         }
         else if (settings_.watatsumiTankMode)
         {
@@ -468,6 +650,16 @@ void AquariumScene::UpdateCamera(
                 playerCharacter_.eyePosition.y;
             settings_.cameraPositionZ =
                 playerCharacter_.eyePosition.z;
+        }
+        else if (settings_.greyboxMode)
+        {
+            routeCollision_.MoveCharacter(
+                playerCharacter_,
+                {requestedMoveX, 0.0f, requestedMoveZ},
+                playerCapsule_);
+            settings_.cameraPositionX = playerCharacter_.eyePosition.x;
+            settings_.cameraPositionY = playerCharacter_.eyePosition.y;
+            settings_.cameraPositionZ = playerCharacter_.eyePosition.z;
         }
         else if (settings_.stageMode)
         {
