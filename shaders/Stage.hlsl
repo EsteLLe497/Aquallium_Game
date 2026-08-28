@@ -146,53 +146,77 @@ float StageHash31(float3 value)
     return frac((value.x + value.y) * value.z);
 }
 
-float StagePanelInterior(float2 coordinates, float seamWidth)
-{
-    const float2 repeated = frac(coordinates);
-    const float2 edgeDistance = min(repeated, 1.0 - repeated);
-    return smoothstep(
-        seamWidth,
-        seamWidth * 2.8,
-        min(edgeDistance.x, edgeDistance.y));
-}
-
 float3 StageArchitecturalAlbedo(
     float3 worldPosition,
     float3 normal,
     float3 authoredColor,
     bool metallicTrim)
 {
-    // A texture-free architectural palette keeps the dark aquarium mood but
-    // restores material hierarchy. Large, irregular modules avoid the cheap
-    // checkerboard look and cost no texture fetches or extra draw passes.
+    // A texture-free Art-Deco aquarium palette inspired by the reference:
+    // dark terrazzo floor, navy diamond wainscot and pale upper plaster.
+    // Everything is analytic, so this adds no textures or draw passes.
     const float floorWeight = smoothstep(0.58, 0.82, normal.y);
     const float ceilingWeight = smoothstep(0.58, 0.82, -normal.y);
 
-    const float2 floorCoordinates = worldPosition.xz / 1.85;
-    const float floorInterior = StagePanelInterior(floorCoordinates, 0.018);
-    const float floorVariation = lerp(
-        0.88,
-        1.10,
-        StageHash21(floor(floorCoordinates) + 19.7));
-    float3 floorColor = float3(0.026, 0.043, 0.056) *
-        floorVariation * lerp(0.48, 1.0, floorInterior);
+    const float floorStoneWave =
+        0.965 +
+        0.022 * sin(worldPosition.x * 0.47 + worldPosition.z * 0.29) +
+        0.013 * sin(worldPosition.x * -0.21 + worldPosition.z * 0.73);
+    const float floorAggregate = smoothstep(
+        0.91,
+        0.985,
+        StageHash21(floor(worldPosition.xz * 3.2) + 19.7));
+    float3 floorColor =
+        float3(0.018, 0.030, 0.047) * floorStoneWave +
+        float3(0.010, 0.030, 0.041) * floorAggregate * 0.22;
 
     const float wallU = abs(normal.x) > abs(normal.z)
         ? worldPosition.z
         : worldPosition.x;
-    // A seamless mineral/acoustic finish differentiates the walls by colour,
-    // rough visual falloff and broad tonal variation. No drawn joints remain:
-    // in the previous version even sparse lines read as decorative stripes.
+    const float storyY = worldPosition.y < 8.0
+        ? max(worldPosition.y, 0.0)
+        : max(worldPosition.y - 12.28, 0.0);
     const float wallCloud =
         0.965 +
         0.020 * sin(wallU * 0.31 + worldPosition.y * 0.17) +
         0.010 * sin(wallU * 0.79 - worldPosition.y * 0.29);
-    const float wallVerticalTone = lerp(
-        0.91,
-        1.04,
-        smoothstep(0.0, 4.8, max(worldPosition.y, 0.0)));
-    float3 wallColor = float3(0.047, 0.058, 0.063) *
-        wallCloud * wallVerticalTone;
+
+    // Rotating the coordinate axes by 45 degrees gives the reference's navy
+    // diamond upholstery/tile without relying on a repeating image asset.
+    const float diamondScale = 1.48;
+    const float2 diamondCoordinates = float2(
+        (wallU + storyY) * diamondScale,
+        (wallU - storyY) * diamondScale);
+    const float2 diamondRepeated = frac(diamondCoordinates);
+    const float2 diamondDistance = min(
+        diamondRepeated,
+        1.0 - diamondRepeated);
+    const float diamondInterior = smoothstep(
+        0.028,
+        0.075,
+        min(diamondDistance.x, diamondDistance.y));
+    const float diamondVariation = lerp(
+        0.92,
+        1.06,
+        StageHash21(floor(diamondCoordinates) + 31.4));
+    const float3 diamondField = lerp(
+        float3(0.030, 0.090, 0.125),
+        float3(0.018, 0.062, 0.118) * diamondVariation,
+        diamondInterior);
+
+    const float3 upperPlaster =
+        float3(0.105, 0.118, 0.122) * wallCloud;
+    const float lowerWallMask =
+        smoothstep(0.16, 0.30, storyY) *
+        (1.0 - smoothstep(3.08, 3.28, storyY));
+    const float trimMask =
+        smoothstep(3.16, 3.22, storyY) *
+        (1.0 - smoothstep(3.38, 3.46, storyY));
+    float3 wallColor = lerp(upperPlaster, diamondField, lowerWallMask);
+    wallColor = lerp(
+        wallColor,
+        float3(0.030, 0.145, 0.165),
+        trimMask * 0.72);
 
     const float authoredLuminance = dot(
         authoredColor,
