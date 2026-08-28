@@ -180,27 +180,24 @@ float3 StageArchitecturalAlbedo(
     const float wallU = abs(normal.x) > abs(normal.z)
         ? worldPosition.z
         : worldPosition.x;
-    // Walls use tall matte architectural panels instead of repeating the
-    // floor treatment. The larger vertical rhythm reads clearly in dim light
-    // and separates the enclosure from the walking surface without textures.
-    const float2 wallCoordinates = float2(
-        wallU / 1.24,
-        worldPosition.y / 2.72);
-    const float2 wallRepeated = frac(wallCoordinates);
-    const float2 wallEdgeDistance = min(wallRepeated, 1.0 - wallRepeated);
-    const float wallNearestEdge = min(wallEdgeDistance.x, wallEdgeDistance.y);
-    const float wallInterior = smoothstep(0.010, 0.034, wallNearestEdge);
-    const float wallBevel = smoothstep(0.010, 0.020, wallNearestEdge) *
-        (1.0 - smoothstep(0.020, 0.052, wallNearestEdge));
-    const float wallVariation = lerp(
-        0.90,
-        1.09,
-        StageHash21(floor(wallCoordinates) + 7.3));
-    const float wallCloud = 0.965 + 0.035 * sin(
-        wallU * 1.73 + worldPosition.y * 0.61);
-    float3 wallColor = float3(0.047, 0.058, 0.065) *
-        wallVariation * wallCloud * lerp(0.40, 1.0, wallInterior);
-    wallColor += float3(0.004, 0.010, 0.014) * wallBevel;
+    // The wall is a continuous matte plaster/acoustic finish. Only sparse
+    // vertical expansion joints remain; horizontal joints made the previous
+    // version read like bathroom tiles, especially under blue tank light.
+    const float wallJointCoordinate = wallU / 3.80;
+    const float wallJointRepeated = frac(wallJointCoordinate);
+    const float wallJointDistance = min(
+        wallJointRepeated,
+        1.0 - wallJointRepeated);
+    const float wallInterior = smoothstep(0.006, 0.020, wallJointDistance);
+    const float wallBevel = smoothstep(0.007, 0.016, wallJointDistance) *
+        (1.0 - smoothstep(0.016, 0.034, wallJointDistance));
+    const float wallCloud =
+        0.970 +
+        0.018 * sin(wallU * 0.43 + worldPosition.y * 0.21) +
+        0.012 * sin(wallU * 1.17 - worldPosition.y * 0.37);
+    float3 wallColor = float3(0.045, 0.057, 0.064) *
+        wallCloud * lerp(0.52, 1.0, wallInterior);
+    wallColor += float3(0.003, 0.008, 0.011) * wallBevel;
 
     const float authoredLuminance = dot(
         authoredColor,
