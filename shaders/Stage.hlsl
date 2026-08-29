@@ -32,7 +32,7 @@ cbuffer StageConstants : register(b2)
     //    13 arch seam, 14 arch rail, 15 arch trim,
     //    16 Watatsumi water, 17 acrylic, 18 architecture, 19 ramp,
     //    20 tank rock, 21 waterline emitter, 22 upper water surface,
-    //    23 arch bubble, 24 above-water emitter, 25 view light curtain
+    //    23 arch bubble, 25 view light curtain
     // y: simulation time
     // z: material alpha
     float4 gStageSurfaceParameters;
@@ -1322,20 +1322,6 @@ StagePixelOutput PSStage(StageVertexOutput input)
         finalOpacity = saturate(0.012 + rim * 0.20 + glint * 0.30);
     }
     else if (!preserveAnalyticAquarium &&
-        surfaceType > 23.5 && surfaceType < 24.5)
-    {
-        // This is the physical fixture above the 5.8 m water surface. The
-        // corresponding CPU light launches from the same location, so the
-        // visible panel, surface hotspot and refracted shaft remain coherent.
-        const float edge = pow(
-            1.0 - saturate(abs(input.uv.x * 2.0 - 1.0)), 0.35) *
-            pow(1.0 - saturate(abs(input.uv.y * 2.0 - 1.0)), 0.35);
-        const float pulse = 0.96 + 0.04 * sin(
-            gStageSurfaceParameters.y * 0.31 + input.worldPosition.x);
-        finalColor = float3(0.10, 0.72, 1.75) *
-            (0.58 + edge * 0.62) * pulse;
-    }
-    else if (!preserveAnalyticAquarium &&
         surfaceType > 24.5 && surfaceType < 25.5)
     {
         // Crossed tapered cards replace the arch's full-screen volume march.
@@ -1344,8 +1330,8 @@ StagePixelOutput PSStage(StageVertexOutput input)
         // from remaining visible while the player walks past a bank.
         const float across = smoothstep(0.0, 0.18, input.uv.x) *
             (1.0 - smoothstep(0.82, 1.0, input.uv.x));
-        const float along = smoothstep(0.0, 0.12, input.uv.y) *
-            (1.0 - smoothstep(0.78, 1.0, input.uv.y));
+        const float along = smoothstep(0.0, 0.075, input.uv.y) *
+            (1.0 - smoothstep(0.92, 1.0, input.uv.y));
         const float viewFacing = abs(dot(normal, -viewDirection));
         const float viewResponse = lerp(
             1.0,
@@ -1361,7 +1347,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
             waterBreakup * filament;
         finalColor = float3(0.035, 0.31, 1.02) *
             beam * (0.82 + input.uv.y * 0.18);
-        finalOpacity = saturate(beam * 0.105);
+        finalOpacity = saturate(beam * 0.132);
     }
     else if (!preserveAnalyticAquarium &&
         surfaceType > 3.5 && surfaceType < 6.5)

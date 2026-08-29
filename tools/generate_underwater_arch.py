@@ -50,7 +50,6 @@ MATERIALS = {
     "TankWaterArch": (0.008, 0.120, 0.300, 0.58),
     "TankGlassArch": (0.055, 0.230, 0.400, 0.16),
     "ArchBubble": (0.260, 0.720, 1.000, 0.20),
-    "ArchOverheadEmitter": (0.260, 0.720, 1.000, 1.0),
     "ArchLightCurtain": (0.090, 0.420, 1.000, 0.12),
 }
 groups = {name: MeshGroup(name) for name in MATERIALS}
@@ -183,21 +182,6 @@ def add_water_surface_grid(x_segments=48, z_segments=24):
             group.indices.extend((a, a + 1, b, a + 1, b + 1, b))
 
 
-def add_overhead_service_lighting():
-    """Build the dry service ceiling and three luminaires above the water."""
-    add_box("Metal", (24.0, 8.52, 0.0), (52.0, 0.28, 18.0))
-    for x in range(0, 49, 8):
-        add_box("Metal", (float(x), 8.30, 0.0), (0.16, 0.30, 18.0))
-
-    fixtures = ((8.0, -2.10), (24.0, 2.00), (40.0, -1.65))
-    for x, z in fixtures:
-        add_box("Metal", (x, 8.16, z), (4.10, 0.30, 2.75))
-        add_box(
-            "ArchOverheadEmitter",
-            (x, 7.99, z),
-            (3.35, 0.035, 1.85))
-
-
 def add_light_card(top, bottom, top_width, bottom_width, across):
     """Append one soft tapered sheet used by the crossed light curtain."""
     ax, ay, az = across
@@ -222,26 +206,27 @@ def add_light_card(top, bottom, top_width, bottom_width, across):
 
 
 def add_refracted_light_curtains():
-    """Cross two tapered cards per bank between the surface and acrylic."""
+    """Cross two long tapered cards per bank from the surface into side water."""
     banks = (
         (8.0, -2.10, (0.08, -1.0, 0.10)),
         (24.0, 2.00, (-0.06, -1.0, -0.08)),
         (40.0, -1.65, (0.09, -1.0, 0.07)),
     )
-    for x, z, direction in banks:
+    for bank_index, (x, z, direction) in enumerate(banks):
         floor = route_height(x)
-        normalized_z = max(-0.98, min(0.98, z / ARCH_GLASS_RADIUS))
-        canopy = (
-            floor + ARCH_SPRING_HEIGHT +
-            ARCH_GLASS_HEIGHT * math.sqrt(1.0 - normalized_z * normalized_z))
         top = (x, WATER_SURFACE_HEIGHT - 0.06, z)
-        vertical_travel = max(top[1] - canopy - 0.10, 0.35)
+        # Continue the apparent shaft past the acrylic crown and into the tank
+        # water beside the dry walkway. The lateral bend keeps the cards out
+        # of the player's corridor while making their full length readable
+        # through the curved glass.
+        side = -1.0 if z < 0.0 else 1.0
+        vertical_travel = top[1] - (floor + 0.62)
         bottom = (
-            x + direction[0] * vertical_travel,
-            canopy + 0.10,
-            z + direction[2] * vertical_travel)
-        add_light_card(top, bottom, 0.42, 1.28, (0.0, 0.0, 1.0))
-        add_light_card(top, bottom, 0.34, 1.04, (1.0, 0.0, 0.0))
+            x + direction[0] * vertical_travel + (bank_index - 1) * 0.28,
+            floor + 0.62,
+            side * (ARCH_GLASS_RADIUS + 1.28))
+        add_light_card(top, bottom, 0.34, 1.72, (0.0, 0.0, 1.0))
+        add_light_card(top, bottom, 0.28, 1.38, (1.0, 0.0, 0.0))
 
 
 def add_bubble_plumes():
@@ -399,7 +384,6 @@ def build_layout():
 
     # A fixed world-space tank surface remains above the descending tunnel.
     # Water depth therefore increases naturally toward the route exit.
-    add_overhead_service_lighting()
     add_water_surface_grid()
     add_refracted_light_curtains()
     add_bubble_plumes()
@@ -514,9 +498,7 @@ def write_glb():
             "emissiveFactor": (
                 [0.04, 1.1, 2.0]
                 if name == "EmissiveCyan"
-                else ([0.18, 0.72, 1.8]
-                      if name == "ArchOverheadEmitter"
-                      else [0, 0, 0])),
+                else [0, 0, 0]),
             "alphaMode": (
                 "BLEND"
                 if (name.startswith("Tank") or

@@ -24,11 +24,11 @@ def load_glb_json(path: Path) -> dict:
 def main() -> None:
     document = load_glb_json(GLB_PATH)
     materials = {material["name"]: material for material in document["materials"]}
-    required = {"ArchWaterSurface", "ArchBubble", "ArchOverheadEmitter", "ArchLightCurtain"}
+    required = {"ArchWaterSurface", "ArchBubble", "ArchLightCurtain"}
     assert required <= materials.keys(), required - materials.keys()
     assert materials["ArchBubble"]["alphaMode"] == "BLEND"
     assert materials["ArchLightCurtain"]["alphaMode"] == "BLEND"
-    assert materials["ArchOverheadEmitter"]["alphaMode"] == "OPAQUE"
+    assert "ArchOverheadEmitter" not in materials
 
     mesh_names = {mesh["name"] for mesh in document["meshes"]}
     assert required <= mesh_names, required - mesh_names
@@ -36,12 +36,12 @@ def main() -> None:
     stage_shader = (ROOT / "shaders" / "Stage.hlsl").read_text(encoding="utf-8")
     stage_model = (ROOT / "src" / "StageModel.cpp").read_text(encoding="utf-8")
     renderer = (ROOT / "src" / "AquariumRenderer.cpp").read_text(encoding="utf-8")
-    for surface_type in ("23.5", "24.5", "25.5"):
+    for surface_type in ("23.5", "25.5"):
         assert surface_type in stage_shader
-    for material_name in ("ArchBubble", "ArchOverheadEmitter", "ArchLightCurtain"):
+    for material_name in ("ArchBubble", "ArchLightCurtain"):
         assert material_name in stage_model
     assert "!settings.greyboxMode" in renderer
-    assert "routePositions[lightIndex], 8.04f" in renderer
+    assert "routePositions[lightIndex], 7.40f" in renderer
 
     primitive_count = sum(len(mesh["primitives"]) for mesh in document["meshes"])
     print(json.dumps({

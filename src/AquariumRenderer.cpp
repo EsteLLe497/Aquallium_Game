@@ -363,7 +363,7 @@ void AquariumRenderer::Render(
         for (UINT lightIndex = 0; lightIndex < activeLightCount; ++lightIndex)
         {
             lights[lightIndex] = {
-                {routePositions[lightIndex], 8.04f,
+                {routePositions[lightIndex], 7.40f,
                  lateralPositions[lightIndex]},
                 intensity[lightIndex],
                 lightDirections[lightIndex],

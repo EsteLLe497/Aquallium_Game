@@ -506,10 +506,6 @@ void StageModel::Initialize(
                 {
                     primitiveSurfaceType = 23.0f;
                 }
-                else if (std::strcmp(materialName, "ArchOverheadEmitter") == 0)
-                {
-                    primitiveSurfaceType = 24.0f;
-                }
                 else if (std::strcmp(materialName, "ArchLightCurtain") == 0)
                 {
                     primitiveSurfaceType = 25.0f;
