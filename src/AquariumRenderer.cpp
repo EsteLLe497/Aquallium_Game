@@ -281,8 +281,8 @@ void AquariumRenderer::Render(
 
     const bool volumePassEnabled =
         settings.volumeStrength > 0.001f &&
-        !settings.watatsumiTankMode &&
-        !(settings.greyboxMode && !settings.underwaterArchMode);
+        !settings.greyboxMode &&
+        !settings.watatsumiTankMode;
     // Authored route views completely replace the old analytic aquarium.
     // They also need depth/motion MRTs only when the temporal volume pass is
     // active. Keeping those attachments off saves two full-resolution writes.
@@ -363,7 +363,7 @@ void AquariumRenderer::Render(
         for (UINT lightIndex = 0; lightIndex < activeLightCount; ++lightIndex)
         {
             lights[lightIndex] = {
-                {routePositions[lightIndex], 7.40f,
+                {routePositions[lightIndex], 8.04f,
                  lateralPositions[lightIndex]},
                 intensity[lightIndex],
                 lightDirections[lightIndex],

@@ -49,6 +49,9 @@ MATERIALS = {
     "ArchWaterSurface": (0.040, 0.360, 0.560, 0.32),
     "TankWaterArch": (0.008, 0.120, 0.300, 0.58),
     "TankGlassArch": (0.055, 0.230, 0.400, 0.16),
+    "ArchBubble": (0.260, 0.720, 1.000, 0.20),
+    "ArchOverheadEmitter": (0.260, 0.720, 1.000, 1.0),
+    "ArchLightCurtain": (0.090, 0.420, 1.000, 0.12),
 }
 groups = {name: MeshGroup(name) for name in MATERIALS}
 
@@ -180,6 +183,94 @@ def add_water_surface_grid(x_segments=48, z_segments=24):
             group.indices.extend((a, a + 1, b, a + 1, b + 1, b))
 
 
+def add_overhead_service_lighting():
+    """Build the dry service ceiling and three luminaires above the water."""
+    add_box("Metal", (24.0, 8.52, 0.0), (52.0, 0.28, 18.0))
+    for x in range(0, 49, 8):
+        add_box("Metal", (float(x), 8.30, 0.0), (0.16, 0.30, 18.0))
+
+    fixtures = ((8.0, -2.10), (24.0, 2.00), (40.0, -1.65))
+    for x, z in fixtures:
+        add_box("Metal", (x, 8.16, z), (4.10, 0.30, 2.75))
+        add_box(
+            "ArchOverheadEmitter",
+            (x, 7.99, z),
+            (3.35, 0.035, 1.85))
+
+
+def add_light_card(top, bottom, top_width, bottom_width, across):
+    """Append one soft tapered sheet used by the crossed light curtain."""
+    ax, ay, az = across
+    tx, ty, tz = top
+    bx, by, bz = bottom
+    vertices = [
+        (tx - ax * top_width, ty - ay * top_width, tz - az * top_width),
+        (bx - ax * bottom_width, by - ay * bottom_width, bz - az * bottom_width),
+        (bx + ax * bottom_width, by + ay * bottom_width, bz + az * bottom_width),
+        (tx + ax * top_width, ty + ay * top_width, tz + az * top_width),
+    ]
+    direction = (bx - tx, by - ty, bz - tz)
+    nx = direction[1] * az - direction[2] * ay
+    ny = direction[2] * ax - direction[0] * az
+    nz = direction[0] * ay - direction[1] * ax
+    inverse_length = 1.0 / max(math.sqrt(nx * nx + ny * ny + nz * nz), 0.0001)
+    append_quad(
+        "ArchLightCurtain",
+        vertices,
+        (nx * inverse_length, ny * inverse_length, nz * inverse_length),
+        ((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)))
+
+
+def add_refracted_light_curtains():
+    """Cross two tapered cards per bank between the surface and acrylic."""
+    banks = (
+        (8.0, -2.10, (0.08, -1.0, 0.10)),
+        (24.0, 2.00, (-0.06, -1.0, -0.08)),
+        (40.0, -1.65, (0.09, -1.0, 0.07)),
+    )
+    for x, z, direction in banks:
+        floor = route_height(x)
+        normalized_z = max(-0.98, min(0.98, z / ARCH_GLASS_RADIUS))
+        canopy = (
+            floor + ARCH_SPRING_HEIGHT +
+            ARCH_GLASS_HEIGHT * math.sqrt(1.0 - normalized_z * normalized_z))
+        top = (x, WATER_SURFACE_HEIGHT - 0.06, z)
+        vertical_travel = max(top[1] - canopy - 0.10, 0.35)
+        bottom = (
+            x + direction[0] * vertical_travel,
+            canopy + 0.10,
+            z + direction[2] * vertical_travel)
+        add_light_card(top, bottom, 0.42, 1.28, (0.0, 0.0, 1.0))
+        add_light_card(top, bottom, 0.34, 1.04, (1.0, 0.0, 0.0))
+
+
+def add_bubble_plumes():
+    """One draw-batch of fine bubbles rising from side diffusers to the surface."""
+    banks = (8.0, 24.0, 40.0)
+    for bank_index, bank_x in enumerate(banks):
+        for side_index, side in enumerate((-1.0, 1.0)):
+            plume_z = side * (4.85 + bank_index * 0.12)
+            floor = route_height(bank_x) - 0.42
+            for bubble_index in range(24):
+                u = (bubble_index + 0.35 * side_index) / 23.5
+                height_t = 1.0 - pow(1.0 - min(u, 1.0), 1.55)
+                phase = (
+                    bubble_index * 2.399963 +
+                    bank_index * 1.73 + side_index * 0.91)
+                x = bank_x + math.sin(phase * 1.31) * (0.18 + 0.20 * height_t)
+                z = plume_z + math.cos(phase * 0.87) * (0.14 + 0.24 * height_t)
+                y = floor + (WATER_SURFACE_HEIGHT - 0.12 - floor) * height_t
+                radius = 0.035 + 0.060 * (0.5 + 0.5 * math.sin(phase * 1.91))
+                radius *= 0.76 + height_t * 0.42
+                add_ellipsoid(
+                    "ArchBubble",
+                    (x, y, z),
+                    (radius * 0.84, radius * 1.15, radius),
+                    latitude_segments=4,
+                    longitude_segments=6,
+                    seed=phase)
+
+
 def route_height(x: float) -> float:
     t = max(0.0, min(1.0, x / 48.0))
     smooth = t * t * (3.0 - 2.0 * t)
@@ -308,7 +399,10 @@ def build_layout():
 
     # A fixed world-space tank surface remains above the descending tunnel.
     # Water depth therefore increases naturally toward the route exit.
+    add_overhead_service_lighting()
     add_water_surface_grid()
+    add_refracted_light_curtains()
+    add_bubble_plumes()
 
     # The published reference uses opaque waist rails below a broad acrylic
     # canopy. Avoid stacked transparent side sheets: their blend order reads as
@@ -417,13 +511,21 @@ def write_glb():
                 "metallicFactor": 0.58 if name == "Metal" else 0.02,
                 "roughnessFactor": 0.16 if name.startswith("Tank") else 0.72,
             },
-            "emissiveFactor": ([0.04, 1.1, 2.0] if name == "EmissiveCyan" else [0, 0, 0]),
+            "emissiveFactor": (
+                [0.04, 1.1, 2.0]
+                if name == "EmissiveCyan"
+                else ([0.18, 0.72, 1.8]
+                      if name == "ArchOverheadEmitter"
+                      else [0, 0, 0])),
             "alphaMode": (
                 "BLEND"
-                if name.startswith("Tank") or name == "ArchWaterSurface"
+                if (name.startswith("Tank") or
+                    name in {"ArchWaterSurface", "ArchBubble", "ArchLightCurtain"})
                 else "OPAQUE"
             ),
-            "doubleSided": name.startswith("Tank") or name == "ArchWaterSurface",
+            "doubleSided": (
+                name.startswith("Tank") or
+                name in {"ArchWaterSurface", "ArchBubble", "ArchLightCurtain"}),
         })
 
     def view(payload, target):

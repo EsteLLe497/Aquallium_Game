@@ -31,7 +31,8 @@ cbuffer StageConstants : register(b2)
     //    10 real tank surface, 11 arch floor, 12 arch rock,
     //    13 arch seam, 14 arch rail, 15 arch trim,
     //    16 Watatsumi water, 17 acrylic, 18 architecture, 19 ramp,
-    //    20 tank rock, 21 waterline emitter, 22 upper water surface
+    //    20 tank rock, 21 waterline emitter, 22 upper water surface,
+    //    23 arch bubble, 24 above-water emitter, 25 view light curtain
     // y: simulation time
     // z: material alpha
     float4 gStageSurfaceParameters;
@@ -1293,6 +1294,74 @@ StagePixelOutput PSStage(StageVertexOutput input)
             surfaceLightColor * surfaceLightBank *
                 (0.13 + fresnel * 0.17);
         finalOpacity = saturate(0.24 + fresnel * 0.26);
+    }
+    else if (!preserveAnalyticAquarium &&
+        surfaceType > 22.5 && surfaceType < 23.5)
+    {
+        // Fine air bubbles are one combined low-poly batch. Their transparent
+        // interiors stay nearly invisible; only the Fresnel rim and a small
+        // overhead glint survive, which reads as a real air/water interface.
+        const float3 bubbleNormal =
+            dot(normal, -viewDirection) >= 0.0 ? normal : -normal;
+        const float facing = saturate(dot(-viewDirection, bubbleNormal));
+        const float rim = pow(1.0 - facing, 2.35);
+        const float3 lightDirection = normalize(float3(0.08, -1.0, 0.06));
+        const float glint = pow(saturate(dot(
+            reflect(-lightDirection, bubbleNormal),
+            -viewDirection)), 48.0);
+        const float film = 0.5 + 0.5 * sin(
+            input.worldPosition.y * 13.0 +
+            input.worldPosition.x * 5.3 +
+            gStageSurfaceParameters.y * 0.55);
+        finalColor =
+            lerp(
+                float3(0.045, 0.24, 0.52),
+                float3(0.28, 0.82, 1.18),
+                film) * rim * 0.72 +
+            float3(0.66, 0.92, 1.20) * glint * 0.88;
+        finalOpacity = saturate(0.012 + rim * 0.20 + glint * 0.30);
+    }
+    else if (!preserveAnalyticAquarium &&
+        surfaceType > 23.5 && surfaceType < 24.5)
+    {
+        // This is the physical fixture above the 5.8 m water surface. The
+        // corresponding CPU light launches from the same location, so the
+        // visible panel, surface hotspot and refracted shaft remain coherent.
+        const float edge = pow(
+            1.0 - saturate(abs(input.uv.x * 2.0 - 1.0)), 0.35) *
+            pow(1.0 - saturate(abs(input.uv.y * 2.0 - 1.0)), 0.35);
+        const float pulse = 0.96 + 0.04 * sin(
+            gStageSurfaceParameters.y * 0.31 + input.worldPosition.x);
+        finalColor = float3(0.10, 0.72, 1.75) *
+            (0.58 + edge * 0.62) * pulse;
+    }
+    else if (!preserveAnalyticAquarium &&
+        surfaceType > 24.5 && surfaceType < 25.5)
+    {
+        // Crossed tapered cards replace the arch's full-screen volume march.
+        // They occupy only the real water gap above the acrylic and fade at
+        // all mesh boundaries. View-angle response prevents a flat rectangle
+        // from remaining visible while the player walks past a bank.
+        const float across = smoothstep(0.0, 0.18, input.uv.x) *
+            (1.0 - smoothstep(0.82, 1.0, input.uv.x));
+        const float along = smoothstep(0.0, 0.12, input.uv.y) *
+            (1.0 - smoothstep(0.78, 1.0, input.uv.y));
+        const float viewFacing = abs(dot(normal, -viewDirection));
+        const float viewResponse = lerp(
+            1.0,
+            0.34,
+            smoothstep(0.18, 0.92, viewFacing));
+        const float waterBreakup = 0.82 + 0.18 * sin(
+            input.worldPosition.y * 2.15 +
+            input.worldPosition.x * 0.41 -
+            gStageSurfaceParameters.y * 0.34);
+        const float filament = 0.72 + 0.28 * pow(
+            saturate(sin(input.uv.x * 9.4248)), 2.0);
+        const float beam = across * along * viewResponse *
+            waterBreakup * filament;
+        finalColor = float3(0.035, 0.31, 1.02) *
+            beam * (0.82 + input.uv.y * 0.18);
+        finalOpacity = saturate(beam * 0.105);
     }
     else if (!preserveAnalyticAquarium &&
         surfaceType > 3.5 && surfaceType < 6.5)

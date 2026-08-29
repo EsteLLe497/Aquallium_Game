@@ -377,3 +377,28 @@ References:
 - Added tag queries to the reusable `GameObject` / `ObjectWorld` framework.
 - Authored walkable and ramp surfaces so the same semantic data can later feed
   an enemy-AI NavMesh without coupling player collision to pathfinding.
+
+# Physically grounded underwater-arch surface lighting
+
+- Added a dry service ceiling and three broad luminaires above the fixed
+  5.80 m water surface. The visible emitter panels, CPU light origins and
+  refracted light directions share the same authored coordinates, so the
+  highlight no longer appears to originate inside the tank.
+- Added 144 small low-poly bubbles as one transparent material batch. Side
+  diffuser plumes widen and become denser toward the surface; a thin-film
+  Fresnel/glint shader leaves the bubble interiors nearly invisible.
+- Replaced the underwater arch's full-screen temporal volume ray march with
+  six crossed tapered light cards. Soft four-edge masks, animated surface
+  breakup and view-angle response hide the card boundaries while retaining
+  the changing shafts seen as the player walks beneath them.
+- Kept the physical water surface and acrylic render path, but avoided an
+  additional depth/motion MRT, shadow map or post-process history allocation.
+  The final Debug x64 1296 x 759 route capture ran at 105 FPS at 100% render
+  scale while displaying the new ceiling, bubble and light-curtain layers.
+
+References:
+
+- https://www.georgiaaquarium.org/gallery/ocean-voyager/
+- https://www.visitsealife.com/sydney/information/news/7-most-instagrammable-places-in-sydney-aquarium/
+- https://www.visitsealife.com/birmingham/explore/aquarium-zones/ocean-tunnel/
+- https://canadianpond.ca/solutions/bubble-curtains/

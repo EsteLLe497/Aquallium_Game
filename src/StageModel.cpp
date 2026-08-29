@@ -502,6 +502,18 @@ void StageModel::Initialize(
                 {
                     primitiveSurfaceType = 22.0f;
                 }
+                else if (std::strcmp(materialName, "ArchBubble") == 0)
+                {
+                    primitiveSurfaceType = 23.0f;
+                }
+                else if (std::strcmp(materialName, "ArchOverheadEmitter") == 0)
+                {
+                    primitiveSurfaceType = 24.0f;
+                }
+                else if (std::strcmp(materialName, "ArchLightCurtain") == 0)
+                {
+                    primitiveSurfaceType = 25.0f;
+                }
                 primitiveTransparent =
                     primitive.material->alpha_mode ==
                     cgltf_alpha_mode_blend;
