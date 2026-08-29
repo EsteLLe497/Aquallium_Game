@@ -155,6 +155,23 @@ AquariumScene::AquariumScene(
     BuildRouteCollision();
     BuildUnderwaterArchCollision();
     BuildWatatsumiCollision();
+
+    // Keep automated performance captures reproducible without changing the
+    // normal player-facing startup route. Example: AQUARIUM_START_VIEW=6.
+    wchar_t startView[8]{};
+    if (GetEnvironmentVariableW(
+            L"AQUARIUM_START_VIEW", startView,
+            ARRAYSIZE(startView)) > 0)
+    {
+        switch (startView[0])
+        {
+        case L'3': SelectAquariumGreyboxView(); break;
+        case L'4': SelectUnderwaterArchView(); break;
+        case L'5': SelectJellyfishReverseValidationView(); break;
+        case L'6': SelectWatatsumiTankView(); break;
+        default: break;
+        }
+    }
 }
 
 void AquariumScene::BuildStageGlassCollision()
@@ -575,6 +592,9 @@ framework::SceneDiagnostics AquariumScene::GetDiagnostics() const
     diagnostics.volumeStrength = settings_.volumeStrength;
     diagnostics.anisotropy = settings_.anisotropy;
     diagnostics.exposure = settings_.exposure;
+    diagnostics.renderScale = renderer_.RenderScale();
+    diagnostics.smoothedFrameMilliseconds =
+        renderer_.SmoothedFrameMilliseconds();
     diagnostics.paused = settings_.paused;
     return diagnostics;
 }

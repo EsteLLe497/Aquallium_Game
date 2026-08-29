@@ -506,11 +506,29 @@ void StageModel::Initialize(
                     primitive.material->alpha_mode ==
                     cgltf_alpha_mode_blend;
             }
+
+            DirectX::XMFLOAT3 boundsMinimum{
+                vertices[baseVertex].position};
+            DirectX::XMFLOAT3 boundsMaximum{
+                vertices[baseVertex].position};
+            for (std::size_t vertexIndex = baseVertex + 1;
+                 vertexIndex < vertices.size(); ++vertexIndex)
+            {
+                const auto& position = vertices[vertexIndex].position;
+                boundsMinimum.x = std::min(boundsMinimum.x, position.x);
+                boundsMinimum.y = std::min(boundsMinimum.y, position.y);
+                boundsMinimum.z = std::min(boundsMinimum.z, position.z);
+                boundsMaximum.x = std::max(boundsMaximum.x, position.x);
+                boundsMaximum.y = std::max(boundsMaximum.y, position.y);
+                boundsMaximum.z = std::max(boundsMaximum.z, position.z);
+            }
             drawBatches_.push_back({
                 batchIndexStart,
                 static_cast<std::uint32_t>(
                     indices.size() - batchIndexStart),
                 primitiveBaseColor,
+                boundsMinimum,
+                boundsMaximum,
                 primitiveSurfaceType,
                 primitiveTransparent
             });
@@ -841,8 +859,51 @@ void StageModel::RenderPass(
     }
     context->RSSetState(rasterizerState_.Get());
 
+    const auto isVisible = [&currentViewProjection](const DrawBatch& batch)
+    {
+        using namespace DirectX;
+        const XMFLOAT3& minimum = batch.boundsMinimum;
+        const XMFLOAT3& maximum = batch.boundsMaximum;
+        unsigned outsideLeft = 0;
+        unsigned outsideRight = 0;
+        unsigned outsideBottom = 0;
+        unsigned outsideTop = 0;
+        unsigned outsideNear = 0;
+        unsigned outsideFar = 0;
+        for (unsigned corner = 0; corner < 8; ++corner)
+        {
+            const XMVECTOR position = XMVectorSet(
+                ((corner & 1u) != 0 ? maximum.x : minimum.x) +
+                    ((corner & 1u) != 0 ? 0.35f : -0.35f),
+                ((corner & 2u) != 0 ? maximum.y : minimum.y) +
+                    ((corner & 2u) != 0 ? 0.35f : -0.35f),
+                ((corner & 4u) != 0 ? maximum.z : minimum.z) +
+                    ((corner & 4u) != 0 ? 0.35f : -0.35f),
+                1.0f);
+            const XMVECTOR clip = XMVector4Transform(
+                position, currentViewProjection);
+            const float x = XMVectorGetX(clip);
+            const float y = XMVectorGetY(clip);
+            const float z = XMVectorGetZ(clip);
+            const float w = XMVectorGetW(clip);
+            outsideLeft += x < -w;
+            outsideRight += x > w;
+            outsideBottom += y < -w;
+            outsideTop += y > w;
+            outsideNear += z < 0.0f;
+            outsideFar += z > w;
+        }
+        return outsideLeft != 8u && outsideRight != 8u &&
+            outsideBottom != 8u && outsideTop != 8u &&
+            outsideNear != 8u && outsideFar != 8u;
+    };
+
     auto drawBatch = [&](const DrawBatch& batch)
     {
+        if (!isVisible(batch))
+        {
+            return;
+        }
         D3D11_MAPPED_SUBRESOURCE mapped{};
         ThrowIfFailed(
             context->Map(

@@ -978,6 +978,27 @@ float3 HighlightBloom(float2 uv)
     return bloom * 0.105;
 }
 
+float3 StageHighlightBloom(float2 uv)
+{
+    // Route views contain compact practical emitters rather than the full
+    // analytic tank. Two symmetric bilinear taps preserve their soft halo at
+    // half the scene-color bandwidth of the generic four-corner filter.
+    const float2 texel = 1.0 / gResolution;
+    const float3 sampleA = gSceneColorTexture.SampleLevel(
+        gLinearClampSampler,
+        uv + float2(-3.25, -2.75) * texel,
+        0).rgb;
+    const float3 sampleB = gSceneColorTexture.SampleLevel(
+        gLinearClampSampler,
+        uv + float2(3.25, 2.75) * texel,
+        0).rgb;
+    const float brightnessA = max(sampleA.r, max(sampleA.g, sampleA.b));
+    const float brightnessB = max(sampleB.r, max(sampleB.g, sampleB.b));
+    return (
+        sampleA * smoothstep(0.32, 1.1, brightnessA) +
+        sampleB * smoothstep(0.32, 1.1, brightnessB)) * 0.185;
+}
+
 void BuildCameraBasis(
     float yaw,
     float pitch,
@@ -1533,6 +1554,17 @@ float4 PSComposite(VSOutput input) : SV_TARGET
         gLinearClampSampler,
         input.uv,
         0).rgb;
+
+    if (gStagePreviewMode > 0.5)
+    {
+        // Fast authored-route path: volume is disabled for these rooms, so a
+        // depth fetch and the generic four-tap bloom would be pure bandwidth.
+        sceneColor += StageHighlightBloom(input.uv);
+        sceneColor = ACESFilm(sceneColor * gExposure);
+        sceneColor = pow(sceneColor, 1.0 / 2.2);
+        return float4(sceneColor, 1.0);
+    }
+
     const float sceneDepth = gSceneDepthTexture.SampleLevel(
         gLinearClampSampler,
         input.uv,
@@ -1544,15 +1576,6 @@ float4 PSComposite(VSOutput input) : SV_TARGET
         : 0.0;
     sceneColor += volume;
     sceneColor += HighlightBloom(input.uv);
-
-    if (gStagePreviewMode > 0.5)
-    {
-        // The modeled route is an air-side interior. Do not wrap it in the old
-        // full-screen aquarium aperture or apply water-column color grading.
-        sceneColor = ACESFilm(sceneColor * gExposure);
-        sceneColor = pow(sceneColor, 1.0 / 2.2);
-        return float4(sceneColor, 1.0);
-    }
 
     // VRC-aquarium grade: lifted blue-green shadows, restrained contrast and
     // a slightly stylized cyan separation without flattening HDR highlights.

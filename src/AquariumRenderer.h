@@ -17,6 +17,7 @@
 #include "StageModel.h"
 #include "JellyfishRenderer.h"
 #include "lighting/LocalLight.h"
+#include "rendering/AdaptiveResolution.h"
 
 static constexpr UINT kMaxAquariumLights = 4;
 
@@ -56,6 +57,8 @@ struct AquariumSettings
     bool greyboxMode = false;
     bool underwaterArchMode = false;
     bool watatsumiTankMode = false;
+    bool adaptiveResolution = true;
+    float targetFrameRate = 100.0f;
     lighting::LocalLightingRig localLighting{};
 };
 
@@ -72,6 +75,16 @@ public:
         float time,
         float deltaTime,
         const AquariumSettings& settings);
+
+    [[nodiscard]] float RenderScale() const noexcept
+    {
+        return adaptiveResolution_.Scale();
+    }
+
+    [[nodiscard]] float SmoothedFrameMilliseconds() const noexcept
+    {
+        return adaptiveResolution_.SmoothedFrameMilliseconds();
+    }
 
 private:
     // 起動時に一度だけ必要なシェーダー、ステート、ノイズ、Shadow Mapを生成
@@ -215,4 +228,5 @@ private:
     StageModel underwaterArchModel_;
     StageModel watatsumiTankModel_;
     JellyfishRenderer jellyfishRenderer_;
+    rendering::AdaptiveResolution adaptiveResolution_;
 };

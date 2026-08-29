@@ -334,10 +334,12 @@ void D3D11App::UpdateWindowTitle(float deltaTime)
     const framework::SceneDiagnostics diagnostics =
         sceneManager_.GetDiagnostics();
     const std::wstring title = std::format(
-        L"Aquarium Lighting Prototype | {:.0f} FPS | {} | {} | Caustics {:.2f} | Volume {:.2f} | g {:.2f} | Exposure {:.2f}{}",
+        L"Aquarium Lighting Prototype | {:.0f} FPS | {} | {} | Scale {:.0f}% / {:.1f} ms | Caustics {:.2f} | Volume {:.2f} | g {:.2f} | Exposure {:.2f}{}",
         fps,
         diagnostics.viewLabel,
         vsyncEnabled_ ? L"VSYNC" : L"UNLOCKED",
+        diagnostics.renderScale * 100.0f,
+        diagnostics.smoothedFrameMilliseconds,
         diagnostics.causticsStrength,
         diagnostics.volumeStrength,
         diagnostics.anisotropy,

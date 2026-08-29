@@ -260,7 +260,33 @@ void AquariumRenderer::Render(
     // 5. ガラス屈折、色収差、Bloom、Tone Mappingを含む最終合成
     Microsoft::WRL::ComPtr<ID3D11Device> device;
     context->GetDevice(device.GetAddressOf());
-    EnsureSizeResources(device.Get(), width, height);
+    adaptiveResolution_.Update(
+        deltaTime,
+        settings.adaptiveResolution && settings.stageMode,
+        settings.targetFrameRate);
+    const float renderScale = adaptiveResolution_.Scale();
+    // Eight-pixel alignment keeps viewport/resource changes infrequent and is
+    // friendly to common GPU tile and compute group dimensions.
+    const UINT renderWidth = std::max(
+        8u,
+        std::min(
+            width,
+            (static_cast<UINT>(width * renderScale) + 7u) & ~7u));
+    const UINT renderHeight = std::max(
+        8u,
+        std::min(
+            height,
+            (static_cast<UINT>(height * renderScale) + 7u) & ~7u));
+    EnsureSizeResources(device.Get(), renderWidth, renderHeight);
+
+    const bool volumePassEnabled =
+        settings.volumeStrength > 0.001f &&
+        !settings.watatsumiTankMode &&
+        !(settings.greyboxMode && !settings.underwaterArchMode);
+    // Authored route views completely replace the old analytic aquarium.
+    // They also need depth/motion MRTs only when the temporal volume pass is
+    // active. Keeping those attachments off saves two full-resolution writes.
+    const UINT sceneTargetCount = volumePassEnabled ? 3u : 1u;
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
     ThrowIfFailed(
@@ -278,8 +304,8 @@ void AquariumRenderer::Render(
     *constants = {
         time,
         deltaTime,
-        static_cast<float>(width),
-        static_cast<float>(height),
+        static_cast<float>(renderWidth),
+        static_cast<float>(renderHeight),
         settings.cameraYaw,
         settings.cameraPitch,
         settings.causticsStrength,
@@ -509,8 +535,11 @@ void AquariumRenderer::Render(
     context->VSSetConstantBuffers(1, 1, &shadowBuffer);
     context->PSSetShader(nullptr, nullptr, 0);
 
+    // Stage lighting evaluates the shared refracted light definitions in
+    // Stage.hlsl and does not sample the prototype shadow array. Do not render
+    // three 512x512 maps that are invisible in every authored route view.
     const UINT shadowLightCount =
-        settings.underwaterArchMode ? 0u : 3u;
+        settings.greyboxMode || settings.underwaterArchMode ? 0u : 3u;
     for (UINT lightIndex = 0;
          lightIndex < shadowLightCount;
          ++lightIndex)
@@ -532,7 +561,15 @@ void AquariumRenderer::Render(
     context->OMSetRenderTargets(0, nullptr, nullptr);
     context->RSSetState(nullptr);
 
-    const D3D11_VIEWPORT fullViewport{
+    const D3D11_VIEWPORT sceneViewport{
+        0.0f,
+        0.0f,
+        static_cast<float>(renderWidth),
+        static_cast<float>(renderHeight),
+        0.0f,
+        1.0f
+    };
+    const D3D11_VIEWPORT outputViewport{
         0.0f,
         0.0f,
         static_cast<float>(width),
@@ -550,20 +587,18 @@ void AquariumRenderer::Render(
     context->PSSetConstantBuffers(1, 1, &shadowBuffer);
 
     // Pass 1: full-resolution HDR scene and analytic linear depth.
-    context->RSSetViewports(1, &fullViewport);
+    context->RSSetViewports(1, &sceneViewport);
     ID3D11RenderTargetView* sceneTargets[] = {
         sceneColorTarget_.Get(),
         sceneDepthTarget_.Get(),
         motionTarget_.Get()
     };
-    context->OMSetRenderTargets(3, sceneTargets, nullptr);
-    context->PSSetShader(scenePixelShader_.Get(), nullptr, 0);
-    context->Draw(3, 0);
-
-    // Route preview owns the complete frame. Remove the old analytic room so
-    // the authored tanks, rather than a full-screen aquarium, light the hall.
     if (settings.greyboxMode)
     {
+        context->OMSetRenderTargets(
+            sceneTargetCount, sceneTargets, nullptr);
+        // Route preview owns the complete frame. Start directly from its dark
+        // hall instead of raymarching a full-screen aquarium and clearing it.
         const float routeDarkHall[4] = {
             0.00015f, 0.00035f, 0.00065f, 1.0f
         };
@@ -578,12 +613,21 @@ void AquariumRenderer::Render(
         context->ClearRenderTargetView(
             sceneColorTarget_.Get(),
             darkHall);
-        context->ClearRenderTargetView(
-            sceneDepthTarget_.Get(),
-            farDepth);
-        context->ClearRenderTargetView(
-            motionTarget_.Get(),
-            zeroMotion);
+        if (volumePassEnabled)
+        {
+            context->ClearRenderTargetView(
+                sceneDepthTarget_.Get(),
+                farDepth);
+            context->ClearRenderTargetView(
+                motionTarget_.Get(),
+                zeroMotion);
+        }
+    }
+    else
+    {
+        context->OMSetRenderTargets(3, sceneTargets, nullptr);
+        context->PSSetShader(scenePixelShader_.Get(), nullptr, 0);
+        context->Draw(3, 0);
     }
 
     // Draw the imported stage over either the analytic tank or the dark route.
@@ -602,7 +646,7 @@ void AquariumRenderer::Render(
             1.0f,
             0);
         context->OMSetRenderTargets(
-            3,
+            sceneTargetCount,
             sceneTargets,
             stageDepthView_.Get());
 
@@ -616,15 +660,15 @@ void AquariumRenderer::Render(
                 settings.cameraYaw,
                 settings.cameraPitch,
                 currentCameraPosition,
-                width,
-                height);
+                renderWidth,
+                renderHeight);
         const DirectX::XMMATRIX previousViewProjection =
             BuildStageViewProjection(
                 previousCameraYaw_,
                 previousCameraPitch_,
                 previousCameraPosition_,
-                width,
-                height);
+                renderWidth,
+                renderHeight);
         const float openingMask =
             settings.greyboxMode ? 0.0f : 1.0f;
         activeStageModel->RenderOpaque(
@@ -657,7 +701,7 @@ void AquariumRenderer::Render(
             refractionCopyTexture_.Get(),
             sceneColorTexture_.Get());
         context->OMSetRenderTargets(
-            3,
+            sceneTargetCount,
             sceneTargets,
             stageDepthView_.Get());
 
@@ -683,7 +727,7 @@ void AquariumRenderer::Render(
                 refractionCopyTexture_.Get(),
                 sceneColorTexture_.Get());
             context->OMSetRenderTargets(
-                3,
+                sceneTargetCount,
                 sceneTargets,
                 stageDepthView_.Get());
 
@@ -727,16 +771,11 @@ void AquariumRenderer::Render(
     };
     ID3D11ShaderResourceView* nullViews[] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     const UINT historyWriteIndex = 1u - historyReadIndex_;
-    const bool volumePassEnabled =
-        settings.volumeStrength > 0.001f &&
-        !settings.watatsumiTankMode &&
-        !(settings.greyboxMode && !settings.underwaterArchMode);
-
     if (volumePassEnabled)
     {
         // Pass 2: one-third-resolution volumetric lighting.
-        const UINT volumeWidth = (width + 2) / 3;
-        const UINT volumeHeight = (height + 2) / 3;
+        const UINT volumeWidth = (renderWidth + 2) / 3;
+        const UINT volumeHeight = (renderHeight + 2) / 3;
         const D3D11_VIEWPORT volumeViewport{
             0.0f,
             0.0f,
@@ -786,7 +825,7 @@ void AquariumRenderer::Render(
     // Pass 4: depth-aware volume upsample, HDR composite and tone mapping.
     context->PSSetShaderResources(0, 7, nullViews);
     context->OMSetRenderTargets(0, nullptr, nullptr);
-    context->RSSetViewports(1, &fullViewport);
+    context->RSSetViewports(1, &outputViewport);
     context->OMSetRenderTargets(1, &target, nullptr);
     context->PSSetShader(compositePixelShader_.Get(), nullptr, 0);
     ID3D11ShaderResourceView* compositeInputs[] = {

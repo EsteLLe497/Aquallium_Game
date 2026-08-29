@@ -808,25 +808,19 @@ StagePixelOutput PSStage(StageVertexOutput input)
             currentUv,
             float2(0.025, 0.025),
             float2(0.975, 0.975));
-        const float2 redUv = clamp(
-            safeUv + refractionOffset * 1.06,
-            float2(0.002, 0.002),
-            float2(0.998, 0.998));
         const float2 greenUv = clamp(
             safeUv + refractionOffset,
             float2(0.002, 0.002),
             float2(0.998, 0.998));
-        const float2 blueUv = clamp(
-            safeUv + refractionOffset * 0.94,
-            float2(0.002, 0.002),
-            float2(0.998, 0.998));
-        const float3 refractedColor = float3(
-            gStageRefractionScene.Sample(
-                gStageRefractionSampler, redUv).r,
-            gStageRefractionScene.Sample(
-                gStageRefractionSampler, greenUv).g,
-            gStageRefractionScene.Sample(
-                gStageRefractionSampler, blueUv).b);
+        const float3 refractedSample = gStageRefractionScene.Sample(
+            gStageRefractionSampler, greenUv).rgb;
+        // The old three-fetch RGB split moved the UV by only six percent.
+        // Preserve that restrained edge coloration analytically and spend one
+        // texture fetch instead of three for every visible glass pixel.
+        const float dispersion = saturate(
+            length(refractionOffset) * 42.0) * (1.0 - facing);
+        const float3 refractedColor = refractedSample *
+            (1.0 + float3(0.032, 0.0, -0.032) * dispersion);
 
         const float3 radialNormal = normalize(
             (archGlass
@@ -1182,15 +1176,15 @@ StagePixelOutput PSStage(StageVertexOutput input)
         offset += pressureWave;
         offset = clamp(offset, -0.014, 0.014);
         const float2 safeUv = clamp(currentUv, 0.003, 0.997);
-        const float3 refracted = gStageSurfaceParameters.w > 0.5
-            ? float3(
-                gStageRefractionScene.Sample(
-                    gStageRefractionSampler, safeUv + offset * 1.035).r,
-                gStageRefractionScene.Sample(
-                    gStageRefractionSampler, safeUv + offset).g,
-                gStageRefractionScene.Sample(
-                    gStageRefractionSampler, safeUv + offset * 0.965).b)
+        const float3 refractedSample = gStageSurfaceParameters.w > 0.5
+            ? gStageRefractionScene.Sample(
+                gStageRefractionSampler,
+                clamp(safeUv + offset, 0.002, 0.998)).rgb
             : float3(0.003, 0.065, 0.145);
+        const float dispersion = saturate(length(offset) * 46.0) *
+            (1.0 - facing);
+        const float3 refracted = refractedSample *
+            (1.0 + float3(0.024, 0.0, -0.024) * dispersion);
         const float verticalEdge = pow(
             saturate(abs(input.worldPosition.z) / 14.62), 10.0);
         float3 glassLightDirection;

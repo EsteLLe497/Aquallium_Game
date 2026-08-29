@@ -335,6 +335,31 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
   only one HDR copy and no extra transparent geometry draws.
 - Removed all five ellipsoid placeholder rocks from the hero tank, leaving a
   clear exhibit volume for later fish and environment authoring.
+- Added a route-aware render graph fast path. Authored rooms no longer execute
+  the full-screen analytic aquarium that was immediately cleared, nor render
+  three unused 512 x 512 prototype shadow maps. Routes without temporal volume
+  bind only the HDR color target, eliminating full-resolution depth and motion
+  writes without changing the visible lighting result.
+- Split the route composite from the underwater composite. Practical-light
+  bloom uses two symmetric bilinear taps instead of the generic four-corner
+  filter, and the zero-volume route path avoids an unnecessary depth fetch.
+- Reduced thick-acrylic screen-space refraction from three scene fetches to one
+  while retaining restrained chromatic dispersion analytically at grazing
+  angles. Water absorption, Fresnel reflection, caustics and lighting remain
+  unchanged.
+- Added hysteretic dynamic resolution with discrete 100%, 90%, 82%, 76% and
+  70% tiers. It targets 100 FPS, waits 0.8 seconds between decisions, ignores
+  large timing spikes and requires 24% headroom before increasing quality,
+  preventing resource-allocation thrash and resolution oscillation.
+- Added primitive-batch AABB frustum culling with a 0.35 m displacement safety
+  margin, preparing later rooms and instanced fish schools to skip completely
+  off-camera geometry before issuing draw calls.
+- Added reproducible route benchmarks through `AQUARIUM_START_VIEW` and exposed
+  render scale plus smoothed frame time in the window diagnostics. On the same
+  Debug x64 1280 x 720 capture, the Watatsumi view improved from 89 FPS to
+  127 FPS at native scale; the entrance/jellyfish route measured 115 FPS and
+  the underwater arch 151 FPS. A 1920 x 1080 stress capture recovered to
+  105 FPS at the 70% safety tier.
 
 References:
 
