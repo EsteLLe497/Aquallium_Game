@@ -180,6 +180,9 @@ def main() -> None:
     assert 'float height = 1.70f;' in (
         ROOT / "src" / "physics" / "CollisionWorld.h"
     ).read_text(encoding="utf-8")
+    assert 'float eyeHeight = 1.65f;' in (
+        ROOT / "src" / "physics" / "CollisionWorld.h"
+    ).read_text(encoding="utf-8")
     assert 'quad("WatatsumiRamp"' in generator
 
     print({
@@ -192,6 +195,7 @@ def main() -> None:
         "watatsumi_upper_layout": "H",
         "watatsumi_upper_all_arms_reachable": True,
         "player_height_m": 1.70,
+        "player_eye_height_m": 1.65,
         "watatsumi_service_fill_width_m": round(facade_rear_x - rear_inner_x, 2),
         "watatsumi_outer_seal_depth_m": round(outer_wall_inner_z - portal_outer_z, 2),
         "watatsumi_tank_portal_seal_m": round(portal_inner_z - tank_jamb_outer_z, 2),

@@ -65,34 +65,6 @@ def box(material, center, size):
         quad(material, [points[i] for i in ids], normal)
 
 
-def ellipsoid(material, center, radii, seed, latitudes=7, longitudes=12):
-    group = groups[material]
-    base = len(group.positions) // 3
-    cx, cy, cz = center
-    rx, ry, rz = radii
-    for latitude in range(latitudes + 1):
-        v = latitude / latitudes
-        phi = math.pi * v
-        for longitude in range(longitudes + 1):
-            u = longitude / longitudes
-            theta = math.tau * u
-            dx = math.sin(phi) * math.cos(theta)
-            dy = math.cos(phi)
-            dz = math.sin(phi) * math.sin(theta)
-            rough = 1.0 + math.sin(phi) * 0.10 * math.sin(theta * 3 + seed)
-            group.positions.extend((cx + dx*rx*rough, cy + dy*ry*rough, cz + dz*rz*rough))
-            nx, ny, nz = dx/rx, dy/ry, dz/rz
-            inv = 1.0 / max(math.sqrt(nx*nx + ny*ny + nz*nz), 0.0001)
-            group.normals.extend((nx*inv, ny*inv, nz*inv))
-            group.texcoords.extend((u, v))
-    row = longitudes + 1
-    for latitude in range(latitudes):
-        for longitude in range(longitudes):
-            a = base + latitude*row + longitude
-            b = a + row
-            group.indices.extend((a,b,a+1,a+1,b,b+1))
-
-
 TANK_FRONT_X = 7.0
 TANK_HALF_WIDTH = 14.50
 TANK_DEPTH = 14.70
@@ -358,11 +330,9 @@ def build():
     quad("WatatsumiGlass", ((6.94,0.30,-14.62),(6.94,12.58,-14.62),
                              (6.94,12.58,14.62),(6.94,0.30,14.62)), (-1,0,0))
     half_ellipse_cap("WatatsumiWaterSurface", TANK_WATER_SURFACE, 1.0)
-    for index, data in enumerate(((10.0,-9.6,3.8,1.5,2.8),(12.5,7.6,4.5,2.0,3.2),
-                                  (17.0,-3.6,4.0,2.4,3.8),(19.0,10.2,2.8,1.4,2.4),
-                                  (16.0,-12.0,3.0,1.5,2.2))):
-        x,z,rx,ry,rz=data
-        ellipsoid("WatatsumiRock", (x,0.35+ry*0.55,z), (rx,ry,rz), index+0.3)
+    # Keep the tank intentionally empty for later exhibit authoring. The old
+    # five ellipsoid placeholder rocks read as unrelated round props and also
+    # obscured the water-transmission comparison through the full depth.
 
     # The 1F entrance and 2F exit are cut from the same facade grid. The lower
     # header begins above the complete arch crown; the upper opening remains

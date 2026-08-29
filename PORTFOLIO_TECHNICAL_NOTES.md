@@ -320,9 +320,21 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
   height at both portals while holding the internal maximum grade to 15.76%,
   removing the former 0.18 m / 0.12 m landing snaps.
 - Calibrated the first-person capsule to an approximately 1.70 m adult:
-  1.70 m body height, 1.59 m eye height, 0.32 m radius and 0.32 m step height.
+  1.70 m body height, a game-readable 1.65 m eye height, 0.32 m radius and
+  0.32 m step height.
   Rendering, collision clearance and all preview spawn heights consume the
   same capsule values.
+- Upgraded the Watatsumi tank to the arch-quality sequential transparency
+  path: water first refracts the opaque tank, the HDR result is copied once,
+  then thick acrylic refracts the already-filtered water. Beer-Lambert
+  transmission now uses the actual rendered 10.20 m waterline instead of the
+  pre-offset 12.45 m authoring coordinate.
+- Re-authored three water-surface light banks from the same CPU definitions
+  used by highlights, refracted axes and caustics. The full-screen volume pass
+  remains disabled in this hall, retaining the prior GPU budget while adding
+  only one HDR copy and no extra transparent geometry draws.
+- Removed all five ellipsoid placeholder rocks from the hero tank, leaving a
+  clear exhibit volume for later fish and environment authoring.
 
 References:
 

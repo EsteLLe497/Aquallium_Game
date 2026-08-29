@@ -908,12 +908,13 @@ void StageModel::RenderPass(
     context->PSSetSamplers(3, 1, &refractionSampler);
     for (const DrawBatch& batch : drawBatches_)
     {
-        const bool isArchGlass =
-            batch.surfaceType > 8.5f && batch.surfaceType < 9.5f;
+        const bool isRefractiveGlass =
+            (batch.surfaceType > 8.5f && batch.surfaceType < 9.5f) ||
+            (batch.surfaceType > 16.5f && batch.surfaceType < 17.5f);
         const bool matchesLayer =
             layer == TransparentLayer::All ||
-            (layer == TransparentLayer::ArchMedium && !isArchGlass) ||
-            (layer == TransparentLayer::ArchGlass && isArchGlass);
+            (layer == TransparentLayer::Medium && !isRefractiveGlass) ||
+            (layer == TransparentLayer::Glass && isRefractiveGlass);
         if (batch.transparent && matchesLayer)
         {
             drawBatch(batch);

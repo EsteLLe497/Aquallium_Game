@@ -1071,16 +1071,45 @@ StagePixelOutput PSStage(StageVertexOutput input)
     else if (!preserveAnalyticAquarium &&
         surfaceType > 15.5 && surfaceType < 16.5)
     {
-        // One material is shared by the opaque tank backing and transparent
-        // front interface. Water depth is measured from the enlarged 12.45 m
-        // surface,
-        // so upper and lower observations retain the same physical gradient.
-        const float waterDepth = max(12.45 - input.worldPosition.y, 0.0);
-        const float viewGrazing = pow(
-            1.0 - saturate(abs(dot(normal, -viewDirection))), 3.2);
+        // The authored 12.45 m surface is rendered at 10.20 m after the common
+        // -2.25 m stage offset. Use that actual world height; the old value
+        // made every pixel optically 2.25 m too deep and unnecessarily opaque.
+        const float waterDepth = max(10.20 - input.worldPosition.y, 0.0);
+        const float3 interfaceNormal =
+            dot(normal, -viewDirection) >= 0.0 ? normal : -normal;
+        const float facing = saturate(
+            dot(-viewDirection, interfaceNormal));
+        const float fresnel =
+            0.020 + 0.980 * pow(1.0 - facing, 5.0);
+        const float2 currentUv = ClipToUv(input.currentClip);
+        float3 waterRay = refract(
+            viewDirection, interfaceNormal, 1.0 / 1.333);
+        if (dot(waterRay, waterRay) < 0.25)
+        {
+            waterRay = viewDirection;
+        }
+        const float4 refractedClip = mul(
+            float4(input.worldPosition + normalize(waterRay) * 0.42, 1.0),
+            gStageViewProjection);
+        float2 waterOffset = ClipToUv(refractedClip) - currentUv;
+        waterOffset += float2(
+            sin(input.worldPosition.y * 1.8 +
+                input.worldPosition.z * 0.28 +
+                gStageSurfaceParameters.y * 0.22),
+            cos(input.worldPosition.y * 2.7 -
+                input.worldPosition.z * 0.19 -
+                gStageSurfaceParameters.y * 0.17)) * 0.00042;
+        waterOffset = clamp(waterOffset, -0.016, 0.016);
+        const float3 backgroundColor = gStageSurfaceParameters.w > 0.5
+            ? gStageRefractionScene.Sample(
+                gStageRefractionSampler,
+                clamp(currentUv + waterOffset, 0.002, 0.998)).rgb
+            : float3(0.003, 0.040, 0.095);
+        const float opticalDistance = min(
+            1.25 + waterDepth * 0.30 + (1.0 - facing) * 4.2,
+            9.0);
         const float3 transmittance = exp(
-            -float3(0.19, 0.064, 0.018) *
-            min(1.2 + waterDepth * 0.72, 7.5));
+            -float3(0.135, 0.046, 0.013) * opticalDistance);
         float3 tankLightDirection;
         float3 tankLightColor;
         float2 tankSurfacePosition;
@@ -1094,9 +1123,9 @@ StagePixelOutput PSStage(StageVertexOutput input)
             gStageSurfaceParameters.y * 0.48,
             0.24);
         const float3 deepColor = lerp(
-            float3(0.002, 0.030, 0.085),
-            float3(0.008, 0.145, 0.275),
-            saturate(1.0 - waterDepth / 6.6));
+            float3(0.002, 0.024, 0.070),
+            float3(0.007, 0.135, 0.260),
+            saturate(1.0 - waterDepth / 8.2));
         const float upperFade = saturate(
             (input.worldPosition.y - 0.25) / 6.2);
         const float shaftA = exp(-pow(
@@ -1113,16 +1142,19 @@ StagePixelOutput PSStage(StageVertexOutput input)
             input.worldPosition.yz * float2(4.0, 3.2)));
         const float revealedMotes = step(0.976, moteCell) *
             (shaftA + shaftB) * upperFade;
-        finalColor = deepColor * (1.16 + lightBank * 0.78) +
+        const float3 inScattering =
+            deepColor * (0.52 + lightBank * 0.62) *
+                (1.0 - transmittance) +
             tankLightColor * broadCaustics * lightBank *
-                exp(-waterDepth * 0.20) * 0.22 +
-            float3(0.010, 0.115, 0.255) * viewGrazing +
+                exp(-waterDepth * 0.16) * 0.24 +
+            float3(0.010, 0.105, 0.245) * fresnel +
             float3(0.012, 0.135, 0.34) *
                 (shaftA * 0.62 + shaftB * 0.48) * slowShaftRipple +
             float3(0.12, 0.48, 0.92) * revealedMotes * 0.25;
-        finalColor = lerp(finalColor, finalColor * transmittance +
-            float3(0.004, 0.042, 0.105) * (1.0 - transmittance), 0.62);
-        finalOpacity = 0.86;
+        finalColor = backgroundColor * transmittance + inScattering;
+        // The shader already sampled the scene through the water, so this is
+        // a near-replacement blend rather than an opaque blue overlay.
+        finalOpacity = saturate(0.70 + fresnel * 0.10);
     }
     else if (!preserveAnalyticAquarium &&
         surfaceType > 16.5 && surfaceType < 17.5)
@@ -1140,11 +1172,15 @@ StagePixelOutput PSStage(StageVertexOutput input)
             float4(input.worldPosition + acrylicRay * 0.22, 1.0),
             gStageViewProjection);
         float2 offset = ClipToUv(refractedClip) - currentUv;
-        const float pressureWave =
-            sin(input.worldPosition.y * 2.1 + input.worldPosition.z * 0.31) *
-            0.00032;
-        offset += normalize(interfaceNormal.zy + 0.0001) * pressureWave;
-        offset = clamp(offset, -0.010, 0.010);
+        const float2 pressureWave = float2(
+            sin(input.worldPosition.y * 2.1 +
+                input.worldPosition.z * 0.31 +
+                gStageSurfaceParameters.y * 0.18),
+            cos(input.worldPosition.y * 4.7 -
+                input.worldPosition.z * 0.22 -
+                gStageSurfaceParameters.y * 0.13)) * 0.00046;
+        offset += pressureWave;
+        offset = clamp(offset, -0.014, 0.014);
         const float2 safeUv = clamp(currentUv, 0.003, 0.997);
         const float3 refracted = gStageSurfaceParameters.w > 0.5
             ? float3(
@@ -1157,13 +1193,31 @@ StagePixelOutput PSStage(StageVertexOutput input)
             : float3(0.003, 0.065, 0.145);
         const float verticalEdge = pow(
             saturate(abs(input.worldPosition.z) / 14.62), 10.0);
-        const float3 reflection = float3(0.04, 0.28, 0.62) *
-            (fresnel * 0.48 + verticalEdge * 0.20);
+        float3 glassLightDirection;
+        float3 glassLightColor;
+        float2 glassSurfacePosition;
+        const float glassLightBank = StageArchOverheadLightData(
+            input.worldPosition,
+            glassLightDirection,
+            glassLightColor,
+            glassSurfacePosition);
+        const float lightRipple =
+            sin(glassSurfacePosition.x * 0.24 +
+                glassSurfacePosition.y * 0.17 +
+                gStageSurfaceParameters.y * 0.19) * 0.5 + 0.5;
+        const float3 reflection =
+            float3(0.035, 0.25, 0.60) *
+                (fresnel * 0.46 + verticalEdge * 0.18) +
+            glassLightColor * glassLightBank *
+                (0.035 + fresnel * 0.085) *
+                (0.76 + lightRipple * 0.24);
         finalColor = lerp(
-            refracted * float3(0.945, 0.982, 0.995),
+            refracted * float3(0.960, 0.985, 0.995),
             reflection,
-            saturate(fresnel * 0.62));
-        finalOpacity = saturate(0.10 + fresnel * 0.30 + verticalEdge * 0.04);
+            saturate(fresnel * 0.60));
+        finalOpacity = saturate(
+            0.075 + fresnel * 0.30 +
+            verticalEdge * 0.035 + glassLightBank * 0.025);
     }
     else if (!preserveAnalyticAquarium &&
         surfaceType > 17.5 && surfaceType < 21.5)
@@ -1182,7 +1236,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
                 input.worldPosition.x * 1.1 +
                 input.worldPosition.y * 1.7 +
                 input.worldPosition.z * 0.8);
-            const float waterDepth = max(12.45 - input.worldPosition.y, 0.0);
+            const float waterDepth = max(10.20 - input.worldPosition.y, 0.0);
             float3 rockLightDirection;
             float3 rockLightColor;
             float2 rockSurfacePosition;
@@ -1229,11 +1283,21 @@ StagePixelOutput PSStage(StageVertexOutput input)
         const float sparkle = pow(saturate(dot(
             reflect(normalize(float3(0.12, -1.0, 0.08)), interfaceNormal),
             -viewDirection)), 54.0);
+        float3 surfaceLightDirection;
+        float3 surfaceLightColor;
+        float2 surfaceLightPosition;
+        const float surfaceLightBank = StageArchOverheadLightData(
+            input.worldPosition,
+            surfaceLightDirection,
+            surfaceLightColor,
+            surfaceLightPosition);
         finalColor = lerp(
             background * float3(0.92, 0.985, 1.02),
             float3(0.025, 0.28, 0.68),
             saturate(0.12 + fresnel * 0.58)) +
-            float3(0.28, 0.72, 1.10) * sparkle * 0.40;
+            float3(0.28, 0.72, 1.10) * sparkle * 0.40 +
+            surfaceLightColor * surfaceLightBank *
+                (0.13 + fresnel * 0.17);
         finalOpacity = saturate(0.24 + fresnel * 0.26);
     }
     else if (!preserveAnalyticAquarium &&

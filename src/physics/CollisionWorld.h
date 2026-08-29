@@ -40,7 +40,8 @@ struct CharacterCapsule
     // floor so camera and collision remain one physical character.
     float radius = 0.32f;
     float height = 1.70f;
-    float eyeHeight = 1.59f;
+    // Slightly elevated game camera while keeping the physical body 170 cm.
+    float eyeHeight = 1.65f;
     float stepHeight = 0.32f;
 };
 

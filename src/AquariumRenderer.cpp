@@ -349,18 +349,25 @@ void AquariumRenderer::Render(
     }
     else if (settings.watatsumiTankMode)
     {
-        activeLightCount = 2;
-        // Broad banks sit above the inferred 650 m3 water surface.  They are
-        // deliberately unequal so the tank reads as the hall's only source.
+        activeLightCount = 3;
+        // Three unequal banks sit above the actual rendered water surface
+        // (12.45 m authored height plus the -2.25 m stage offset). Their
+        // refracted axes drive surface highlights, water shafts and caustics
+        // from one definition, matching the underwater-arch lighting path.
         lights[0] = {
-            {10.0f, 9.2f, -3.6f}, 0.90f,
-            {0.12f, -1.0f, 0.08f}, 42.0f,
-            {0.045f, 0.44f, 1.10f}, 6.45f
+            {12.0f, 14.4f, -8.0f}, 0.94f,
+            {0.08f, -1.0f, 0.06f}, 46.0f,
+            {0.055f, 0.48f, 1.12f}, 10.20f
         };
         lights[1] = {
-            {14.5f, 9.2f, 3.8f}, 0.72f,
-            {-0.10f, -1.0f, -0.06f}, 45.0f,
-            {0.020f, 0.25f, 0.82f}, 6.45f
+            {15.0f, 14.7f, 0.0f}, 0.82f,
+            {-0.04f, -1.0f, -0.02f}, 48.0f,
+            {0.035f, 0.36f, 0.98f}, 10.20f
+        };
+        lights[2] = {
+            {11.2f, 14.2f, 8.0f}, 0.70f,
+            {-0.09f, -1.0f, -0.05f}, 46.0f,
+            {0.020f, 0.27f, 0.84f}, 10.20f
         };
     }
     else
@@ -654,12 +661,12 @@ void AquariumRenderer::Render(
             sceneTargets,
             stageDepthView_.Get());
 
-        if (settings.underwaterArchMode)
+        if (settings.underwaterArchMode || settings.watatsumiTankMode)
         {
-            // First refract the opaque scene through the water medium. Glass
-            // must then sample a second copy containing that water result;
-            // otherwise it replaces the underwater lighting with the older
-            // opaque-only image and makes the overhead banks disappear.
+            // First refract the opaque scene through the water medium. The
+            // acrylic then samples a second copy containing that water result;
+            // otherwise it replaces the tank lighting with the older
+            // opaque-only image. This path is shared by the arch and hero tank.
             activeStageModel->RenderTransparent(
                 context,
                 currentViewProjection,
@@ -668,7 +675,7 @@ void AquariumRenderer::Render(
                 time,
                 openingMask,
                 refractionCopyView_.Get(),
-                StageModel::TransparentLayer::ArchMedium,
+                StageModel::TransparentLayer::Medium,
                 nullptr);
 
             context->OMSetRenderTargets(3, unboundTargets, nullptr);
@@ -688,7 +695,7 @@ void AquariumRenderer::Render(
                 time,
                 openingMask,
                 refractionCopyView_.Get(),
-                StageModel::TransparentLayer::ArchGlass,
+                StageModel::TransparentLayer::Glass,
                 nullptr);
         }
         else

@@ -23,8 +23,8 @@ public:
     enum class TransparentLayer
     {
         All,
-        ArchMedium,
-        ArchGlass
+        Medium,
+        Glass
     };
 
     struct ImportOptions
