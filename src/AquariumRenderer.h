@@ -16,6 +16,7 @@
 
 #include "StageModel.h"
 #include "JellyfishRenderer.h"
+#include "FishRenderer.h"
 #include "lighting/LocalLight.h"
 #include "rendering/AdaptiveResolution.h"
 
@@ -228,5 +229,6 @@ private:
     StageModel underwaterArchModel_;
     StageModel watatsumiTankModel_;
     JellyfishRenderer jellyfishRenderer_;
+    FishRenderer fishRenderer_;
     rendering::AdaptiveResolution adaptiveResolution_;
 };

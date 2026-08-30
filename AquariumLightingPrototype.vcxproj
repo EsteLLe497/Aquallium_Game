@@ -83,6 +83,7 @@
   <ItemGroup>
     <ClCompile Include="src\AquariumRenderer.cpp" />
     <ClCompile Include="src\JellyfishRenderer.cpp" />
+    <ClCompile Include="src\FishRenderer.cpp" />
     <ClCompile Include="src\imgui\LightingEditor.cpp" />
     <ClCompile Include="src\D3D11App.cpp" />
     <ClCompile Include="src\framework\gameObject.cpp" />
@@ -104,6 +105,7 @@
   <ItemGroup>
     <ClInclude Include="src\AquariumRenderer.h" />
     <ClInclude Include="src\JellyfishRenderer.h" />
+    <ClInclude Include="src\FishRenderer.h" />
     <ClInclude Include="src\imgui\LightingEditor.h" />
     <ClInclude Include="src\lighting\LocalLight.h" />
     <ClInclude Include="src\rendering\AdaptiveResolution.h" />
@@ -132,6 +134,7 @@
     <None Include="shaders\AquariumPrototype.hlsl" />
     <None Include="shaders\Stage.hlsl" />
     <None Include="shaders\Jellyfish.hlsl" />
+    <None Include="shaders\Fish.hlsl" />
     <None Include="shaders\lighting\LocalLighting.hlsli" />
     <None Include="model\map.glb" />
     <None Include="model\aquarium_greybox.glb" />
@@ -191,6 +194,7 @@
     <None Include="tools\generate_underwater_arch.py" />
     <None Include="tools\generate_watatsumi_hall.py" />
     <None Include="tools\validate_aquarium_collision_layout.py" />
+    <None Include="tools\validate_fish_schooling.py" />
     <None Include="tools\generate_aquarium_floorplan_v2.py" />
     <None Include="tools\generate_aquarium_floorplan_v3.py" />
     <None Include="tools\generate_aquarium_floorplan_v4.py" />
@@ -199,7 +203,7 @@
   </ItemGroup>
   <Target Name="CopyShaders" AfterTargets="Build">
     <MakeDir Directories="$(OutDir)shaders" />
-    <Copy SourceFiles="$(ProjectDir)shaders\AquariumPrototype.hlsl;$(ProjectDir)shaders\AquariumFroxel.hlsl;$(ProjectDir)shaders\Stage.hlsl;$(ProjectDir)shaders\Jellyfish.hlsl" DestinationFolder="$(OutDir)shaders" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)shaders\AquariumPrototype.hlsl;$(ProjectDir)shaders\AquariumFroxel.hlsl;$(ProjectDir)shaders\Stage.hlsl;$(ProjectDir)shaders\Jellyfish.hlsl;$(ProjectDir)shaders\Fish.hlsl" DestinationFolder="$(OutDir)shaders" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)shaders\lighting" />
     <Copy SourceFiles="$(ProjectDir)shaders\lighting\LocalLighting.hlsli" DestinationFolder="$(OutDir)shaders\lighting" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)model" />

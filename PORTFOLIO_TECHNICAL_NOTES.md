@@ -401,3 +401,27 @@ References:
 - https://www.visitsealife.com/sydney/information/news/7-most-instagrammable-places-in-sydney-aquarium/
 - https://www.visitsealife.com/birmingham/explore/aquarium-zones/ocean-tunnel/
 - https://canadianpond.ca/solutions/bubble-curtains/
+
+# Data-oriented small-fish schooling
+
+- Added a procedural 130-triangle small-fish mesh with GPU vertex deformation:
+  the head remains stable while phase-shifted amplitude grows toward the tail.
+  Per-instance scale, tint, swim rate and phase create variation without extra
+  models, bones or animation draws.
+- Implemented fixed-30 Hz CPU Boids using a 2.4 m spatial hash. Alignment,
+  cohesion and separation search only the 27 adjacent grid cells, while an
+  authored looping school target controls exhibit composition and dedicated
+  habitat steering prevents fish from entering glass, floor or dry walkways.
+- Rendered 72 fish in the underwater arch and 144 in the Watatsumi tank through
+  one dynamic instance buffer and one `DrawIndexedInstanced` call. Per-fish
+  frustum/distance rejection happens before the buffer upload.
+- Split the arch population into two 24-fish side schools and one 24-fish
+  overhead school. The overhead habitat derives its lower bound from the same
+  semi-ellipse used by the acrylic canopy, keeping fish between glass and the
+  water surface throughout the descending route.
+- Added a view-from-below silhouette response for overhead fish. Dark bodies
+  with a restrained cyan Fresnel rim provide a fish-shadow cue without another
+  draw call or shadow map. Biology is submitted before water and acrylic, so it
+  participates in the established sequential absorption/refraction path.
+- Debug x64 validation reported zero warnings and zero errors. The final
+  1296 x 759 underwater-arch capture retained 100% render scale at 133 FPS.

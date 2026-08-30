@@ -241,6 +241,9 @@ void AquariumRenderer::Initialize(ID3D11Device* device, const std::filesystem::p
     jellyfishRenderer_.Initialize(
         device,
         shaderPath.parent_path() / L"Jellyfish.hlsl");
+    fishRenderer_.Initialize(
+        device,
+        shaderPath.parent_path() / L"Fish.hlsl");
 }
 
 void AquariumRenderer::Render(
@@ -688,6 +691,23 @@ void AquariumRenderer::Render(
                 previousViewProjection,
                 currentCameraPosition,
                 time);
+        }
+        if (settings.underwaterArchMode || settings.watatsumiTankMode)
+        {
+            const FishRenderer::Habitat fishHabitat =
+                settings.underwaterArchMode
+                    ? FishRenderer::Habitat::UnderwaterArch
+                    : FishRenderer::Habitat::WatatsumiTank;
+            // Opaque biology is rendered before both water and acrylic copies.
+            // The existing sequential refraction path therefore treats the
+            // fish as tank contents instead of a decal pasted onto the glass.
+            fishRenderer_.Render(
+                context,
+                currentViewProjection,
+                currentCameraPosition,
+                time,
+                deltaTime,
+                fishHabitat);
         }
 
         // Glass cannot sample the HDR target while that same texture is bound

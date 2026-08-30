@@ -40,6 +40,9 @@
     <Filter Include="04 Rendering\Lighting">
       <UniqueIdentifier>{B512F514-34E8-4FF7-A34B-CE84F195EB0A}</UniqueIdentifier>
     </Filter>
+    <Filter Include="04 Rendering\Biology">
+      <UniqueIdentifier>{A7A8FC99-6187-49D3-A2A4-FA9CE036AD84}</UniqueIdentifier>
+    </Filter>
     <Filter Include="10 ImGui">
       <UniqueIdentifier>{F6864046-0BFC-44F8-BF5E-42DCC6334CE7}</UniqueIdentifier>
     </Filter>
@@ -77,6 +80,9 @@
     </ClCompile>
     <ClCompile Include="src\JellyfishRenderer.cpp">
       <Filter>04 Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="src\FishRenderer.cpp">
+      <Filter>04 Rendering\Biology</Filter>
     </ClCompile>
     <ClCompile Include="src\StageModel.cpp">
       <Filter>04 Rendering</Filter>
@@ -142,6 +148,9 @@
     <ClInclude Include="src\JellyfishRenderer.h">
       <Filter>04 Rendering</Filter>
     </ClInclude>
+    <ClInclude Include="src\FishRenderer.h">
+      <Filter>04 Rendering\Biology</Filter>
+    </ClInclude>
     <ClInclude Include="src\StageModel.h">
       <Filter>04 Rendering</Filter>
     </ClInclude>
@@ -160,6 +169,9 @@
       <Filter>05 Shaders</Filter>
     </None>
     <None Include="shaders\Jellyfish.hlsl">
+      <Filter>05 Shaders</Filter>
+    </None>
+    <None Include="shaders\Fish.hlsl">
       <Filter>05 Shaders</Filter>
     </None>
     <None Include="model\map.glb">
@@ -330,6 +342,9 @@
       <Filter>09 Tools</Filter>
     </None>
     <None Include="tools\validate_aquarium_collision_layout.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\validate_fish_schooling.py">
       <Filter>09 Tools</Filter>
     </None>
     <None Include="tools\generate_aquarium_floorplan_v2.py">
