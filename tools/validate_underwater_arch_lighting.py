@@ -46,6 +46,13 @@ def main() -> None:
     assert "const UINT volumeWidth = (renderWidth + 2) / 3" in renderer
     assert "sourceSpine" in stage_shader
     assert "viewWaterDistance" in stage_shader
+    assert "StageArchBubbleSurfaceWave" in stage_shader
+    assert "archWaterSurface ? 1.34 : 1.0" in stage_shader
+    assert "capillaryPhase" in stage_shader
+    assert "worldPosition.y * 3.15" in stage_shader
+    assert "projectedSurfacePosition * 0.30" in stage_shader
+    assert "gStageSurfaceParameters.y * 0.96" in stage_shader
+    assert "0.33);" in stage_shader
 
     volume_shader = (
         ROOT / "shaders" / "AquariumPrototype.hlsl"
@@ -63,6 +70,8 @@ def main() -> None:
         "volume_resolution_divisor": 3,
         "arch_volume_steps": 2,
         "sampled_lights_per_step": 2,
+        "bubble_linked_surface_waves": True,
+        "wide_caustics_world_scale": 0.30,
     }, ensure_ascii=False))
 
 

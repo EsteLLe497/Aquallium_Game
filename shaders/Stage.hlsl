@@ -41,6 +41,43 @@ cbuffer StageConstants : register(b2)
 Texture2D<float4> gStageRefractionScene : register(t8);
 SamplerState gStageRefractionSampler : register(s3);
 
+float StageArchBubbleSurfaceWave(
+    float2 surfacePosition,
+    float time,
+    out float2 gradient)
+{
+    // Match the three authored diffuser banks at X=8/24/40 m. The closest
+    // left/right plume becomes a physical-looking radial wave source.
+    const float bankIndex = clamp(
+        round((surfacePosition.x - 8.0) / 16.0),
+        0.0,
+        2.0);
+    const float bankX = 8.0 + bankIndex * 16.0;
+    const float plumeMagnitude = 4.85 + bankIndex * 0.12;
+    const float plumeZ = surfacePosition.y < 0.0
+        ? -plumeMagnitude
+        : plumeMagnitude;
+    const float2 delta =
+        surfacePosition - float2(bankX, plumeZ);
+    // Distance-squared rings avoid sqrt/exp in the receiver pixel shader.
+    // A squared polynomial envelope retains a smooth finite disturbance zone.
+    const float radiusSquared = dot(delta, delta);
+    const float falloff = saturate(1.0 - radiusSquared * 0.034);
+    const float envelope = falloff * falloff;
+    const float phase =
+        radiusSquared * 0.58 - time * 1.55 + bankIndex * 0.83;
+    const float amplitude = 0.082;
+    const float wave = sin(phase) * amplitude * envelope;
+    const float envelopeDerivative = falloff > 0.0
+        ? -0.068 * falloff
+        : 0.0;
+    const float derivativeByRadiusSquared = amplitude * (
+        cos(phase) * 0.58 * envelope +
+        sin(phase) * envelopeDerivative);
+    gradient = 2.0 * delta * derivativeByRadiusSquared;
+    return wave;
+}
+
 struct StageVertexInput
 {
     float3 position : POSITION;
@@ -84,25 +121,60 @@ StageVertexOutput VSStage(StageVertexInput input)
             worldPosition.x * 2.15 +
             worldPosition.z * 1.72 -
             gStageSurfaceParameters.y * 1.08;
-        worldPosition.y +=
+        const bool archWaterSurface =
+            gStageSurfaceParameters.x < 10.5;
+        const float waveScale = archWaterSurface ? 1.34 : 1.0;
+        float waterHeight = (
             sin(phaseA) * 0.140 +
             sin(phaseB) * 0.090 +
             sin(phaseC) * 0.035 +
-            sin(phaseD) * 0.018;
-        const float derivativeX =
+            sin(phaseD) * 0.018) * waveScale;
+        float derivativeX = (
             cos(phaseA) * 0.140 * 0.48 +
             cos(phaseB) * 0.090 * -0.27 +
             cos(phaseC) * 0.035 * 1.08 +
-            cos(phaseD) * 0.018 * 2.15;
-        const float derivativeZ =
+            cos(phaseD) * 0.018 * 2.15) * waveScale;
+        float derivativeZ = (
             cos(phaseA) * 0.140 * 0.31 +
             cos(phaseB) * 0.090 * 0.63 +
             cos(phaseC) * 0.035 * -0.86 +
-            cos(phaseD) * 0.018 * 1.72;
+            cos(phaseD) * 0.018 * 1.72) * waveScale;
+        if (archWaterSurface)
+        {
+            float2 bubbleGradient;
+            waterHeight += StageArchBubbleSurfaceWave(
+                worldPosition.xz,
+                gStageSurfaceParameters.y,
+                bubbleGradient);
+            derivativeX += bubbleGradient.x;
+            derivativeZ += bubbleGradient.y;
+
+            const float capillaryPhase =
+                worldPosition.x * 3.60 +
+                worldPosition.z * 2.90 +
+                gStageSurfaceParameters.y * 1.35;
+            waterHeight += sin(capillaryPhase) * 0.026;
+            derivativeX += cos(capillaryPhase) * 0.026 * 3.60;
+            derivativeZ += cos(capillaryPhase) * 0.026 * 2.90;
+        }
+        worldPosition.y += waterHeight;
         worldNormal = normalize(float3(
             derivativeX,
             -1.0,
             derivativeZ));
+    }
+    else if (gStageSurfaceParameters.x > 22.5 &&
+             gStageSurfaceParameters.x < 23.5)
+    {
+        // The low-poly plume remains one batch; a coherent wobble makes the
+        // bubbles visibly feed the moving surface without CPU particle work.
+        const float bubblePhase =
+            worldPosition.y * 3.15 +
+            worldPosition.x * 0.91 +
+            gStageSurfaceParameters.y * 1.18;
+        worldPosition.x += sin(bubblePhase) * 0.032;
+        worldPosition.z += cos(bubblePhase * 0.83) * 0.028;
+        worldPosition.y += sin(bubblePhase * 0.47) * 0.045;
     }
     output.worldPosition = worldPosition;
     output.normal = worldNormal;
@@ -1019,10 +1091,10 @@ StagePixelOutput PSStage(StageVertexOutput input)
         // surface position so it follows the same angled refracted trajectory
         // as the corresponding overhead bank.
         const float caustics = StageTankCaustics(
-            projectedSurfacePosition * 0.42,
-            gStageSurfaceParameters.y * 0.72,
-            0.22);
-        const float receiverStrength = archRock ? 0.090 : 0.225;
+            projectedSurfacePosition * 0.30,
+            gStageSurfaceParameters.y * 0.96,
+            0.33);
+        const float receiverStrength = archRock ? 0.165 : 0.410;
         const float checker = abs(fmod(
             floor(input.worldPosition.x * 1.35) +
             floor(input.worldPosition.z * 1.35),
@@ -1043,7 +1115,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
             baseLighting +
             float3(0.008, 0.095, 0.390) *
                 lightTransmission * receiverUp * 0.34 +
-            lightColor * 0.88 *
+            lightColor * 1.04 *
                 caustics * lightTransmission *
                 lightFacing * overheadBank * receiverStrength;
     }

@@ -394,6 +394,21 @@ References:
   additional depth/motion MRT, shadow map or post-process history allocation.
   The final Debug x64 1296 x 759 route capture ran at 105 FPS at 100% render
   scale while displaying the bubble and light-curtain layers.
+- Strengthened the arch-only water displacement by 34% and added a capillary
+  octave. Each of the six authored bubble diffusers now acts as the nearest
+  radial wave source; the analytic height and gradient drive both displaced
+  vertices and the water normal without CPU particle simulation.
+- Added a coherent wobble to the existing single-batch bubble mesh, visually
+  connecting the rising plumes to their surface disturbances. The dry route
+  remains static and keeps the after-hours contrast.
+- Enlarged receiver caustics from a 0.42 to 0.30 world-space frequency scale,
+  widened the ridge threshold from 0.22 to 0.33, and increased floor/rock
+  response. The pattern uses the refracted surface projection and a faster
+  water time axis, producing broad moving bands instead of dense thin lines.
+- Rejected the first per-pixel bubble-gradient caustics experiment after a
+  113 FPS capture. Removing its floor-wide sqrt/exp/gradient work retained the
+  linked surface motion and bold caustics; the final repeatable 1280 x 720
+  route benchmark measured 144 FPS at 100% render scale.
 
 References:
 
