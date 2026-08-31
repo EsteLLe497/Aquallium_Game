@@ -20,9 +20,12 @@ def main() -> None:
     assert "for (int y = -1; y <= 1; ++y)" in source
     assert "for (int x = -1; x <= 1; ++x)" in source
     assert "constexpr float simulationStep = 1.0f / 30.0f" in source
-    assert "Habitat::UnderwaterArch ? 18u : 36u" in source
+    assert "Habitat::UnderwaterArch ? 15u : 36u" in source
+    assert "Habitat::UnderwaterArch ? 9u : 0u" in source
     assert "Habitat::UnderwaterArch ? 9u : 12u" in source
     assert "spawnSchool(3u, mediumFishCount, 1u)" in source
+    assert "spawnSchool(4u, entranceFishCount, 0u)" in source
+    assert "7.0f + std::sin(route) * 5.6f" in source
     assert "CreateRayGeometry" in source
     assert "BuildRayInstances" in source
     assert "Habitat::UnderwaterArch ? 2u : 3u" in source
@@ -42,6 +45,7 @@ def main() -> None:
     print({
         "result": "pass",
         "arch_small_fish": 54,
+        "arch_entrance_school": 9,
         "arch_medium_fish": 9,
         "arch_rays": 2,
         "watatsumi_small_fish": 108,

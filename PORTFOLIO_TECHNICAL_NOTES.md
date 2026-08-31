@@ -420,8 +420,10 @@ References:
   Watatsumi tank uses 108 small fish, 12 medium fish and 3 rays. Per-instance
   frustum/distance rejection happens before two dynamic-buffer uploads and at
   most two `DrawIndexedInstanced` calls.
-- Split the arch's small population into three 18-fish schools. The overhead
-  habitat derives its lower bound from the same
+- Split the arch's small population into three 15-fish wide-route schools and
+  one 9-fish entrance school, keeping the total at 54. Distinct route centres
+  cover the entrance, middle and deep end without raising the simulation or
+  instance budget. The overhead habitat derives its lower bound from the same
   semi-ellipse used by the acrylic canopy, keeping fish between glass and the
   water surface throughout the descending route.
 - Used an analytic authored spline for the large rays instead of applying Boids

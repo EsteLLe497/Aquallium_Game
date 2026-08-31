@@ -335,10 +335,13 @@ void FishRenderer::ResetHabitat(Habitat habitat)
             static_cast<float>(0x01000000u);
     };
     const std::uint32_t smallFishPerSchool =
-        habitat == Habitat::UnderwaterArch ? 18u : 36u;
+        habitat == Habitat::UnderwaterArch ? 15u : 36u;
+    const std::uint32_t entranceFishCount =
+        habitat == Habitat::UnderwaterArch ? 9u : 0u;
     const std::uint32_t mediumFishCount =
         habitat == Habitat::UnderwaterArch ? 9u : 12u;
-    agents_.reserve(smallFishPerSchool * 3u + mediumFishCount);
+    agents_.reserve(
+        smallFishPerSchool * 3u + entranceFishCount + mediumFishCount);
     const auto spawnSchool = [&](std::uint32_t school,
                                  std::uint32_t count,
                                  std::uint32_t species)
@@ -379,6 +382,12 @@ void FishRenderer::ResetHabitat(Habitat habitat)
     // provide local spacing, but their wider initial radius avoids a second
     // dense bait-ball silhouette.
     spawnSchool(3u, mediumFishCount, 1u);
+    if (entranceFishCount > 0u)
+    {
+        // A small persistent welcome school keeps the first metres alive while
+        // the other schools traverse the full 48 m exhibit.
+        spawnSchool(4u, entranceFishCount, 0u);
+    }
 }
 
 XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
@@ -386,9 +395,24 @@ XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
     const float schoolPhase = static_cast<float>(school) * 2.0943951f;
     if (habitat_ == Habitat::UnderwaterArch)
     {
-        const float route = time * (school == 3u ? 0.14f : 0.23f) + schoolPhase;
-        const float x = 24.0f + std::sin(route) *
-            (school == 2u ? 16.0f : 18.5f);
+        const float routeSpeed = school == 3u
+            ? 0.14f : (school == 4u ? 0.16f : 0.23f);
+        const float route = time * routeSpeed + schoolPhase;
+        if (school == 4u)
+        {
+            const float x = 7.0f + std::sin(route) * 5.6f;
+            return {
+                x,
+                ArchFloor(x) + 2.35f + std::sin(route * 0.81f) * 0.34f,
+                4.85f + std::cos(route) * 0.68f};
+        }
+        const float x = school == 0u
+            ? 15.5f + std::sin(route) * 15.0f
+            : (school == 1u
+                ? 30.0f + std::sin(route) * 17.0f
+                : (school == 2u
+                    ? 24.0f + std::sin(route) * 20.0f
+                    : 24.0f + std::sin(route) * 21.5f));
         if (school == 2u)
         {
             const float z = std::sin(route * 0.71f) * 1.55f;
