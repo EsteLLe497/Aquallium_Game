@@ -128,8 +128,46 @@ void FishRenderer::Initialize(
     const std::filesystem::path& shaderPath)
 {
     CreateGeometry(device);
+    CreateLowDetailGeometry(device);
     CreateRayGeometry(device);
     CreatePipeline(device, shaderPath);
+}
+
+void FishRenderer::CreateLowDetailGeometry(ID3D11Device* device)
+{
+    // Ten-triangle octahedral silhouette for distant schoolers. It preserves
+    // thickness from head-on and top-down views unlike a camera-facing card,
+    // while using less than eight percent of the hero fish triangles.
+    const std::vector<Vertex> vertices{
+        {{ 0.68f,  0.00f,  0.00f}, { 1, 0, 0}, {1.0f, 0.5f}, 0.00f},
+        {{-0.58f,  0.00f,  0.00f}, {-1, 0, 0}, {0.2f, 0.5f}, 0.72f},
+        {{ 0.00f,  0.22f,  0.00f}, { 0, 1, 0}, {0.6f, 0.0f}, 0.20f},
+        {{ 0.00f, -0.22f,  0.00f}, { 0,-1, 0}, {0.6f, 1.0f}, 0.20f},
+        {{ 0.00f,  0.00f,  0.12f}, { 0, 0, 1}, {0.6f, 0.5f}, 0.20f},
+        {{ 0.00f,  0.00f, -0.12f}, { 0, 0,-1}, {0.6f, 0.5f}, 0.20f},
+        {{-1.08f,  0.31f,  0.00f}, { 0, 0, 1}, {0.0f, 0.0f}, 1.00f},
+        {{-1.08f, -0.31f,  0.00f}, { 0, 0, 1}, {0.0f, 1.0f}, 1.00f}
+    };
+    const std::vector<std::uint32_t> indices{
+        0, 2, 4, 0, 4, 3, 0, 3, 5, 0, 5, 2,
+        1, 4, 2, 1, 3, 4, 1, 5, 3, 1, 2, 5,
+        1, 6, 7, 1, 7, 6
+    };
+    D3D11_BUFFER_DESC bufferDesc{};
+    bufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    bufferDesc.ByteWidth = static_cast<UINT>(vertices.size() * sizeof(Vertex));
+    D3D11_SUBRESOURCE_DATA initialData{vertices.data(), 0, 0};
+    ThrowIfFailed(device->CreateBuffer(
+        &bufferDesc, &initialData, lowDetailVertexBuffer_.GetAddressOf()),
+        "CreateBuffer (low-detail fish vertices)");
+    bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    bufferDesc.ByteWidth = static_cast<UINT>(indices.size() * sizeof(std::uint32_t));
+    initialData.pSysMem = indices.data();
+    ThrowIfFailed(device->CreateBuffer(
+        &bufferDesc, &initialData, lowDetailIndexBuffer_.GetAddressOf()),
+        "CreateBuffer (low-detail fish indices)");
+    lowDetailIndexCount_ = static_cast<std::uint32_t>(indices.size());
 }
 
 void FishRenderer::CreateGeometry(ID3D11Device* device)
@@ -289,6 +327,9 @@ void FishRenderer::CreatePipeline(
     ThrowIfFailed(device->CreateBuffer(
         &bufferDesc, nullptr, instanceBuffer_.GetAddressOf()),
         "CreateBuffer (fish instances)");
+    ThrowIfFailed(device->CreateBuffer(
+        &bufferDesc, nullptr, lowDetailInstanceBuffer_.GetAddressOf()),
+        "CreateBuffer (low-detail fish instances)");
     bufferDesc.ByteWidth = 8u * sizeof(Instance);
     ThrowIfFailed(device->CreateBuffer(
         &bufferDesc, nullptr, rayInstanceBuffer_.GetAddressOf()),
@@ -782,6 +823,8 @@ void FishRenderer::Render(
 
     visibleInstances_.clear();
     visibleInstances_.reserve(agents_.size());
+    visibleLowDetailInstances_.clear();
+    visibleLowDetailInstances_.reserve(agents_.size());
     for (const Agent& agent : agents_)
     {
         if (!IsVisible(agent, viewProjection, cameraPosition))
@@ -795,7 +838,14 @@ void FishRenderer::Render(
             : 0.58f + agent.tint * 0.14f;
         const bool overheadSilhouette =
             habitat_ == Habitat::UnderwaterArch && agent.school == 2u;
-        visibleInstances_.push_back({
+        const float cameraDistanceSquared = LengthSquared(
+            Subtract(agent.position, cameraPosition));
+        const bool useLowDetail =
+            agent.species == 0u && cameraDistanceSquared > 22.0f * 22.0f;
+        auto& destination = useLowDetail
+            ? visibleLowDetailInstances_
+            : visibleInstances_;
+        destination.push_back({
             {agent.position.x, agent.position.y, agent.position.z, agent.scale},
             {forward.x, forward.y, forward.z, agent.phase},
             {mediumSpecies
@@ -814,12 +864,16 @@ void FishRenderer::Render(
         });
     }
     BuildRayInstances(viewProjection, cameraPosition, totalTime);
-    if (visibleInstances_.empty() && visibleRayInstances_.empty())
+    if (visibleInstances_.empty() &&
+        visibleLowDetailInstances_.empty() &&
+        visibleRayInstances_.empty())
     {
         return;
     }
 
     UploadInstances(context, instanceBuffer_.Get(), visibleInstances_);
+    UploadInstances(
+        context, lowDetailInstanceBuffer_.Get(), visibleLowDetailInstances_);
     UploadInstances(context, rayInstanceBuffer_.Get(), visibleRayInstances_);
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -865,6 +919,10 @@ void FishRenderer::Render(
     drawInstances(
         vertexBuffer_.Get(), indexBuffer_.Get(), instanceBuffer_.Get(),
         indexCount_, static_cast<UINT>(visibleInstances_.size()));
+    drawInstances(
+        lowDetailVertexBuffer_.Get(), lowDetailIndexBuffer_.Get(),
+        lowDetailInstanceBuffer_.Get(), lowDetailIndexCount_,
+        static_cast<UINT>(visibleLowDetailInstances_.size()));
     drawInstances(
         rayVertexBuffer_.Get(), rayIndexBuffer_.Get(), rayInstanceBuffer_.Get(),
         rayIndexCount_, static_cast<UINT>(visibleRayInstances_.size()));

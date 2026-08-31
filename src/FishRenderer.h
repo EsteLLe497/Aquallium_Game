@@ -73,6 +73,7 @@ private:
     };
 
     void CreateGeometry(ID3D11Device* device);
+    void CreateLowDetailGeometry(ID3D11Device* device);
     void CreateRayGeometry(ID3D11Device* device);
     void CreatePipeline(ID3D11Device* device, const std::filesystem::path& shaderPath);
     void ResetHabitat(Habitat habitat);
@@ -101,6 +102,9 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Buffer> vertexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> indexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> instanceBuffer_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> lowDetailVertexBuffer_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> lowDetailIndexBuffer_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> lowDetailInstanceBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> rayVertexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> rayIndexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> rayInstanceBuffer_;
@@ -109,8 +113,10 @@ private:
     Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizerState_;
     std::vector<Agent> agents_;
     std::vector<Instance> visibleInstances_;
+    std::vector<Instance> visibleLowDetailInstances_;
     std::vector<Instance> visibleRayInstances_;
     std::uint32_t indexCount_ = 0;
+    std::uint32_t lowDetailIndexCount_ = 0;
     std::uint32_t rayIndexCount_ = 0;
     std::uint32_t instanceCapacity_ = 256;
     Habitat habitat_ = Habitat::None;

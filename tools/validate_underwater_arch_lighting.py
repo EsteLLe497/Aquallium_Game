@@ -42,6 +42,16 @@ def main() -> None:
         assert material_name in stage_model
     assert "!settings.greyboxMode" in renderer
     assert "routePositions[lightIndex], 7.40f" in renderer
+    assert "? 0.26f" in renderer
+    assert "const UINT volumeWidth = (renderWidth + 2) / 3" in renderer
+    assert "sourceSpine" in stage_shader
+    assert "viewWaterDistance" in stage_shader
+
+    volume_shader = (
+        ROOT / "shaders" / "AquariumPrototype.hlsl"
+    ).read_text(encoding="utf-8")
+    assert "const int stepCount = 2" in volume_shader
+    assert "position.x < 32.0 ? 0u : 1u" in volume_shader
 
     primitive_count = sum(len(mesh["primitives"]) for mesh in document["meshes"])
     print(json.dumps({
@@ -50,6 +60,9 @@ def main() -> None:
         "meshes": len(document["meshes"]),
         "primitives": primitive_count,
         "surface_lighting_contract": "ok",
+        "volume_resolution_divisor": 3,
+        "arch_volume_steps": 2,
+        "sampled_lights_per_step": 2,
     }, ensure_ascii=False))
 
 

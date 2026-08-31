@@ -418,8 +418,7 @@ References:
   CPU and asset cost.
 - Rendered 54 small fish, 9 medium fish and 2 rays in the underwater arch; the
   Watatsumi tank uses 108 small fish, 12 medium fish and 3 rays. Per-instance
-  frustum/distance rejection happens before two dynamic-buffer uploads and at
-  most two `DrawIndexedInstanced` calls.
+  frustum/distance rejection happens before compact dynamic-buffer uploads.
 - Split the arch's small population into three 15-fish wide-route schools and
   one 9-fish entrance school, keeping the total at 54. Distinct route centres
   cover the entrance, middle and deep end without raising the simulation or
@@ -429,14 +428,24 @@ References:
 - Used an analytic authored spline for the large rays instead of applying Boids
   to every species. A 27-triangle procedural ray mesh receives GPU wing
   deformation, keeping these sparse hero silhouettes deterministic and cheap.
+- Added a true 22 m geometry LOD for small fish. Near silhouettes retain the
+  130-triangle mesh; distant instances use a 10-triangle octahedral fish,
+  reducing their triangle cost by 92%. Near, far and ray batches require at
+  most three `DrawIndexedInstanced` calls for the whole habitat.
 - Added a view-from-below silhouette response for overhead fish. Dark bodies
   with a restrained cyan Fresnel rim provide a fish-shadow cue without another
   draw call or shadow map. Biology is submitted before water and acrylic, so it
   participates in the established sequential absorption/refraction path.
-- The arch's global exposure remains unchanged for an after-hours mood. Only
-  the water-surface transmission and narrow light curtains were strengthened,
-  preserving dark architecture while making the overhead lighting legible.
+- The arch's global exposure remains unchanged for an after-hours mood. A long
+  broken emissive spine is evaluated directly on the displaced water surface,
+  while stronger Beer-Lambert distance absorption and cyan in-scattering make
+  the outer water volume readable without lifting the dry walkway.
+- Reused the existing one-third-resolution, two-step temporal volume buffer.
+  An initial all-three-light evaluation measured 126 FPS in capture and was
+  rejected. A fixed coherent route split samples banks 0/1 before 32 m and
+  banks 1/2 afterwards, covering the entire route without per-pixel ranking.
 - Debug x64 validation reported zero warnings and zero errors. The repeatable
-  1280 x 720 route benchmark retained 100% render scale at 169 FPS in the
-  underwater arch; the full-resolution visual capture measured 117 FPS while
-  screen capture and the development UI were active.
+  1280 x 720 route benchmark retained 100% render scale at 174 FPS in the
+  underwater arch, 122 FPS in the entrance route and 124 FPS in Watatsumi.
+  The final full-resolution visual capture measured 146 FPS while screen
+  capture and the development UI were active.

@@ -317,7 +317,7 @@ void AquariumRenderer::Render(
             ? 0.0f
             : settings.volumeStrength *
                 (settings.underwaterArchMode
-                    ? 0.20f
+                    ? 0.26f
                     : (settings.watatsumiTankMode ? 0.0f : 1.0f)),
         settings.exposure,
         settings.waterClarity,

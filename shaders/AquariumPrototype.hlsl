@@ -769,22 +769,16 @@ float3 IntegrateArchVolume(
                 position.y * 0.31 +
                 gTime * 0.16);
         float3 incidentLight = 0.0;
-        // Keep the costly sampled scattering on two banks. All three still
-        // contribute their analytic curtain, surface highlight and caustics.
-        const uint marchedLightCount = min(
-            (uint)gActiveLightCount,
-            2u);
-        [unroll]
-        for (uint lightIndex = 0;
-             lightIndex < marchedLightCount;
-             ++lightIndex)
-        {
-            incidentLight += EvaluateRefractedAreaLight(
-                position,
-                rayDirection,
-                lightIndex);
-        }
-        incidentLight *= slowDensity * gVolumeStrength * 0.92;
+        // The three authored banks are ordered along +X. A single coherent
+        // route split selects the relevant adjacent pair without per-pixel
+        // ranking or divergent dynamic loops.
+        const uint nearestLight = position.x < 32.0 ? 0u : 1u;
+        const uint secondLight = nearestLight + 1u;
+        incidentLight += EvaluateRefractedAreaLight(
+            position, rayDirection, nearestLight);
+        incidentLight += EvaluateRefractedAreaLight(
+            position, rayDirection, secondLight);
+        incidentLight *= slowDensity * gVolumeStrength * 1.08;
 
         const float mediumDensity = 0.62 * gWaterClarity;
         const float3 sigmaS =

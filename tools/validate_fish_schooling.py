@@ -27,6 +27,9 @@ def main() -> None:
     assert "spawnSchool(4u, entranceFishCount, 0u)" in source
     assert "7.0f + std::sin(route) * 5.6f" in source
     assert "CreateRayGeometry" in source
+    assert "CreateLowDetailGeometry" in source
+    assert "cameraDistanceSquared > 22.0f * 22.0f" in source
+    assert "lowDetailIndexCount_" in header
     assert "BuildRayInstances" in source
     assert "Habitat::UnderwaterArch ? 2u : 3u" in source
     assert "ArchCanopy(agent.position.x, agent.position.z) + 0.22f" in source
@@ -53,7 +56,8 @@ def main() -> None:
         "watatsumi_rays": 3,
         "simulation_hz": 30,
         "spatial_cells_per_query": 27,
-        "maximum_biology_draw_calls_per_habitat": 2,
+        "maximum_biology_draw_calls_per_habitat": 3,
+        "far_fish_triangle_reduction_percent": 92,
         "overhead_silhouette_extra_draws": 0,
         "sequential_refraction_order": True,
     })

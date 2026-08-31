@@ -341,9 +341,9 @@ float StageArchOverheadLightData(
         const float2 delta =
             (surfacePosition -
              gStageLightSurfaceOrigin[lightIndex].xz) /
-            float2(4.35, 2.20);
+            float2(6.20, 2.55);
         const float lightPool =
-            exp(-dot(delta, delta) * 2.2) *
+            exp(-dot(delta, delta) * 1.82) *
             gStageLightColorStrength[lightIndex].w;
         if (lightPool > illumination)
         {
@@ -645,9 +645,12 @@ StagePixelOutput PSStage(StageVertexOutput input)
         const float depthBelowSurface = max(
             5.8 - input.worldPosition.y,
             0.0);
+        const float viewWaterDistance = min(
+            length(cameraToStage) * 0.052,
+            1.65);
         const float waterDistance = min(
             (0.24 + depthBelowSurface * 0.16) / facing,
-            4.20);
+            4.20) + viewWaterDistance;
         const float3 absorptionCoefficient = lerp(
             float3(0.20, 0.070, 0.022),
             float3(0.31, 0.110, 0.035),
@@ -673,8 +676,8 @@ StagePixelOutput PSStage(StageVertexOutput input)
             : float3(0.002, 0.018, 0.045);
 
         const float3 waterScatterColor = lerp(
-            float3(0.006, 0.092, 0.270),
-            float3(0.003, 0.036, 0.165),
+            float3(0.008, 0.125, 0.340),
+            float3(0.004, 0.052, 0.205),
             depthProgress);
         const float3 overheadDirection =
             normalize(float3(-0.20, -0.93, 0.29));
@@ -744,9 +747,9 @@ StagePixelOutput PSStage(StageVertexOutput input)
         const float3 inScattering =
             (1.0 - transmittance) * waterScatterColor *
                 (0.56 + forwardScatter * 0.28) +
-            float3(0.005, 0.075, 0.330) *
+            float3(0.006, 0.105, 0.410) *
                 canopyHeight * surfaceTransmission *
-                (0.14 + slowWaterA * 0.065) +
+                (0.18 + slowWaterA * 0.075) +
             moonlightColor *
                 (moonlightPatch * 0.145 + fallingMoonlight * 0.060);
 
@@ -948,10 +951,27 @@ StagePixelOutput PSStage(StageVertexOutput input)
         const float entryCore = pow(overheadBank, 4.20);
         const float entryHalo = pow(overheadBank, 0.82);
         const float entryTransmission = 1.0 - fresnel;
+        // A long, broken strip above the tunnel is the perceived primary
+        // source. It is evaluated on the existing water surface, so no extra
+        // emitter geometry or draw pass is required.
+        const float sourceSpine = exp(
+            -input.worldPosition.z * input.worldPosition.z * 0.115) *
+            smoothstep(-2.0, 1.5, input.worldPosition.x) *
+            (1.0 - smoothstep(47.0, 50.0, input.worldPosition.x));
+        const float spineBreakup = lerp(
+            0.68,
+            1.0,
+            0.5 + 0.5 * sin(
+                input.worldPosition.x * 0.19 -
+                gStageSurfaceParameters.y * 0.21 +
+                sin(input.worldPosition.z * 0.41) * 0.8));
         const float3 transmittedEntryLight =
             surfaceLightColor * entryTransmission *
             (entryCore * 3.15 + entryHalo * 0.34) *
-            (0.88 + slowSurfacePulse * 0.12);
+            (0.88 + slowSurfacePulse * 0.12) +
+            float3(0.19, 0.72, 1.34) *
+                sourceSpine * spineBreakup *
+                (0.48 + overheadBank * 0.52) * entryTransmission;
         finalColor = lerp(
             transmittedScene * float3(0.90, 0.975, 1.02),
             reflectedAreaLight,
