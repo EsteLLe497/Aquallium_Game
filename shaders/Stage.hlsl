@@ -32,7 +32,7 @@ cbuffer StageConstants : register(b2)
     //    13 arch seam, 14 arch rail, 15 arch trim,
     //    16 Watatsumi water, 17 acrylic, 18 architecture, 19 ramp,
     //    20 tank rock, 21 waterline emitter, 22 upper water surface,
-    //    23 arch bubble, 25 view light curtain
+    //    23 arch bubble
     // y: simulation time
     // z: material alpha
     float4 gStageSurfaceParameters;
@@ -1091,9 +1091,9 @@ StagePixelOutput PSStage(StageVertexOutput input)
         // surface position so it follows the same angled refracted trajectory
         // as the corresponding overhead bank.
         const float caustics = StageTankCaustics(
-            projectedSurfacePosition * 0.30,
+            projectedSurfacePosition * 0.20,
             gStageSurfaceParameters.y * 0.96,
-            0.33);
+            0.38);
         const float receiverStrength = archRock ? 0.165 : 0.410;
         const float checker = abs(fmod(
             floor(input.worldPosition.x * 1.35) +
@@ -1412,34 +1412,6 @@ StagePixelOutput PSStage(StageVertexOutput input)
                 film) * rim * 0.72 +
             float3(0.66, 0.92, 1.20) * glint * 0.88;
         finalOpacity = saturate(0.012 + rim * 0.20 + glint * 0.30);
-    }
-    else if (!preserveAnalyticAquarium &&
-        surfaceType > 24.5 && surfaceType < 25.5)
-    {
-        // Crossed tapered cards replace the arch's full-screen volume march.
-        // They occupy only the real water gap above the acrylic and fade at
-        // all mesh boundaries. View-angle response prevents a flat rectangle
-        // from remaining visible while the player walks past a bank.
-        const float across = smoothstep(0.0, 0.18, input.uv.x) *
-            (1.0 - smoothstep(0.82, 1.0, input.uv.x));
-        const float along = smoothstep(0.0, 0.075, input.uv.y) *
-            (1.0 - smoothstep(0.92, 1.0, input.uv.y));
-        const float viewFacing = abs(dot(normal, -viewDirection));
-        const float viewResponse = lerp(
-            1.0,
-            0.34,
-            smoothstep(0.18, 0.92, viewFacing));
-        const float waterBreakup = 0.82 + 0.18 * sin(
-            input.worldPosition.y * 2.15 +
-            input.worldPosition.x * 0.41 -
-            gStageSurfaceParameters.y * 0.34);
-        const float filament = 0.72 + 0.28 * pow(
-            saturate(sin(input.uv.x * 9.4248)), 2.0);
-        const float beam = across * along * viewResponse *
-            waterBreakup * filament;
-        finalColor = float3(0.050, 0.42, 1.20) *
-            beam * (0.82 + input.uv.y * 0.18);
-        finalOpacity = saturate(beam * 0.155);
     }
     else if (!preserveAnalyticAquarium &&
         surfaceType > 3.5 && surfaceType < 6.5)

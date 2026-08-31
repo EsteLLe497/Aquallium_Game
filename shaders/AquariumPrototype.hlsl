@@ -542,14 +542,14 @@ float3 EvaluateRefractedAreaLight(
         rcp(1.0 + lightDepth * lightDepth * 0.010);
     const float phase = min(
         PhaseHenyeyGreenstein(
-            dot(rayDirection, centralAxis),
+            // Incoming radiance travels along centralAxis, while the
+            // scattering direction toward the eye is -rayDirection.
+            dot(-rayDirection, centralAxis),
             gAnisotropy) * (4.0 * PI),
         6.0);
-    // The current prototype has no authored tank inhabitants. The shadow map
-    // still contains diagnostic ellipsoids used while validating the pass;
-    // applying them here creates unexplained mottling in an otherwise empty
-    // exhibit. Keep the shadow infrastructure for real meshes, but do not
-    // present debug casters as final volumetric shadows.
+    // Instanced fish and rays do not yet write the legacy prototype shadow
+    // buffer. Its diagnostic ellipsoids would create ghost occluders, so keep
+    // this path unshadowed until biology is submitted to the shadow atlas.
     const float shadow = 1.0;
     const float3 lightColor =
         gLightColorStrength[lightIndex].rgb;
@@ -563,102 +563,6 @@ float3 EvaluateRefractedAreaLight(
         distanceAttenuation *
         phase *
         intensity;
-}
-
-float3 IntegrateArchSpotCurtains(
-    float3 rayOrigin,
-    float3 rayDirection,
-    float maxDistance)
-{
-    // Integrate the dominant part of each refracted spotlight analytically.
-    // The closest approach between the view ray and light axis gives a smooth
-    // volumetric curtain through the acrylic without another ray-march pass.
-    float3 accumulated = 0.0;
-    [unroll]
-    for (uint lightIndex = 0;
-         lightIndex < (uint)gActiveLightCount;
-         ++lightIndex)
-    {
-        const float3 surfaceOrigin =
-            gLightSurfaceOrigin[lightIndex].xyz;
-        const float3 lightAxis = normalize(
-            gLightRefractedAxis[lightIndex].xyz);
-        const float3 originOffset = rayOrigin - surfaceOrigin;
-        const float axisAlignment = dot(rayDirection, lightAxis);
-        const float denominator = max(
-            1.0 - axisAlignment * axisAlignment,
-            0.035);
-        const float viewProjection = dot(rayDirection, originOffset);
-        const float lightProjection = dot(lightAxis, originOffset);
-        float rayDistance =
-            (axisAlignment * lightProjection - viewProjection) /
-            denominator;
-        rayDistance = clamp(rayDistance, 0.0, maxDistance);
-
-        const float3 samplePosition =
-            rayOrigin + rayDirection * rayDistance;
-        const float lightDepth = dot(
-            samplePosition - surfaceOrigin,
-            lightAxis);
-        if (lightDepth <= 0.0)
-        {
-            continue;
-        }
-
-        const float3 axisPosition =
-            surfaceOrigin + lightAxis * lightDepth;
-        const float radialDistance = length(
-            samplePosition - axisPosition);
-        // A real spotlight has a bright core and a softer penumbra. Both grow
-        // after refraction, so the beam visibly originates at the moving water
-        // surface rather than appearing as an unrelated fog patch below it.
-        const float coneRadius = 0.68 + lightDepth * 0.140;
-        const float normalizedRadius =
-            radialDistance / max(coneRadius, 0.001);
-        const float core = exp(
-            -normalizedRadius * normalizedRadius * 6.0);
-        const float penumbra = exp(
-            -normalizedRadius * normalizedRadius * 1.50);
-        const float cone = core * 0.68 + penumbra * 0.32;
-
-        // Longer intersections read as a light curtain at grazing views. The
-        // cap avoids the singularity when looking exactly along the beam.
-        const float opticalPath = min(
-            coneRadius / sqrt(denominator),
-            3.6);
-        const float phase = min(
-            PhaseHenyeyGreenstein(
-                dot(lightAxis, -rayDirection),
-                0.56) * (4.0 * PI),
-            5.4);
-        const float depthTransmission = exp(-lightDepth * 0.075);
-        const float surfaceFocus = lerp(
-            0.92,
-            1.24,
-            gLightRefractedAxis[lightIndex].w);
-        const float rayBoundaryFade =
-            smoothstep(0.0, 1.15, rayDistance) *
-            smoothstep(0.0, 1.15, maxDistance - rayDistance);
-        const float surfaceEntryFade = smoothstep(
-            0.04,
-            0.72,
-            lightDepth);
-        const float slowWaterPulse = 0.93 + 0.07 * sin(
-            surfaceOrigin.x * 0.37 +
-            surfaceOrigin.z * 0.53 +
-            gTime * 0.34);
-        const float3 lightColor =
-            gLightColorStrength[lightIndex].rgb;
-        const float lightStrength =
-            gLightColorStrength[lightIndex].w;
-
-        accumulated += lightColor *
-            cone * opticalPath * phase *
-            depthTransmission * surfaceFocus * slowWaterPulse *
-            rayBoundaryFade * surfaceEntryFade *
-            lightStrength * gVolumeStrength * 0.320;
-    }
-    return accumulated;
 }
 
 float3 IntegrateVolume(
@@ -744,11 +648,12 @@ float3 IntegrateArchVolume(
     float3 rayDirection,
     float maxDistance)
 {
-    // The arch uses a deliberately small, water-only integration budget.
-    // Two centered samples at the existing low-resolution volume buffer are
-    // enough once temporal reprojection and bilateral upsampling are applied.
-    const int stepCount = 2;
-    const float travelDistance = min(maxDistance, 12.0);
+    // This is the production shaft path: no transparent light-card geometry.
+    // Three centered samples at one-third resolution retain enough depth
+    // variation for a moving viewpoint; temporal reprojection and bilateral
+    // upsampling recover continuity at a fraction of a full-resolution march.
+    const int stepCount = 3;
+    const float travelDistance = min(maxDistance, 14.0);
     const float stepLength = travelDistance / stepCount;
     float3 accumulated = 0.0;
     float3 transmittance = 1.0;
@@ -793,9 +698,6 @@ float3 IntegrateArchVolume(
         accumulated += transmittance * integratedSource;
         transmittance *= segmentTransmittance;
     }
-    // The analytic ray/axis curtain remains available for experiments, but is
-    // not composited in the production preview. At oblique tunnel views its
-    // finite integration interval read as a pair of transparent rectangles.
     return accumulated;
 }
 

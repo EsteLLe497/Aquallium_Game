@@ -385,15 +385,27 @@ References:
 - Added 144 small low-poly bubbles as one transparent material batch. Side
   diffuser plumes widen and become denser toward the surface; a thin-film
   Fresnel/glint shader leaves the bubble interiors nearly invisible.
-- Replaced the underwater arch's full-screen temporal volume ray march with
-  six crossed tapered light cards. The cards now continue from the surface to
-  the side water near the tank bed, outside the dry player corridor. Sharper
-  longitudinal masks, animated surface breakup and view-angle response retain
-  a clear long shaft without exposing a rectangular mesh boundary.
-- Kept the physical water surface and acrylic render path, but avoided an
-  additional depth/motion MRT, shadow map or post-process history allocation.
-  The final Debug x64 1296 x 759 route capture ran at 105 FPS at 100% render
-  scale while displaying the bubble and light-curtain layers.
+- Removed the six crossed transparent light cards after their boundaries
+  became visible from moving viewpoints. The production path now evaluates
+  true water-volume scattering from the authored fixture positions; there is
+  no beam geometry or camera-facing light curtain in the stage GLB.
+- Re-enabled the existing one-third-resolution temporal volume buffer for the
+  arch. Three centered ray samples evaluate the relevant adjacent light pair,
+  then temporal reprojection and depth-aware bilateral upsampling restore a
+  continuous shaft without paying for a full-resolution march.
+- Matched the CPU refraction surface to the exact multi-octave displaced water
+  mesh, including diffuser-linked radial waves and the capillary octave. Two
+  fixed-point intersections place each light on the moving surface; its height
+  gradient supplies the normal used by Snell refraction (air IOR 1.0 to water
+  IOR 1.333), so the shaft origin and direction move with visible water.
+- Corrected Henyey-Greenstein evaluation to use the light travel direction and
+  the direction from the sample toward the eye. Shaft brightness therefore
+  changes naturally as the player walks around or looks toward/away from a
+  source instead of behaving like a fixed translucent decal.
+- Raised only the arch scattering multiplier from 0.26 to 0.34 after visual
+  review. This makes the physical shaft readable without adding samples or
+  transparent draws; the repeatable 1280 x 720 benchmark measured 143 FPS at
+  100% render scale, and the final capture reported 146 FPS.
 - Strengthened the arch-only water displacement by 34% and added a capillary
   octave. Each of the six authored bubble diffusers now acts as the nearest
   radial wave source; the analytic height and gradient drive both displaced
@@ -401,8 +413,8 @@ References:
 - Added a coherent wobble to the existing single-batch bubble mesh, visually
   connecting the rising plumes to their surface disturbances. The dry route
   remains static and keeps the after-hours contrast.
-- Enlarged receiver caustics from a 0.42 to 0.30 world-space frequency scale,
-  widened the ridge threshold from 0.22 to 0.33, and increased floor/rock
+- Enlarged receiver caustics from a 0.42 to 0.20 world-space frequency scale,
+  widened the ridge threshold from 0.22 to 0.38, and increased floor/rock
   response. The pattern uses the refracted surface projection and a faster
   water time axis, producing broad moving bands instead of dense thin lines.
 - Rejected the first per-pixel bubble-gradient caustics experiment after a

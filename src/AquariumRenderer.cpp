@@ -106,6 +106,89 @@ DirectX::XMMATRIX BuildStageViewProjection(
         120.0f);
     return view * projection;
 }
+
+struct ArchSurfaceWaveSample
+{
+    float heightOffset;
+    float derivativeX;
+    float derivativeZ;
+};
+
+ArchSurfaceWaveSample EvaluateArchSurfaceWave(
+    float surfaceX,
+    float surfaceZ,
+    float time)
+{
+    // Keep the CPU light refraction surface identical to the water mesh in
+    // Stage.hlsl. Light launch points and Snell axes therefore move with the
+    // surface that the player can actually see instead of a hidden proxy wave.
+    const float phaseA =
+        surfaceX * 0.48f + surfaceZ * 0.31f + time * 0.55f;
+    const float phaseB =
+        surfaceX * -0.27f + surfaceZ * 0.63f - time * 0.42f;
+    const float phaseC =
+        surfaceX * 1.08f + surfaceZ * -0.86f + time * 0.73f;
+    const float phaseD =
+        surfaceX * 2.15f + surfaceZ * 1.72f - time * 1.08f;
+    constexpr float waveScale = 1.34f;
+    ArchSurfaceWaveSample sample{
+        (std::sin(phaseA) * 0.140f +
+         std::sin(phaseB) * 0.090f +
+         std::sin(phaseC) * 0.035f +
+         std::sin(phaseD) * 0.018f) * waveScale,
+        (std::cos(phaseA) * 0.140f * 0.48f +
+         std::cos(phaseB) * 0.090f * -0.27f +
+         std::cos(phaseC) * 0.035f * 1.08f +
+         std::cos(phaseD) * 0.018f * 2.15f) * waveScale,
+        (std::cos(phaseA) * 0.140f * 0.31f +
+         std::cos(phaseB) * 0.090f * 0.63f +
+         std::cos(phaseC) * 0.035f * -0.86f +
+         std::cos(phaseD) * 0.018f * 1.72f) * waveScale
+    };
+
+    const float bankIndex = std::clamp(
+        std::round((surfaceX - 8.0f) / 16.0f),
+        0.0f,
+        2.0f);
+    const float bankX = 8.0f + bankIndex * 16.0f;
+    const float plumeMagnitude = 4.85f + bankIndex * 0.12f;
+    const float plumeZ = surfaceZ < 0.0f
+        ? -plumeMagnitude
+        : plumeMagnitude;
+    const float deltaX = surfaceX - bankX;
+    const float deltaZ = surfaceZ - plumeZ;
+    const float radiusSquared =
+        deltaX * deltaX + deltaZ * deltaZ;
+    const float falloff = std::clamp(
+        1.0f - radiusSquared * 0.034f,
+        0.0f,
+        1.0f);
+    const float envelope = falloff * falloff;
+    const float bubblePhase =
+        radiusSquared * 0.58f - time * 1.55f + bankIndex * 0.83f;
+    constexpr float bubbleAmplitude = 0.082f;
+    sample.heightOffset +=
+        std::sin(bubblePhase) * bubbleAmplitude * envelope;
+    const float envelopeDerivative = falloff > 0.0f
+        ? -0.068f * falloff
+        : 0.0f;
+    const float derivativeByRadiusSquared = bubbleAmplitude * (
+        std::cos(bubblePhase) * 0.58f * envelope +
+        std::sin(bubblePhase) * envelopeDerivative);
+    sample.derivativeX +=
+        2.0f * deltaX * derivativeByRadiusSquared;
+    sample.derivativeZ +=
+        2.0f * deltaZ * derivativeByRadiusSquared;
+
+    const float capillaryPhase =
+        surfaceX * 3.60f + surfaceZ * 2.90f + time * 1.35f;
+    sample.heightOffset += std::sin(capillaryPhase) * 0.026f;
+    sample.derivativeX +=
+        std::cos(capillaryPhase) * 0.026f * 3.60f;
+    sample.derivativeZ +=
+        std::cos(capillaryPhase) * 0.026f * 2.90f;
+    return sample;
+}
 }
 
 void AquariumRenderer::Initialize(ID3D11Device* device, const std::filesystem::path& shaderPath)
@@ -317,7 +400,7 @@ void AquariumRenderer::Render(
             ? 0.0f
             : settings.volumeStrength *
                 (settings.underwaterArchMode
-                    ? 0.26f
+                    ? 0.34f
                     : (settings.watatsumiTankMode ? 0.0f : 1.0f)),
         settings.exposure,
         settings.waterClarity,
@@ -436,35 +519,73 @@ void AquariumRenderer::Render(
         XMVECTOR surfacePoint =
             lightOrigin + lightAxis * surfaceDistance;
 
-        const float surfaceX = XMVectorGetX(surfacePoint);
-        const float surfaceZ = XMVectorGetZ(surfacePoint);
-        const float waveA = surfaceX * 1.4f + time * 0.63f;
-        const float waveB =
-            (surfaceX * 0.7f + surfaceZ * 1.1f) * 2.2f -
-            time * 0.48f;
-        const float waveC = surfaceZ * 1.7f - time * 0.54f;
-        const float waveD =
-            (-surfaceX * 1.2f + surfaceZ * 0.6f) * 2.5f +
-            time * 0.39f;
-        const float surfaceHeight =
-            lights[lightIndex].surfaceHeight +
-            std::sin(waveA) * 0.055f +
-            std::sin(waveB) * 0.028f +
-            std::sin(waveC) * 0.045f +
-            std::sin(waveD) * 0.022f;
+        float surfaceX = XMVectorGetX(surfacePoint);
+        float surfaceZ = XMVectorGetZ(surfacePoint);
+        ArchSurfaceWaveSample archWave{};
+        float surfaceHeight = lights[lightIndex].surfaceHeight;
+        float derivativeX = 0.0f;
+        float derivativeZ = 0.0f;
+        if (settings.underwaterArchMode)
+        {
+            // Two cheap fixed-point iterations account for the small X/Z
+            // shift of an angled ray as the displaced surface height changes.
+            for (int surfaceIteration = 0;
+                 surfaceIteration < 2;
+                 ++surfaceIteration)
+            {
+                archWave = EvaluateArchSurfaceWave(
+                    surfaceX,
+                    surfaceZ,
+                    time);
+                surfaceHeight =
+                    lights[lightIndex].surfaceHeight +
+                    archWave.heightOffset;
+                surfaceDistance =
+                    (surfaceHeight - XMVectorGetY(lightOrigin)) / axisY;
+                surfacePoint =
+                    lightOrigin + lightAxis * surfaceDistance;
+                surfaceX = XMVectorGetX(surfacePoint);
+                surfaceZ = XMVectorGetZ(surfacePoint);
+            }
+            archWave = EvaluateArchSurfaceWave(
+                surfaceX,
+                surfaceZ,
+                time);
+            surfaceHeight =
+                lights[lightIndex].surfaceHeight +
+                archWave.heightOffset;
+            derivativeX = archWave.derivativeX;
+            derivativeZ = archWave.derivativeZ;
+        }
+        else
+        {
+            const float waveA = surfaceX * 1.4f + time * 0.63f;
+            const float waveB =
+                (surfaceX * 0.7f + surfaceZ * 1.1f) * 2.2f -
+                time * 0.48f;
+            const float waveC = surfaceZ * 1.7f - time * 0.54f;
+            const float waveD =
+                (-surfaceX * 1.2f + surfaceZ * 0.6f) * 2.5f +
+                time * 0.39f;
+            surfaceHeight =
+                lights[lightIndex].surfaceHeight +
+                std::sin(waveA) * 0.055f +
+                std::sin(waveB) * 0.028f +
+                std::sin(waveC) * 0.045f +
+                std::sin(waveD) * 0.022f;
+            derivativeX =
+                std::cos(waveA) * 0.055f * 1.4f +
+                std::cos(waveB) * 0.028f * 0.7f * 2.2f +
+                std::cos(waveD) * 0.022f * -1.2f * 2.5f;
+            derivativeZ =
+                std::cos(waveB) * 0.028f * 1.1f * 2.2f +
+                std::cos(waveC) * 0.045f * 1.7f +
+                std::cos(waveD) * 0.022f * 0.6f * 2.5f;
+        }
         surfaceDistance =
             (surfaceHeight - XMVectorGetY(lightOrigin)) / axisY;
         surfacePoint =
             lightOrigin + lightAxis * surfaceDistance;
-
-        const float derivativeX =
-            std::cos(waveA) * 0.055f * 1.4f +
-            std::cos(waveB) * 0.028f * 0.7f * 2.2f +
-            std::cos(waveD) * 0.022f * -1.2f * 2.5f;
-        const float derivativeZ =
-            std::cos(waveB) * 0.028f * 1.1f * 2.2f +
-            std::cos(waveC) * 0.045f * 1.7f +
-            std::cos(waveD) * 0.022f * 0.6f * 2.5f;
         const XMVECTOR surfaceNormal = XMVector3Normalize(
             XMVectorSet(-derivativeX, 1.0f, -derivativeZ, 0.0f));
         const XMVECTOR refractedAxis = XMVector3Normalize(
