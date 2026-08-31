@@ -20,10 +20,17 @@ def main() -> None:
     assert "for (int y = -1; y <= 1; ++y)" in source
     assert "for (int x = -1; x <= 1; ++x)" in source
     assert "constexpr float simulationStep = 1.0f / 30.0f" in source
-    assert "habitat == Habitat::UnderwaterArch ? 24u : 48u" in source
+    assert "Habitat::UnderwaterArch ? 18u : 36u" in source
+    assert "Habitat::UnderwaterArch ? 9u : 12u" in source
+    assert "spawnSchool(3u, mediumFishCount, 1u)" in source
+    assert "CreateRayGeometry" in source
+    assert "BuildRayInstances" in source
+    assert "Habitat::UnderwaterArch ? 2u : 3u" in source
     assert "ArchCanopy(agent.position.x, agent.position.z) + 0.22f" in source
     assert "DrawIndexedInstanced" in source
     assert "input.bendWeight" in shader
+    assert "input.instanceSpeciesShape.x" in shader
+    assert "raySpecies" in shader and "wingMask" in shader
     assert "viewedFromBelow" in shader
     assert "Fish.hlsl" in project and "FishRenderer.cpp" in project
 
@@ -34,11 +41,15 @@ def main() -> None:
 
     print({
         "result": "pass",
-        "arch_fish": 72,
-        "watatsumi_fish": 144,
+        "arch_small_fish": 54,
+        "arch_medium_fish": 9,
+        "arch_rays": 2,
+        "watatsumi_small_fish": 108,
+        "watatsumi_medium_fish": 12,
+        "watatsumi_rays": 3,
         "simulation_hz": 30,
         "spatial_cells_per_query": 27,
-        "draw_calls_per_habitat": 1,
+        "maximum_biology_draw_calls_per_habitat": 2,
         "overhead_silhouette_extra_draws": 0,
         "sequential_refraction_order": True,
     })

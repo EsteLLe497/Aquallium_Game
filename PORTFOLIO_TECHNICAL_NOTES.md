@@ -402,7 +402,7 @@ References:
 - https://www.visitsealife.com/birmingham/explore/aquarium-zones/ocean-tunnel/
 - https://canadianpond.ca/solutions/bubble-curtains/
 
-# Data-oriented small-fish schooling
+# Data-oriented multi-species aquarium schooling
 
 - Added a procedural 130-triangle small-fish mesh with GPU vertex deformation:
   the head remains stable while phase-shifted amplitude grows toward the tail.
@@ -412,16 +412,29 @@ References:
   cohesion and separation search only the 27 adjacent grid cells, while an
   authored looping school target controls exhibit composition and dedicated
   habitat steering prevents fish from entering glass, floor or dry walkways.
-- Rendered 72 fish in the underwater arch and 144 in the Watatsumi tank through
-  one dynamic instance buffer and one `DrawIndexedInstanced` call. Per-fish
-  frustum/distance rejection happens before the buffer upload.
-- Split the arch population into two 24-fish side schools and one 24-fish
-  overhead school. The overhead habitat derives its lower bound from the same
+- Added a second sparse medium-fish profile without duplicating geometry. The
+  species id changes proportions, tint, glint and Boids weights in the existing
+  instanced shader, producing slower and less cohesive individuals at negligible
+  CPU and asset cost.
+- Rendered 54 small fish, 9 medium fish and 2 rays in the underwater arch; the
+  Watatsumi tank uses 108 small fish, 12 medium fish and 3 rays. Per-instance
+  frustum/distance rejection happens before two dynamic-buffer uploads and at
+  most two `DrawIndexedInstanced` calls.
+- Split the arch's small population into three 18-fish schools. The overhead
+  habitat derives its lower bound from the same
   semi-ellipse used by the acrylic canopy, keeping fish between glass and the
   water surface throughout the descending route.
+- Used an analytic authored spline for the large rays instead of applying Boids
+  to every species. A 27-triangle procedural ray mesh receives GPU wing
+  deformation, keeping these sparse hero silhouettes deterministic and cheap.
 - Added a view-from-below silhouette response for overhead fish. Dark bodies
   with a restrained cyan Fresnel rim provide a fish-shadow cue without another
   draw call or shadow map. Biology is submitted before water and acrylic, so it
   participates in the established sequential absorption/refraction path.
-- Debug x64 validation reported zero warnings and zero errors. The final
-  1296 x 759 underwater-arch capture retained 100% render scale at 133 FPS.
+- The arch's global exposure remains unchanged for an after-hours mood. Only
+  the water-surface transmission and narrow light curtains were strengthened,
+  preserving dark architecture while making the overhead lighting legible.
+- Debug x64 validation reported zero warnings and zero errors. The repeatable
+  1280 x 720 route benchmark retained 100% render scale at 169 FPS in the
+  underwater arch; the full-resolution visual capture measured 117 FPS while
+  screen capture and the development UI were active.

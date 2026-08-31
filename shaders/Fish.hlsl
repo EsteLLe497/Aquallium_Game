@@ -15,6 +15,8 @@ struct VertexInput
     float4 instancePositionScale : INSTANCE_POSITION_SCALE;
     float4 instanceForwardPhase : INSTANCE_FORWARD_PHASE;
     float4 instanceTintSwim : INSTANCE_TINT_SWIM;
+    // x: species (0 schooler, 1 medium, 2 ray), yz: body shape.
+    float4 instanceSpeciesShape : INSTANCE_SPECIES_SHAPE;
 };
 
 struct VertexOutput
@@ -26,6 +28,7 @@ struct VertexOutput
     float depthBelowSurface : TEXCOORD3;
     float tailMask : TEXCOORD4;
     float overheadSchool : TEXCOORD5;
+    float species : TEXCOORD6;
 };
 
 float3 SafeNormalize(float3 value, float3 fallback)
@@ -45,7 +48,20 @@ VertexOutput VSFish(VertexInput input)
     const float wave = sin(
         gCameraTime.w * swimSpeed + phase - input.position.x * 5.2);
     float3 localPosition = input.position;
-    localPosition.z += wave * 0.105 * input.bendWeight;
+    const bool raySpecies = input.instanceSpeciesShape.x > 1.5;
+    if (raySpecies)
+    {
+        const float wingMask = saturate(-input.bendWeight);
+        localPosition.y += sin(
+            gCameraTime.w * swimSpeed + phase +
+            abs(input.position.z) * 0.85) * wingMask * 0.135;
+    }
+    else
+    {
+        localPosition.z += wave * 0.105 * saturate(input.bendWeight);
+    }
+    localPosition.x *= input.instanceSpeciesShape.y;
+    localPosition.yz *= input.instanceSpeciesShape.z;
 
     const float3 forward = SafeNormalize(
         input.instanceForwardPhase.xyz,
@@ -70,8 +86,9 @@ VertexOutput VSFish(VertexInput input)
         up);
     output.tint = input.instanceTintSwim.rgb;
     output.depthBelowSurface = max(gWaterParameters.x - worldPosition.y, 0.0);
-    output.tailMask = input.bendWeight;
+    output.tailMask = saturate(input.bendWeight);
     output.overheadSchool = input.instanceTintSwim.w < 0.0 ? 1.0 : 0.0;
+    output.species = input.instanceSpeciesShape.x;
     output.position = mul(float4(worldPosition, 1.0), gViewProjection);
     return output;
 }
@@ -94,8 +111,11 @@ float4 PSFish(VertexOutput input, bool frontFace : SV_IsFrontFace) : SV_TARGET0
     const float flankFlash = pow(
         saturate(dot(reflect(-lightDirection, normal), viewDirection)),
         28.0);
-    const float3 baseColor = input.tint * (0.22 + diffuse * 0.52);
-    const float3 silver = float3(0.24, 0.48, 0.72) * flankFlash * 0.42;
+    const bool raySpecies = input.species > 1.5;
+    const float3 baseColor = input.tint *
+        (raySpecies ? (0.15 + diffuse * 0.34) : (0.22 + diffuse * 0.52));
+    const float3 silver = float3(0.24, 0.48, 0.72) * flankFlash *
+        (raySpecies ? 0.20 : 0.42);
     const float3 rimColor = float3(0.04, 0.22, 0.46) * rim * 0.42;
     const float3 transmission = exp(
         -gWaterParameters.yzw * input.depthBelowSurface);
@@ -103,13 +123,17 @@ float4 PSFish(VertexOutput input, bool frontFace : SV_IsFrontFace) : SV_TARGET0
     float3 color = (baseColor + silver + rimColor) * transmission * tailDarkening;
     // Fish above the acrylic are intentionally read from below as silhouettes,
     // providing a cheap fish-shadow cue without a second shadow-map pass.
-    const float viewedFromBelow = input.overheadSchool * smoothstep(
+    const float viewedFromBelow =
+        saturate(input.overheadSchool + (raySpecies ? 0.72 : 0.0)) * smoothstep(
         0.35,
         1.8,
         input.worldPosition.y - gCameraTime.y);
     const float3 silhouette =
         float3(0.006, 0.025, 0.055) +
         float3(0.025, 0.12, 0.25) * rim;
-    color = lerp(color, silhouette, viewedFromBelow * 0.88);
+    color = lerp(
+        color,
+        raySpecies ? silhouette * float3(0.18, 0.27, 0.38) : silhouette,
+        viewedFromBelow * (raySpecies ? 0.94 : 0.88));
     return float4(color, 1.0);
 }

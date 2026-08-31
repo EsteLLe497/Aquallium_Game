@@ -936,7 +936,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
                 input.worldPosition.z * 0.27 +
                 gStageSurfaceParameters.y * 0.38) * 0.10;
         const float3 reflectedAreaLight =
-            float3(0.035, 0.270, 0.860) *
+            float3(0.040, 0.315, 0.980) *
             (0.18 + fresnel * 0.72) * slowSurfacePulse +
             float3(0.30, 0.78, 1.10) * surfaceSpecular * 0.42 +
             surfaceLightColor *
@@ -950,7 +950,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
         const float entryTransmission = 1.0 - fresnel;
         const float3 transmittedEntryLight =
             surfaceLightColor * entryTransmission *
-            (entryCore * 2.30 + entryHalo * 0.22) *
+            (entryCore * 3.15 + entryHalo * 0.34) *
             (0.88 + slowSurfacePulse * 0.12);
         finalColor = lerp(
             transmittedScene * float3(0.90, 0.975, 1.02),
@@ -1345,9 +1345,9 @@ StagePixelOutput PSStage(StageVertexOutput input)
             saturate(sin(input.uv.x * 9.4248)), 2.0);
         const float beam = across * along * viewResponse *
             waterBreakup * filament;
-        finalColor = float3(0.035, 0.31, 1.02) *
+        finalColor = float3(0.050, 0.42, 1.20) *
             beam * (0.82 + input.uv.y * 0.18);
-        finalOpacity = saturate(beam * 0.132);
+        finalOpacity = saturate(beam * 0.155);
     }
     else if (!preserveAnalyticAquarium &&
         surfaceType > 3.5 && surfaceType < 6.5)

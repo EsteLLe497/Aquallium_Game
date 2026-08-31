@@ -128,6 +128,7 @@ void FishRenderer::Initialize(
     const std::filesystem::path& shaderPath)
 {
     CreateGeometry(device);
+    CreateRayGeometry(device);
     CreatePipeline(device, shaderPath);
 }
 
@@ -202,6 +203,46 @@ void FishRenderer::CreateGeometry(ID3D11Device* device)
     indexCount_ = static_cast<std::uint32_t>(indices.size());
 }
 
+void FishRenderer::CreateRayGeometry(ID3D11Device* device)
+{
+    // A compact manta silhouette. Negative bend weights select the wing-flap
+    // path in Fish.hlsl, allowing the same pipeline to animate both meshes.
+    const std::vector<Vertex> vertices{
+        {{ 0.05f, 0.0f,  0.00f}, {0, 1, 0}, {0.50f, 0.50f}, -0.08f},
+        {{ 1.08f, 0.0f,  0.00f}, {0, 1, 0}, {1.00f, 0.50f}, -0.05f},
+        {{ 0.46f, 0.0f,  0.58f}, {0, 1, 0}, {0.72f, 0.73f}, -0.46f},
+        {{-0.12f, 0.0f,  1.28f}, {0, 1, 0}, {0.45f, 1.00f}, -1.00f},
+        {{-0.76f, 0.0f,  0.38f}, {0, 1, 0}, {0.14f, 0.65f}, -0.32f},
+        {{-0.86f, 0.0f,  0.00f}, {0, 1, 0}, {0.10f, 0.50f}, -0.05f},
+        {{-0.76f, 0.0f, -0.38f}, {0, 1, 0}, {0.14f, 0.35f}, -0.32f},
+        {{-0.12f, 0.0f, -1.28f}, {0, 1, 0}, {0.45f, 0.00f}, -1.00f},
+        {{ 0.46f, 0.0f, -0.58f}, {0, 1, 0}, {0.72f, 0.27f}, -0.46f},
+        {{-0.82f, 0.0f,  0.00f}, {0, 1, 0}, {0.08f, 0.50f}, -0.04f},
+        {{-2.16f, 0.0f,  0.00f}, {0, 1, 0}, {0.00f, 0.50f}, -0.03f},
+        {{-1.45f, 0.0f,  0.055f}, {0, 1, 0}, {0.03f, 0.53f}, -0.04f}
+    };
+    const std::vector<std::uint32_t> indices{
+        0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5,
+        0, 5, 6, 0, 6, 7, 0, 7, 8, 0, 8, 1,
+        9, 10, 11
+    };
+    D3D11_BUFFER_DESC bufferDesc{};
+    bufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    bufferDesc.ByteWidth = static_cast<UINT>(vertices.size() * sizeof(Vertex));
+    D3D11_SUBRESOURCE_DATA initialData{vertices.data(), 0, 0};
+    ThrowIfFailed(device->CreateBuffer(
+        &bufferDesc, &initialData, rayVertexBuffer_.GetAddressOf()),
+        "CreateBuffer (ray vertices)");
+    bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    bufferDesc.ByteWidth = static_cast<UINT>(indices.size() * sizeof(std::uint32_t));
+    initialData.pSysMem = indices.data();
+    ThrowIfFailed(device->CreateBuffer(
+        &bufferDesc, &initialData, rayIndexBuffer_.GetAddressOf()),
+        "CreateBuffer (ray indices)");
+    rayIndexCount_ = static_cast<std::uint32_t>(indices.size());
+}
+
 void FishRenderer::CreatePipeline(
     ID3D11Device* device,
     const std::filesystem::path& shaderPath)
@@ -217,7 +258,7 @@ void FishRenderer::CreatePipeline(
         pixelBytecode->GetBufferPointer(), pixelBytecode->GetBufferSize(),
         nullptr, pixelShader_.GetAddressOf()), "CreatePixelShader (fish)");
 
-    const std::array<D3D11_INPUT_ELEMENT_DESC, 7> layout{{
+    const std::array<D3D11_INPUT_ELEMENT_DESC, 8> layout{{
         {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,
          D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12,
@@ -231,6 +272,8 @@ void FishRenderer::CreatePipeline(
         {"INSTANCE_FORWARD_PHASE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16,
          D3D11_INPUT_PER_INSTANCE_DATA, 1},
         {"INSTANCE_TINT_SWIM", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32,
+         D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"INSTANCE_SPECIES_SHAPE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48,
          D3D11_INPUT_PER_INSTANCE_DATA, 1}
     }};
     ThrowIfFailed(device->CreateInputLayout(
@@ -246,6 +289,10 @@ void FishRenderer::CreatePipeline(
     ThrowIfFailed(device->CreateBuffer(
         &bufferDesc, nullptr, instanceBuffer_.GetAddressOf()),
         "CreateBuffer (fish instances)");
+    bufferDesc.ByteWidth = 8u * sizeof(Instance);
+    ThrowIfFailed(device->CreateBuffer(
+        &bufferDesc, nullptr, rayInstanceBuffer_.GetAddressOf()),
+        "CreateBuffer (ray instances)");
     bufferDesc.ByteWidth = sizeof(Constants);
     bufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     ThrowIfFailed(device->CreateBuffer(
@@ -287,17 +334,22 @@ void FishRenderer::ResetHabitat(Habitat habitat)
         return static_cast<float>((randomState >> 8u) & 0x00ffffffu) /
             static_cast<float>(0x01000000u);
     };
-    constexpr std::uint32_t schoolCount = 3u;
-    const std::uint32_t fishPerSchool =
-        habitat == Habitat::UnderwaterArch ? 24u : 48u;
-    agents_.reserve(schoolCount * fishPerSchool);
-    for (std::uint32_t school = 0; school < schoolCount; ++school)
+    const std::uint32_t smallFishPerSchool =
+        habitat == Habitat::UnderwaterArch ? 18u : 36u;
+    const std::uint32_t mediumFishCount =
+        habitat == Habitat::UnderwaterArch ? 9u : 12u;
+    agents_.reserve(smallFishPerSchool * 3u + mediumFishCount);
+    const auto spawnSchool = [&](std::uint32_t school,
+                                 std::uint32_t count,
+                                 std::uint32_t species)
     {
         const XMFLOAT3 target = SchoolTarget(school, school * 4.7f);
-        for (std::uint32_t index = 0; index < fishPerSchool; ++index)
+        for (std::uint32_t index = 0; index < count; ++index)
         {
             const float angle = random01() * kPi * 2.0f;
-            const float radius = 0.60f + random01() * 1.65f;
+            const float radius = species == 0u
+                ? 0.60f + random01() * 1.65f
+                : 1.30f + random01() * 2.10f;
             Agent agent;
             agent.position = {
                 target.x + std::cos(angle) * radius,
@@ -309,13 +361,24 @@ void FishRenderer::ResetHabitat(Habitat habitat)
                  (random01() - 0.5f) * 0.42f},
                 {1.0f, 0.0f, 0.0f});
             agent.phase = random01() * kPi * 2.0f;
-            agent.scale = 0.22f + random01() * 0.12f;
+            agent.scale = species == 0u
+                ? 0.22f + random01() * 0.12f
+                : 0.48f + random01() * 0.18f;
             agent.tint = random01();
             agent.school = school;
+            agent.species = species;
             ConstrainToHabitat(agent);
             agents_.push_back(agent);
         }
+    };
+    for (std::uint32_t school = 0; school < 3u; ++school)
+    {
+        spawnSchool(school, smallFishPerSchool, 0u);
     }
+    // Medium fusilier-like fish use a sparse authored route. Boids still
+    // provide local spacing, but their wider initial radius avoids a second
+    // dense bait-ball silhouette.
+    spawnSchool(3u, mediumFishCount, 1u);
 }
 
 XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
@@ -323,7 +386,7 @@ XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
     const float schoolPhase = static_cast<float>(school) * 2.0943951f;
     if (habitat_ == Habitat::UnderwaterArch)
     {
-        const float route = time * 0.23f + schoolPhase;
+        const float route = time * (school == 3u ? 0.14f : 0.23f) + schoolPhase;
         const float x = 24.0f + std::sin(route) *
             (school == 2u ? 16.0f : 18.5f);
         if (school == 2u)
@@ -335,11 +398,14 @@ XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
                 canopy + (3.28f - canopy) * 0.58f,
                 z};
         }
-        const float side = school == 0u ? -1.0f : 1.0f;
+        const float side = (school == 0u || school == 3u) ? -1.0f : 1.0f;
         return {
             x,
-            ArchFloor(x) + 2.55f + std::sin(route * 0.73f) * 0.42f,
-            side * (5.25f + std::cos(route) * 0.78f)};
+            ArchFloor(x) +
+                (school == 3u ? 3.35f : 2.55f) +
+                std::sin(route * 0.73f) * 0.42f,
+            side * ((school == 3u ? 4.75f : 5.25f) +
+                std::cos(route) * 0.78f)};
     }
     const float route = time * 0.19f + schoolPhase;
     return {
@@ -366,7 +432,7 @@ void FishRenderer::ApplyHabitatSteering(
         }
         else
         {
-        const bool negativeSide = agent.school == 0u;
+        const bool negativeSide = agent.school == 0u || agent.school == 3u;
         minimum = {0.2f, ArchFloor(agent.position.x) + 0.72f,
             negativeSide ? -7.3f : 3.75f};
         maximum = {47.8f, 3.20f,
@@ -409,7 +475,7 @@ void FishRenderer::ConstrainToHabitat(Agent& agent) const
                 3.28f);
             return;
         }
-        const bool negativeSide = agent.school == 0u;
+        const bool negativeSide = agent.school == 0u || agent.school == 3u;
         agent.position.x = std::clamp(agent.position.x, 0.2f, 47.8f);
         agent.position.y = std::clamp(
             agent.position.y,
@@ -507,22 +573,29 @@ void FishRenderer::Simulate(float stepSeconds, float totalTime)
             const XMFLOAT3 averageVelocity = Scale(alignment, inverseCount);
             const XMFLOAT3 averagePosition = Scale(cohesion, inverseCount);
             steering = Add(steering,
-                Scale(Subtract(averageVelocity, agent.velocity), 0.72f));
+                Scale(Subtract(averageVelocity, agent.velocity),
+                    agent.species == 0u ? 0.72f : 0.44f));
             steering = Add(steering,
-                Scale(Normalize(Subtract(averagePosition, agent.position), {}), 0.27f));
-            steering = Add(steering, Scale(separation, 1.78f));
+                Scale(Normalize(Subtract(averagePosition, agent.position), {}),
+                    agent.species == 0u ? 0.27f : 0.12f));
+            steering = Add(steering, Scale(
+                separation,
+                agent.species == 0u ? 1.78f : 1.12f));
         }
         const XMFLOAT3 routeDirection = Normalize(
             Subtract(SchoolTarget(agent.school, totalTime), agent.position),
             agent.velocity);
-        steering = Add(steering, Scale(routeDirection, 0.78f));
+        steering = Add(steering, Scale(
+            routeDirection,
+            agent.species == 0u ? 0.78f : 0.92f));
         ApplyHabitatSteering(agent, steering);
 
         XMFLOAT3 velocity = Add(agent.velocity, Scale(steering, stepSeconds));
-        const float minimumSpeed = habitat_ == Habitat::UnderwaterArch
-            ? 0.72f : 0.82f;
-        const float maximumSpeed = habitat_ == Habitat::UnderwaterArch
-            ? 1.52f : 1.78f;
+        const float speciesSpeedScale = agent.species == 0u ? 1.0f : 0.88f;
+        const float minimumSpeed = (habitat_ == Habitat::UnderwaterArch
+            ? 0.72f : 0.82f) * speciesSpeedScale;
+        const float maximumSpeed = (habitat_ == Habitat::UnderwaterArch
+            ? 1.52f : 1.78f) * speciesSpeedScale;
         const float speed = Length(velocity);
         if (speed < minimumSpeed)
         {
@@ -567,6 +640,91 @@ bool FishRenderer::IsVisible(
         y >= -w - margin && y <= w + margin && z >= -margin && z <= w + margin;
 }
 
+void FishRenderer::BuildRayInstances(
+    const DirectX::XMMATRIX& viewProjection,
+    const XMFLOAT3& cameraPosition,
+    float totalTime)
+{
+    visibleRayInstances_.clear();
+    const std::uint32_t rayCount =
+        habitat_ == Habitat::UnderwaterArch ? 2u : 3u;
+    const auto rayPosition = [&](std::uint32_t index, float time)
+    {
+        const float phase = static_cast<float>(index) * 2.37f;
+        if (habitat_ == Habitat::UnderwaterArch)
+        {
+            const float route = time * (index == 0u ? 0.115f : 0.092f) + phase;
+            // Keep the hero ray on a compact loop over the first half of the
+            // tunnel so the species reads from the route's establishing view.
+            const float x = index == 0u
+                ? 13.0f + std::sin(route) * 8.5f
+                : 24.0f + std::sin(route) * 17.0f;
+            if (index == 0u)
+            {
+                const float z = std::cos(route * 0.73f) * 1.35f;
+                const float canopy = ArchCanopy(x, z);
+                return XMFLOAT3{
+                    x,
+                    canopy + (3.30f - canopy) * 0.70f,
+                    z};
+            }
+            return XMFLOAT3{
+                x,
+                std::min(ArchFloor(x) + 3.25f, 3.02f),
+                4.85f + std::cos(route * 0.81f) * 0.72f};
+        }
+        const float route = time * (0.082f + index * 0.009f) + phase;
+        return XMFLOAT3{
+            14.4f + std::cos(route) * (4.6f + index * 0.35f),
+            3.8f + std::sin(route * 0.67f + phase) * 1.35f,
+            std::sin(route) * (7.2f + index * 0.55f)};
+    };
+    for (std::uint32_t index = 0; index < rayCount; ++index)
+    {
+        const XMFLOAT3 position = rayPosition(index, totalTime);
+        Agent visibilityProxy;
+        visibilityProxy.position = position;
+        if (!IsVisible(visibilityProxy, viewProjection, cameraPosition))
+        {
+            continue;
+        }
+        const XMFLOAT3 nextPosition = rayPosition(index, totalTime + 0.08f);
+        const XMFLOAT3 forward = Normalize(
+            Subtract(nextPosition, position),
+            {1.0f, 0.0f, 0.0f});
+        const float scale = habitat_ == Habitat::UnderwaterArch
+            ? (index == 0u ? 1.18f : 0.78f)
+            : (0.92f + index * 0.10f);
+        visibleRayInstances_.push_back({
+            {position.x, position.y, position.z, scale},
+            {forward.x, forward.y, forward.z,
+             0.73f + static_cast<float>(index) * 1.91f},
+            {0.035f, 0.115f, 0.205f, 2.05f + index * 0.13f},
+            {2.0f, 1.0f, 1.0f, 0.72f}
+        });
+    }
+}
+
+void FishRenderer::UploadInstances(
+    ID3D11DeviceContext* context,
+    ID3D11Buffer* buffer,
+    const std::vector<Instance>& instances) const
+{
+    if (instances.empty())
+    {
+        return;
+    }
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    ThrowIfFailed(context->Map(
+        buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
+        "Map (biology instances)");
+    std::memcpy(
+        mapped.pData,
+        instances.data(),
+        instances.size() * sizeof(Instance));
+    context->Unmap(buffer, 0);
+}
+
 void FishRenderer::Render(
     ID3D11DeviceContext* context,
     const DirectX::XMMATRIX& viewProjection,
@@ -607,32 +765,40 @@ void FishRenderer::Render(
             continue;
         }
         const XMFLOAT3 forward = Normalize(agent.velocity, {1.0f, 0.0f, 0.0f});
-        const float silver = 0.58f + agent.tint * 0.14f;
+        const bool mediumSpecies = agent.species == 1u;
+        const float silver = mediumSpecies
+            ? 0.39f + agent.tint * 0.10f
+            : 0.58f + agent.tint * 0.14f;
+        const bool overheadSilhouette =
+            habitat_ == Habitat::UnderwaterArch && agent.school == 2u;
         visibleInstances_.push_back({
             {agent.position.x, agent.position.y, agent.position.z, agent.scale},
             {forward.x, forward.y, forward.z, agent.phase},
-            {0.18f + agent.tint * 0.10f,
-             0.42f + agent.tint * 0.13f,
+            {mediumSpecies
+                 ? 0.20f + agent.tint * 0.08f
+                 : 0.18f + agent.tint * 0.10f,
+             mediumSpecies
+                 ? 0.34f + agent.tint * 0.10f
+                 : 0.42f + agent.tint * 0.13f,
              silver,
-             (agent.school == 2u ? -1.0f : 1.0f) *
-                 (4.3f + agent.tint * 1.5f)}
+             (overheadSilhouette ? -1.0f : 1.0f) *
+                 (mediumSpecies ? 3.15f : 4.3f + agent.tint * 1.5f)},
+            {static_cast<float>(agent.species),
+             mediumSpecies ? 1.24f : 1.0f,
+             mediumSpecies ? 1.12f : 1.0f,
+             mediumSpecies ? 0.58f : 0.36f}
         });
     }
-    if (visibleInstances_.empty())
+    BuildRayInstances(viewProjection, cameraPosition, totalTime);
+    if (visibleInstances_.empty() && visibleRayInstances_.empty())
     {
         return;
     }
 
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    ThrowIfFailed(context->Map(
-        instanceBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
-        "Map (fish instances)");
-    std::memcpy(
-        mapped.pData,
-        visibleInstances_.data(),
-        visibleInstances_.size() * sizeof(Instance));
-    context->Unmap(instanceBuffer_.Get(), 0);
+    UploadInstances(context, instanceBuffer_.Get(), visibleInstances_);
+    UploadInstances(context, rayInstanceBuffer_.Get(), visibleRayInstances_);
 
+    D3D11_MAPPED_SUBRESOURCE mapped{};
     ThrowIfFailed(context->Map(
         constantBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
         "Map (fish constants)");
@@ -645,13 +811,8 @@ void FishRenderer::Render(
         : DirectX::XMFLOAT4{10.20f, 0.060f, 0.027f, 0.014f};
     context->Unmap(constantBuffer_.Get(), 0);
 
-    ID3D11Buffer* buffers[] = {vertexBuffer_.Get(), instanceBuffer_.Get()};
-    const UINT strides[] = {sizeof(Vertex), sizeof(Instance)};
-    const UINT offsets[] = {0, 0};
     context->IASetInputLayout(inputLayout_.Get());
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    context->IASetVertexBuffers(0, 2, buffers, strides, offsets);
-    context->IASetIndexBuffer(indexBuffer_.Get(), DXGI_FORMAT_R32_UINT, 0);
     context->VSSetShader(vertexShader_.Get(), nullptr, 0);
     ID3D11Buffer* constantBuffer = constantBuffer_.Get();
     context->VSSetConstantBuffers(4, 1, &constantBuffer);
@@ -660,10 +821,29 @@ void FishRenderer::Render(
     context->RSSetState(rasterizerState_.Get());
     context->OMSetBlendState(nullptr, nullptr, 0xffffffffu);
     context->OMSetDepthStencilState(depthState_.Get(), 0);
-    context->DrawIndexedInstanced(
-        indexCount_,
-        static_cast<UINT>(visibleInstances_.size()),
-        0, 0, 0);
+    const auto drawInstances = [&](ID3D11Buffer* vertices,
+                                   ID3D11Buffer* indices,
+                                   ID3D11Buffer* instances,
+                                   UINT indexCount,
+                                   UINT instanceCount)
+    {
+        if (instanceCount == 0u)
+        {
+            return;
+        }
+        ID3D11Buffer* buffers[] = {vertices, instances};
+        const UINT strides[] = {sizeof(Vertex), sizeof(Instance)};
+        const UINT offsets[] = {0, 0};
+        context->IASetVertexBuffers(0, 2, buffers, strides, offsets);
+        context->IASetIndexBuffer(indices, DXGI_FORMAT_R32_UINT, 0);
+        context->DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0);
+    };
+    drawInstances(
+        vertexBuffer_.Get(), indexBuffer_.Get(), instanceBuffer_.Get(),
+        indexCount_, static_cast<UINT>(visibleInstances_.size()));
+    drawInstances(
+        rayVertexBuffer_.Get(), rayIndexBuffer_.Get(), rayInstanceBuffer_.Get(),
+        rayIndexCount_, static_cast<UINT>(visibleRayInstances_.size()));
 
     context->OMSetDepthStencilState(nullptr, 0);
     context->RSSetState(nullptr);

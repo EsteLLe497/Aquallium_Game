@@ -51,6 +51,7 @@ private:
         DirectX::XMFLOAT4 positionScale;
         DirectX::XMFLOAT4 forwardPhase;
         DirectX::XMFLOAT4 tintSwim;
+        DirectX::XMFLOAT4 speciesShape;
     };
 
     struct Agent
@@ -61,6 +62,7 @@ private:
         float scale = 1.0f;
         float tint = 0.0f;
         std::uint32_t school = 0;
+        std::uint32_t species = 0;
     };
 
     struct alignas(16) Constants
@@ -71,6 +73,7 @@ private:
     };
 
     void CreateGeometry(ID3D11Device* device);
+    void CreateRayGeometry(ID3D11Device* device);
     void CreatePipeline(ID3D11Device* device, const std::filesystem::path& shaderPath);
     void ResetHabitat(Habitat habitat);
     void Simulate(float stepSeconds, float totalTime);
@@ -83,6 +86,14 @@ private:
         const Agent& agent,
         const DirectX::XMMATRIX& viewProjection,
         const DirectX::XMFLOAT3& cameraPosition) const;
+    void BuildRayInstances(
+        const DirectX::XMMATRIX& viewProjection,
+        const DirectX::XMFLOAT3& cameraPosition,
+        float totalTime);
+    void UploadInstances(
+        ID3D11DeviceContext* context,
+        ID3D11Buffer* buffer,
+        const std::vector<Instance>& instances) const;
 
     Microsoft::WRL::ComPtr<ID3D11VertexShader> vertexShader_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> pixelShader_;
@@ -90,12 +101,17 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Buffer> vertexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> indexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> instanceBuffer_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> rayVertexBuffer_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> rayIndexBuffer_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> rayInstanceBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> constantBuffer_;
     Microsoft::WRL::ComPtr<ID3D11DepthStencilState> depthState_;
     Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizerState_;
     std::vector<Agent> agents_;
     std::vector<Instance> visibleInstances_;
+    std::vector<Instance> visibleRayInstances_;
     std::uint32_t indexCount_ = 0;
+    std::uint32_t rayIndexCount_ = 0;
     std::uint32_t instanceCapacity_ = 256;
     Habitat habitat_ = Habitat::None;
     float simulationAccumulator_ = 0.0f;
