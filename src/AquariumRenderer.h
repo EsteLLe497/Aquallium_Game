@@ -59,6 +59,7 @@ struct AquariumSettings
     bool greyboxMode = false;
     bool underwaterArchMode = false;
     bool watatsumiTankMode = false;
+    bool continuousMapMode = false;
     bool adaptiveResolution = true;
     float targetFrameRate = 100.0f;
     lighting::LocalLightingRig localLighting{};
@@ -225,11 +226,14 @@ private:
     bool previousGreyboxMode_ = false;
     bool previousUnderwaterArchMode_ = false;
     bool previousWatatsumiTankMode_ = false;
+    bool previousContinuousMapMode_ = false;
     bool historyValid_ = false;
     StageModel stageModel_;
     StageModel aquariumGreyboxModel_;
     StageModel underwaterArchModel_;
     StageModel watatsumiTankModel_;
+    StageModel continuousShellModel_;
+    StageModel continuousArchModel_;
     JellyfishRenderer jellyfishRenderer_;
     FishRenderer fishRenderer_;
     rendering::AdaptiveResolution adaptiveResolution_;

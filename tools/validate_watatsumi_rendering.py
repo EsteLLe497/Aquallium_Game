@@ -40,12 +40,12 @@ def main() -> None:
     light_rig = LIGHT_RIG.read_text(encoding="utf-8")
     model = read_glb_json(MODEL)
 
-    assert "settings.underwaterArchMode || settings.watatsumiTankMode" in renderer
+    assert "settings.underwaterArchMode || heroTankScene" in renderer
     assert "StageModel::TransparentLayer::Medium" in renderer
     assert "StageModel::TransparentLayer::Glass" in renderer
     assert "activeLightCount = 3;" in renderer
     assert renderer.count("10.20f") >= 3
-    assert "!settings.watatsumiTankMode" in renderer
+    assert "!heroTankScene" in renderer
     assert "isRefractiveGlass" in stage_model
     assert "Medium," in stage_header and "Glass" in stage_header
     assert "const float waterDepth = max(10.20 - input.worldPosition.y" in stage_shader
@@ -57,7 +57,7 @@ def main() -> None:
     assert "WatatsumiBubble" in stage_model
     assert "WatatsumiBubble" in generator
     assert "settings.underwaterArchMode" in renderer
-    assert "? refractionCopyView_.Get()" in renderer
+    assert "cheapHeroGlass ? nullptr : refractionCopyView_.Get()" in renderer
 
     assert "HeroTankLightingRig" in light_rig
     assert "alternateEnabled" in light_rig

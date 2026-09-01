@@ -196,6 +196,12 @@
     <None Include="model\aquarium_underwater_arch.glb">
       <Filter>06 Models</Filter>
     </None>
+    <None Include="model\aquarium_watatsumi_hall.glb">
+      <Filter>06 Models</Filter>
+    </None>
+    <None Include="model\aquarium_continuous_shell.glb">
+      <Filter>06 Models</Filter>
+    </None>
     <None Include="concepts\aquarium-floorplan-concept.png">
       <Filter>06 Models\Concept Art</Filter>
     </None>
@@ -280,6 +286,9 @@
     <None Include="PORTFOLIO_TECHNICAL_NOTES.md">
       <Filter>08 Documents</Filter>
     </None>
+    <None Include="CONTINUOUS_AQUARIUM_MAP.md">
+      <Filter>08 Documents</Filter>
+    </None>
     <None Include="REAL_AQUARIUM_REFERENCE_NOTES.md">
       <Filter>08 Documents</Filter>
     </None>
@@ -349,6 +358,12 @@
       <Filter>09 Tools</Filter>
     </None>
     <None Include="tools\generate_watatsumi_hall.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_continuous_aquarium.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\validate_continuous_aquarium.py">
       <Filter>09 Tools</Filter>
     </None>
     <None Include="tools\validate_aquarium_collision_layout.py">

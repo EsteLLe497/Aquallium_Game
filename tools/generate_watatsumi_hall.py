@@ -131,7 +131,10 @@ def bubble_octahedron(center, radius):
 
 TANK_FRONT_X = 7.0
 TANK_HALF_WIDTH = 14.50
-TANK_DEPTH = 14.70
+# The public pane keeps its monumental width/height, but the service-side
+# footprint is deliberately shallower. This improves hall circulation and
+# avoids spending transparent fill-rate on invisible rear water.
+TANK_DEPTH = 10.50
 TANK_WATER_BOTTOM = 0.35
 TANK_WATER_SURFACE = 12.45
 UPPER_FLOOR_Y = 12.28
@@ -331,7 +334,12 @@ def curved_tank_wall(material, segments=40):
         normal = (math.cos(middle)/TANK_DEPTH, 0,
                   math.sin(middle)/TANK_HALF_WIDTH)
         inv = 1.0/max(math.hypot(normal[0],normal[2]),0.0001)
-        quad(material, (p0,p1,p2,p3), (normal[0]*inv,0,normal[2]*inv))
+        # The authored negative-Z quarter becomes the player's left side after
+        # StageModel's glTF Z conversion. Expose this section as acrylic so the
+        # side gallery sees the same hero tank from another angle.
+        segment_material = "WatatsumiGlass" if middle < -0.38 else material
+        quad(segment_material, (p0,p1,p2,p3),
+             (normal[0]*inv,0,normal[2]*inv))
 
 
 def tank_surface_grid(x_segments=24, z_segments=32):
@@ -476,7 +484,14 @@ def build():
     wall_center_y = wall_height * 0.5
     box("WatatsumiArchitecture", (5.0,wall_center_y,23.85), (66,wall_height,0.30))
     box("WatatsumiArchitecture", (5.0,wall_center_y,-23.85), (66,wall_height,0.30))
-    box("WatatsumiArchitecture", (-27.85,wall_center_y,0), (0.30,wall_height,48))
+    # Rear entrance opening: two jamb walls plus a header, rather than one
+    # blocker spanning the whole hall. The route shell joins this 4.4 m portal.
+    box("WatatsumiArchitecture", (-27.85,wall_center_y,-14.10),
+        (0.30,wall_height,19.80))
+    box("WatatsumiArchitecture", (-27.85,wall_center_y,14.10),
+        (0.30,wall_height,19.80))
+    box("WatatsumiArchitecture", (-27.85,12.50,0.0),
+        (0.30,HALL_CEILING_Y-5.20,8.40))
     box("WatatsumiArchitecture", (5.0,HALL_CEILING_Y,0), (66,0.40,48))
 
     # Seal the service voids with non-overlapping solids. The previous 30.6 m
@@ -531,15 +546,30 @@ def build():
     box("WatatsumiArchitecture",
         (6.80,(lower_header_bottom+facade_top)*0.5,PORTAL_Z),
         (0.70,facade_top-lower_header_bottom,PORTAL_WIDTH))
-    upper_lower_wall_top = 11.70
-    box("WatatsumiArchitecture", (6.80,upper_lower_wall_top*0.5,-PORTAL_Z),
-        (0.70,upper_lower_wall_top,PORTAL_WIDTH))
+    # The same facade bay has a ground-level side-gallery opening and the 2F
+    # ramp landing above it. A structural band separates both routes without
+    # sealing either doorway.
+    upper_lower_wall_bottom = 7.35
+    upper_lower_wall_top = UPPER_FLOOR_Y - 0.22
+    box("WatatsumiArchitecture",
+        (6.80,(upper_lower_wall_bottom+upper_lower_wall_top)*0.5,-PORTAL_Z),
+        (0.70,upper_lower_wall_top-upper_lower_wall_bottom,PORTAL_WIDTH))
     arch_portal_collar(PORTAL_Z, 0.0, top_clearance=7.35)
+    arch_portal_collar(-PORTAL_Z, 0.0, top_clearance=7.35)
     arch_portal_collar(
         -PORTAL_Z,
         UPPER_FLOOR_Y,
         top_clearance=HALL_CEILING_Y - 0.20 - UPPER_FLOOR_Y)
     ramp_strip()
+
+    # Two quiet bench groups frame the hero view without narrowing the centre
+    # sightline. They share existing batches, so the addition costs no draw call.
+    for side in (-1.0, 1.0):
+        for x in (-14.0, -6.0):
+            z = side * 18.4
+            box("WatatsumiRamp", (x,0.48,z), (4.2,0.20,0.84))
+            box("WatatsumiArchitecture", (x,0.24,z), (3.3,0.48,0.22))
+            box("WatatsumiRamp", (x,1.05,z+side*0.34), (4.2,1.10,0.16))
 
     # Sparse blue practicals follow the enclosed ramp. They are navigation
     # cues, not general hall lighting, and sit near the arch crown.
@@ -653,8 +683,8 @@ def write_glb():
          "nodes":nodes,"meshes":meshes,"materials":materials,"accessors":accessors,
          "bufferViews":views,"buffers":[{"byteLength":len(binary)}],
          "extras":{"units":"meters","previewKey":6,"referenceVolumeTonnes":650,
-                   "inferredTankPlan":"flat-front semi-ellipse","inferredTankSize":[14.7,12.1,29.0],
-                   "inferredGrossVolumeM3":4050.0,
+                   "inferredTankPlan":"flat-front semi-ellipse","inferredTankSize":[10.5,12.1,29.0],
+                   "inferredGrossVolumeM3":2890.0,
                    "rampWidth":RAMP_WIDTH,"rampRise":RAMP_RISE,
                    "tunnelWallHeight":RAMP_WALL_HEIGHT,
                    "tunnelArchRise":RAMP_ARCH_RISE,

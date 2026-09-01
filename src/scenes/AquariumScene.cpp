@@ -155,6 +155,7 @@ AquariumScene::AquariumScene(
     BuildRouteCollision();
     BuildUnderwaterArchCollision();
     BuildWatatsumiCollision();
+    BuildContinuousCollision();
 
     // Keep automated performance captures reproducible without changing the
     // normal player-facing startup route. Example: AQUARIUM_START_VIEW=6.
@@ -169,6 +170,7 @@ AquariumScene::AquariumScene(
         case L'4': SelectUnderwaterArchView(); break;
         case L'5': SelectJellyfishReverseValidationView(); break;
         case L'6': SelectWatatsumiTankView(); break;
+        case L'7': SelectContinuousAquariumView(); break;
         default: break;
         }
     }
@@ -407,9 +409,9 @@ void AquariumScene::BuildWatatsumiCollision()
         ColliderTag::Solid,
         LayerMask(CollisionLayer::World)});
     watatsumiCollision_.AddBox({
-        L"Watatsumi_UpperPortalLowerWall",
-        {6.38f, kStageFloorOffset, 14.70f},
-        {7.50f, kStageFloorOffset + 11.70f, 20.90f},
+        L"Watatsumi_UpperPortalStructuralBand",
+        {6.38f, kStageFloorOffset + 7.35f, 14.70f},
+        {7.50f, kStageFloorOffset + kWatatsumiUpperFloorY - 0.22f, 20.90f},
         ColliderTag::Solid,
         LayerMask(CollisionLayer::World)});
     for (const float portalZ : {-17.80f, 17.80f})
@@ -457,10 +459,23 @@ void AquariumScene::BuildWatatsumiCollision()
             ColliderTag::Solid,
             LayerMask(CollisionLayer::World)});
     }
+    for (const float side : {-1.0f, 1.0f})
+    {
+        watatsumiCollision_.AddBox({
+            side < 0.0f
+                ? L"Watatsumi_RearWallSouth"
+                : L"Watatsumi_RearWallNorth",
+            {-28.10f, kStageFloorOffset - 0.20f,
+             side < 0.0f ? -24.0f : 4.20f},
+            {-27.55f, kStageFloorOffset + 19.80f,
+             side < 0.0f ? -4.20f : 24.0f},
+            ColliderTag::Solid,
+            LayerMask(CollisionLayer::World)});
+    }
     watatsumiCollision_.AddBox({
-        L"Watatsumi_RearWall",
-        {-28.10f, kStageFloorOffset - 0.20f, -24.0f},
-        {-27.55f, kStageFloorOffset + 19.80f, 24.0f},
+        L"Watatsumi_RearEntranceHeader",
+        {-28.10f, kStageFloorOffset + 5.20f, -4.20f},
+        {-27.55f, kStageFloorOffset + 19.80f, 4.20f},
         ColliderTag::Solid,
         LayerMask(CollisionLayer::World)});
     watatsumiCollision_.AddBox({
@@ -515,6 +530,112 @@ void AquariumScene::BuildWatatsumiCollision()
 
 }
 
+void AquariumScene::BuildContinuousCollision()
+{
+    using physics::ColliderTag;
+    using physics::CollisionLayer;
+    using physics::LayerMask;
+
+    continuousCollision_.Clear();
+    for (const physics::BoxCollider& box : watatsumiCollision_.Boxes())
+    {
+        continuousCollision_.AddBox(box);
+    }
+    for (const physics::WalkableRect& rect : watatsumiCollision_.WalkableRects())
+    {
+        continuousCollision_.AddWalkableRect(rect);
+    }
+    for (const physics::PathSurface& path : watatsumiCollision_.Paths())
+    {
+        continuousCollision_.AddPathSurface(path);
+    }
+
+    const auto addWall = [this](
+        const wchar_t* name,
+        float minX, float maxX,
+        float minZ, float maxZ,
+        float floorY, float height,
+        ColliderTag tag = ColliderTag::Solid)
+    {
+        continuousCollision_.AddBox({
+            name,
+            {minX, floorY, minZ},
+            {maxX, floorY + height, maxZ},
+            tag,
+            LayerMask(CollisionLayer::World)});
+    };
+
+    // Entrance and the 1F side gallery overlap the hall floor at their seams,
+    // preventing a capsule-height snap when crossing between GLB chunks.
+    continuousCollision_.AddWalkableRect({
+        L"Continuous_EntranceFloor", -42.0f, -27.40f, -6.0f, 6.0f,
+        kStageFloorOffset, ColliderTag::Walkable,
+        LayerMask(CollisionLayer::World)});
+    addWall(L"Continuous_EntranceNorthWall", -42.1f, -27.4f, 5.85f, 6.15f,
+        kStageFloorOffset, 5.4f);
+    addWall(L"Continuous_EntranceSouthWall", -42.1f, -27.4f, -6.15f, -5.85f,
+        kStageFloorOffset, 5.4f);
+    addWall(L"Continuous_EntranceExitDoor", -42.15f, -41.75f, -2.0f, 2.0f,
+        kStageFloorOffset, 2.9f, ColliderTag::Trigger);
+
+    continuousCollision_.AddWalkableRect({
+        L"Continuous_HeroSideGallery", 6.45f, 22.50f, 14.70f, 20.70f,
+        kStageFloorOffset, ColliderTag::Walkable,
+        LayerMask(CollisionLayer::World)});
+    // Keep the capsule centre 0.04 m inside the arch endpoint's legal radius.
+    // Without this funnel a player holding strafe against the outer wall could
+    // miss PathSurface hand-off by roughly one centimetre.
+    addWall(L"Continuous_SideGalleryOuterWall", 6.45f, 22.7f, 20.70f, 21.05f,
+        kStageFloorOffset, 7.2f);
+    addWall(L"Continuous_SideTankGlass", 7.1f, 17.2f, 14.55f, 14.78f,
+        kStageFloorOffset, 12.6f, ColliderTag::Glass);
+    addWall(L"Continuous_SideGalleryInnerClosure", 17.2f, 22.7f, 14.55f, 14.85f,
+        kStageFloorOffset, 7.2f);
+
+    physics::PathSurface arch;
+    arch.name = L"Continuous_DescendingUnderwaterArch";
+    arch.halfWidth = 3.06f;
+    arch.tag = ColliderTag::Ramp;
+    arch.layer = LayerMask(CollisionLayer::World);
+    constexpr int archSegments = 192;
+    arch.centerLine.reserve(archSegments + 1);
+    for (int index = 0; index <= archSegments; ++index)
+    {
+        DirectX::XMFLOAT3 point = EvaluateUnderwaterArchPoint(
+            index / static_cast<float>(archSegments));
+        point.x += 22.0f;
+        point.z += 17.80f;
+        arch.centerLine.push_back(point);
+    }
+    continuousCollision_.AddPathSurface(std::move(arch));
+
+    const float basementY = kStageFloorOffset - 4.70f;
+    continuousCollision_.AddWalkableRect({
+        L"Continuous_JellyColumnRoom", 69.6f, 88.0f, 10.3f, 25.3f,
+        basementY, ColliderTag::Walkable, LayerMask(CollisionLayer::World)});
+    continuousCollision_.AddWalkableRect({
+        L"Continuous_PanoramaJellyRoom", 88.0f, 110.0f, 8.8f, 26.8f,
+        basementY, ColliderTag::Walkable, LayerMask(CollisionLayer::World)});
+    addWall(L"Continuous_BasementSouthWall", 69.6f, 110.2f, 8.65f, 8.95f,
+        basementY, 6.2f);
+    addWall(L"Continuous_BasementNorthWall", 69.6f, 110.2f, 26.65f, 26.95f,
+        basementY, 6.2f);
+    addWall(L"Continuous_BasementEndWall", 109.85f, 110.15f, 8.8f, 26.8f,
+        basementY, 6.2f);
+
+    struct JellyColumn { float x; float z; };
+    constexpr JellyColumn columns[] = {
+        {73.0f, 21.3f}, {76.0f, 14.2f}, {80.0f, 21.5f},
+        {83.0f, 14.4f}, {86.0f, 21.2f}};
+    for (const JellyColumn& column : columns)
+    {
+        addWall(L"Continuous_JellyColumnGlass",
+            column.x - 0.76f, column.x + 0.76f,
+            column.z - 0.76f, column.z + 0.76f,
+            basementY, 4.7f, ColliderTag::Glass);
+    }
+}
+
 void AquariumScene::Update(
     const framework::FrameContext& frame,
     const framework::InputSystem& input)
@@ -552,6 +673,10 @@ void AquariumScene::Update(
     {
         SelectWatatsumiTankView();
     }
+    if (input.WasPressed('7'))
+    {
+        SelectContinuousAquariumView();
+    }
 
     // プレイヤー入力とライティング調整を各専用クラスへ委譲する。
     UpdatePlayer(frame.deltaTime, input);
@@ -578,7 +703,9 @@ void AquariumScene::Render(const framework::RenderContext& context)
 framework::SceneDiagnostics AquariumScene::GetDiagnostics() const
 {
     framework::SceneDiagnostics diagnostics;
-    diagnostics.viewLabel = settings_.watatsumiTankMode
+    diagnostics.viewLabel = settings_.continuousMapMode
+        ? L"ROUTE 07: CONTINUOUS AQUARIUM"
+        : (settings_.watatsumiTankMode
         ? L"ROUTE 05: WATATSUMI HERO TANK"
         : (settings_.underwaterArchMode
         ? L"ROUTE 06: DESCENDING UNDERWATER ARCH"
@@ -588,7 +715,7 @@ framework::SceneDiagnostics AquariumScene::GetDiagnostics() const
             ? L"STAGE + GLASS VIEW"
             : (settings_.viewMode > 0.5f
                 ? L"GLASS VIEW"
-                : L"UNDERWATER VIEW"))));
+                : L"UNDERWATER VIEW")))));
     diagnostics.causticsStrength = settings_.causticsStrength;
     diagnostics.volumeStrength = settings_.volumeStrength;
     diagnostics.anisotropy = settings_.anisotropy;
@@ -630,6 +757,7 @@ void AquariumScene::SelectUnderwaterView()
     settings_.greyboxMode = false;
     settings_.underwaterArchMode = false;
     settings_.watatsumiTankMode = false;
+    settings_.continuousMapMode = false;
 }
 
 void AquariumScene::SelectStageGlassView()
@@ -639,6 +767,7 @@ void AquariumScene::SelectStageGlassView()
     settings_.greyboxMode = false;
     settings_.underwaterArchMode = false;
     settings_.watatsumiTankMode = false;
+    settings_.continuousMapMode = false;
     settings_.cameraPositionX = 0.0f;
     settings_.cameraPositionY = -2.25f + playerManager_.Capsule().eyeHeight;
     settings_.cameraPositionZ = -6.65f;
@@ -654,6 +783,7 @@ void AquariumScene::SelectAquariumGreyboxView()
     settings_.greyboxMode = true;
     settings_.underwaterArchMode = false;
     settings_.watatsumiTankMode = false;
+    settings_.continuousMapMode = false;
     // Enter from the public doors and look through the lobby toward the
     // Jellyfish Theater. The generated route runs along +X.
     settings_.cameraPositionX = -16.2f;
@@ -671,6 +801,7 @@ void AquariumScene::SelectUnderwaterArchView()
     settings_.greyboxMode = true;
     settings_.underwaterArchMode = true;
     settings_.watatsumiTankMode = false;
+    settings_.continuousMapMode = false;
     settings_.cameraPositionX = 0.85f;
     settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
     settings_.cameraPositionZ = 0.0f;
@@ -686,6 +817,7 @@ void AquariumScene::SelectJellyfishReverseValidationView()
     settings_.greyboxMode = true;
     settings_.underwaterArchMode = false;
     settings_.watatsumiTankMode = false;
+    settings_.continuousMapMode = false;
     settings_.cameraPositionX = 6.0f;
     settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
     settings_.cameraPositionZ = -6.15f;
@@ -701,6 +833,7 @@ void AquariumScene::SelectWatatsumiTankView()
     settings_.greyboxMode = true;
     settings_.underwaterArchMode = false;
     settings_.watatsumiTankMode = true;
+    settings_.continuousMapMode = false;
     // Offset toward the ramp side so the tank remains the hero while the
     // lower-right wall portal is readable in the establishing shot.
     settings_.cameraPositionX = -9.5f;
@@ -708,6 +841,23 @@ void AquariumScene::SelectWatatsumiTankView()
     settings_.cameraPositionZ = -3.0f;
     settings_.cameraYaw = 1.505f;
     settings_.cameraPitch = -0.065f;
+    ResetPlayer();
+}
+
+void AquariumScene::SelectContinuousAquariumView()
+{
+    settings_.viewMode = 1.0f;
+    settings_.stageMode = true;
+    settings_.greyboxMode = true;
+    settings_.underwaterArchMode = false;
+    settings_.watatsumiTankMode = false;
+    settings_.continuousMapMode = true;
+    settings_.cameraPositionX = -36.5f;
+    settings_.cameraPositionY =
+        kStageFloorOffset + playerManager_.Capsule().eyeHeight;
+    settings_.cameraPositionZ = 0.0f;
+    settings_.cameraYaw = 1.57079633f;
+    settings_.cameraPitch = -0.035f;
     ResetPlayer();
 }
 
@@ -719,6 +869,10 @@ void AquariumScene::UpdatePlayer(
     if (settings_.underwaterArchMode)
     {
         collisionWorld = &underwaterArchCollision_;
+    }
+    else if (settings_.continuousMapMode)
+    {
+        collisionWorld = &continuousCollision_;
     }
     else if (settings_.watatsumiTankMode)
     {

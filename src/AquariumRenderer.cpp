@@ -321,6 +321,23 @@ void AquariumRenderer::Initialize(ID3D11Device* device, const std::filesystem::p
         watatsumiTankPath,
         stageShaderPath,
         aquariumGreyboxImport);
+
+    const std::filesystem::path continuousShellPath =
+        shaderPath.parent_path().parent_path() /
+        L"model" /
+        L"aquarium_continuous_shell.glb";
+    continuousShellModel_.Initialize(
+        device,
+        continuousShellPath,
+        stageShaderPath,
+        aquariumGreyboxImport);
+    StageModel::ImportOptions continuousArchImport = aquariumGreyboxImport;
+    continuousArchImport.translation = {22.0f, 0.0f, 17.80f};
+    continuousArchModel_.Initialize(
+        device,
+        underwaterArchPath,
+        stageShaderPath,
+        continuousArchImport);
     jellyfishRenderer_.Initialize(
         device,
         shaderPath.parent_path() / L"Jellyfish.hlsl");
@@ -365,10 +382,16 @@ void AquariumRenderer::Render(
             (static_cast<UINT>(height * renderScale) + 7u) & ~7u));
     EnsureSizeResources(device.Get(), renderWidth, renderHeight);
 
+    const bool heroTankScene =
+        settings.watatsumiTankMode || settings.continuousMapMode;
+    const bool translatedArchRegion =
+        settings.continuousMapMode && settings.cameraPositionX > 19.0f;
+    const bool archLightingScene =
+        settings.underwaterArchMode || translatedArchRegion;
     const bool volumePassEnabled =
         settings.volumeStrength > 0.001f &&
         !settings.greyboxMode &&
-        !settings.watatsumiTankMode;
+        !heroTankScene;
     // Authored route views completely replace the old analytic aquarium.
     // They also need depth/motion MRTs only when the temporal volume pass is
     // active. Keeping those attachments off saves two full-resolution writes.
@@ -385,7 +408,8 @@ void AquariumRenderer::Render(
         previousStageMode_ == settings.stageMode &&
         previousGreyboxMode_ == settings.greyboxMode &&
         previousUnderwaterArchMode_ == settings.underwaterArchMode &&
-        previousWatatsumiTankMode_ == settings.watatsumiTankMode;
+        previousWatatsumiTankMode_ == settings.watatsumiTankMode &&
+        previousContinuousMapMode_ == settings.continuousMapMode;
     auto* constants = static_cast<FrameConstants*>(mapped.pData);
     *constants = {
         time,
@@ -396,12 +420,12 @@ void AquariumRenderer::Render(
         settings.cameraPitch,
         settings.causticsStrength,
         (settings.greyboxMode && !settings.underwaterArchMode &&
-         !settings.watatsumiTankMode)
+         !heroTankScene)
             ? 0.0f
             : settings.volumeStrength *
                 (settings.underwaterArchMode
                     ? 0.34f
-                    : (settings.watatsumiTankMode ? 0.0f : 1.0f)),
+                    : (heroTankScene ? 0.0f : 1.0f)),
         settings.exposure,
         settings.waterClarity,
         settings.anisotropy,
@@ -417,7 +441,7 @@ void AquariumRenderer::Render(
         settings.cameraPositionX,
         settings.cameraPositionY,
         settings.cameraPositionZ,
-        settings.underwaterArchMode ? 1.0f : 0.0f,
+        archLightingScene ? 1.0f : 0.0f,
         previousCameraPosition_.x,
         previousCameraPosition_.y,
         previousCameraPosition_.z,
@@ -428,7 +452,7 @@ void AquariumRenderer::Render(
     using namespace DirectX;
     std::array<AquariumLight, kMaxAquariumLights> lights{};
     UINT activeLightCount = 3;
-    if (settings.underwaterArchMode)
+    if (archLightingScene)
     {
         activeLightCount = 3;
         constexpr std::array<float, 4> routePositions{
@@ -449,8 +473,11 @@ void AquariumRenderer::Render(
         for (UINT lightIndex = 0; lightIndex < activeLightCount; ++lightIndex)
         {
             lights[lightIndex] = {
-                {routePositions[lightIndex], 7.40f,
-                 lateralPositions[lightIndex]},
+                {routePositions[lightIndex] +
+                    (translatedArchRegion ? 22.0f : 0.0f),
+                 7.40f,
+                 lateralPositions[lightIndex] +
+                    (translatedArchRegion ? 17.80f : 0.0f)},
                 intensity[lightIndex],
                 lightDirections[lightIndex],
                 31.0f,
@@ -459,7 +486,7 @@ void AquariumRenderer::Render(
             };
         }
     }
-    else if (settings.watatsumiTankMode)
+    else if (heroTankScene)
     {
         activeLightCount = 3;
         const DirectX::XMFLOAT3 selectedColor =
@@ -539,7 +566,7 @@ void AquariumRenderer::Render(
         float surfaceHeight = lights[lightIndex].surfaceHeight;
         float derivativeX = 0.0f;
         float derivativeZ = 0.0f;
-        if (settings.underwaterArchMode)
+        if (archLightingScene)
         {
             // Two cheap fixed-point iterations account for the small X/Z
             // shift of an angled ray as the displaced surface height changes.
@@ -634,7 +661,7 @@ void AquariumRenderer::Render(
             XMConvertToRadians(lights[lightIndex].coneAngleDegrees),
             1.0f,
             0.03f,
-            settings.underwaterArchMode ? 22.0f : 15.0f);
+            archLightingScene ? 22.0f : 15.0f);
         XMStoreFloat4x4(
             &shadowConstants.lightViewProjection[lightIndex],
             view * projection);
@@ -677,7 +704,7 @@ void AquariumRenderer::Render(
     // Stage.hlsl and does not sample the prototype shadow array. Do not render
     // three 512x512 maps that are invisible in every authored route view.
     const UINT shadowLightCount =
-        settings.greyboxMode || settings.underwaterArchMode ? 0u : 3u;
+        settings.greyboxMode || archLightingScene ? 0u : 3u;
     for (UINT lightIndex = 0;
          lightIndex < shadowLightCount;
          ++lightIndex)
@@ -743,7 +770,7 @@ void AquariumRenderer::Render(
         const float watatsumiBlueBlack[4] = {
             0.000015f, 0.000040f, 0.000100f, 1.0f
         };
-        const float* darkHall = settings.watatsumiTankMode
+        const float* darkHall = heroTankScene
             ? watatsumiBlueBlack
             : routeDarkHall;
         const float farDepth[4] = {30.0f, 30.0f, 30.0f, 30.0f};
@@ -769,14 +796,31 @@ void AquariumRenderer::Render(
     }
 
     // Draw the imported stage over either the analytic tank or the dark route.
-    StageModel* activeStageModel = settings.watatsumiTankMode
-        ? &watatsumiTankModel_
-        : (settings.underwaterArchMode
-        ? &underwaterArchModel_
-        : (settings.greyboxMode
-            ? &aquariumGreyboxModel_
-            : &stageModel_));
-    if (settings.stageMode && activeStageModel->IsLoaded())
+    std::array<StageModel*, 3> activeStageModels{};
+    std::size_t activeStageModelCount = 1;
+    if (settings.continuousMapMode)
+    {
+        activeStageModels = {
+            &watatsumiTankModel_,
+            &continuousShellModel_,
+            &continuousArchModel_};
+        activeStageModelCount = activeStageModels.size();
+    }
+    else
+    {
+        activeStageModels[0] = settings.watatsumiTankMode
+            ? &watatsumiTankModel_
+            : (settings.underwaterArchMode
+            ? &underwaterArchModel_
+            : (settings.greyboxMode
+                ? &aquariumGreyboxModel_
+                : &stageModel_));
+    }
+    const bool hasLoadedStage = std::any_of(
+        activeStageModels.begin(),
+        activeStageModels.begin() + activeStageModelCount,
+        [](const StageModel* model) { return model->IsLoaded(); });
+    if (settings.stageMode && hasLoadedStage)
     {
         context->ClearDepthStencilView(
             stageDepthView_.Get(),
@@ -811,7 +855,7 @@ void AquariumRenderer::Render(
             settings.greyboxMode ? 0.0f : 1.0f;
         lighting::LocalLightingRig stageLocalLighting =
             settings.localLighting;
-        if (settings.watatsumiTankMode)
+        if (heroTankScene)
         {
             const DirectX::XMFLOAT3 selectedColor =
                 settings.heroTankLighting.alternateEnabled
@@ -825,16 +869,24 @@ void AquariumRenderer::Render(
                 settings.localLighting.tankBounceIntensity *
                 std::max(settings.heroTankLighting.intensity, 0.0f);
         }
-        activeStageModel->RenderOpaque(
-            context,
-            currentViewProjection,
-            previousViewProjection,
-            currentCameraPosition,
-            time,
-            openingMask,
-            &stageLocalLighting);
+        for (std::size_t modelIndex = 0;
+             modelIndex < activeStageModelCount;
+             ++modelIndex)
+        {
+            if (activeStageModels[modelIndex]->IsLoaded())
+            {
+                activeStageModels[modelIndex]->RenderOpaque(
+                    context,
+                    currentViewProjection,
+                    previousViewProjection,
+                    currentCameraPosition,
+                    time,
+                    openingMask,
+                    &stageLocalLighting);
+            }
+        }
         if (settings.greyboxMode && !settings.underwaterArchMode &&
-            !settings.watatsumiTankMode)
+            !heroTankScene)
         {
             jellyfishRenderer_.Render(
                 context,
@@ -843,7 +895,7 @@ void AquariumRenderer::Render(
                 currentCameraPosition,
                 time);
         }
-        if (settings.underwaterArchMode || settings.watatsumiTankMode)
+        if (settings.underwaterArchMode || heroTankScene)
         {
             const FishRenderer::Habitat fishHabitat =
                 settings.underwaterArchMode
@@ -859,7 +911,7 @@ void AquariumRenderer::Render(
                 time,
                 deltaTime,
                 fishHabitat,
-                settings.watatsumiTankMode
+                heroTankScene
                     ? &settings.heroTankLighting
                     : nullptr);
         }
@@ -879,24 +931,32 @@ void AquariumRenderer::Render(
             sceneTargets,
             stageDepthView_.Get());
 
-        if (settings.underwaterArchMode || settings.watatsumiTankMode)
+        if (settings.underwaterArchMode || heroTankScene)
         {
             // First refract the opaque scene through the water medium. The
             // acrylic then samples a second copy containing that water result;
             // otherwise it replaces the tank lighting with the older
             // opaque-only image. This path is shared by the arch and hero tank.
-            activeStageModel->RenderTransparent(
-                context,
-                currentViewProjection,
-                previousViewProjection,
-                currentCameraPosition,
-                time,
-                openingMask,
-                refractionCopyView_.Get(),
-                StageModel::TransparentLayer::Medium,
-                nullptr);
+            for (std::size_t modelIndex = 0;
+                 modelIndex < activeStageModelCount;
+                 ++modelIndex)
+            {
+                if (activeStageModels[modelIndex]->IsLoaded())
+                {
+                    activeStageModels[modelIndex]->RenderTransparent(
+                        context,
+                        currentViewProjection,
+                        previousViewProjection,
+                        currentCameraPosition,
+                        time,
+                        openingMask,
+                        refractionCopyView_.Get(),
+                        StageModel::TransparentLayer::Medium,
+                        nullptr);
+                }
+            }
 
-            if (settings.underwaterArchMode)
+            if (settings.underwaterArchMode || settings.continuousMapMode)
             {
                 // Curved tunnel acrylic still needs a second scene copy because
                 // it visibly bends the already-refracted water layer. The hero
@@ -913,31 +973,51 @@ void AquariumRenderer::Render(
                     stageDepthView_.Get());
             }
 
-            activeStageModel->RenderTransparent(
-                context,
-                currentViewProjection,
-                previousViewProjection,
-                currentCameraPosition,
-                time,
-                openingMask,
-                settings.underwaterArchMode
-                    ? refractionCopyView_.Get()
-                    : nullptr,
-                StageModel::TransparentLayer::Glass,
-                nullptr);
+            for (std::size_t modelIndex = 0;
+                 modelIndex < activeStageModelCount;
+                 ++modelIndex)
+            {
+                StageModel* model = activeStageModels[modelIndex];
+                if (!model->IsLoaded())
+                {
+                    continue;
+                }
+                // The huge flat hero pane uses its cheap Fresnel path. Curved
+                // arch and jelly acrylic sample the already-rendered medium.
+                const bool cheapHeroGlass =
+                    model == &watatsumiTankModel_;
+                model->RenderTransparent(
+                    context,
+                    currentViewProjection,
+                    previousViewProjection,
+                    currentCameraPosition,
+                    time,
+                    openingMask,
+                    cheapHeroGlass ? nullptr : refractionCopyView_.Get(),
+                    StageModel::TransparentLayer::Glass,
+                    nullptr);
+            }
         }
         else
         {
-            activeStageModel->RenderTransparent(
-                context,
-                currentViewProjection,
-                previousViewProjection,
-                currentCameraPosition,
-                time,
-                openingMask,
-                refractionCopyView_.Get(),
-                StageModel::TransparentLayer::All,
-                nullptr);
+            for (std::size_t modelIndex = 0;
+                 modelIndex < activeStageModelCount;
+                 ++modelIndex)
+            {
+                if (activeStageModels[modelIndex]->IsLoaded())
+                {
+                    activeStageModels[modelIndex]->RenderTransparent(
+                        context,
+                        currentViewProjection,
+                        previousViewProjection,
+                        currentCameraPosition,
+                        time,
+                        openingMask,
+                        refractionCopyView_.Get(),
+                        StageModel::TransparentLayer::All,
+                        nullptr);
+                }
+            }
         }
     }
 
@@ -1038,6 +1118,7 @@ void AquariumRenderer::Render(
     previousGreyboxMode_ = settings.greyboxMode;
     previousUnderwaterArchMode_ = settings.underwaterArchMode;
     previousWatatsumiTankMode_ = settings.watatsumiTankMode;
+    previousContinuousMapMode_ = settings.continuousMapMode;
     previousCameraPosition_ = {
         settings.cameraPositionX,
         settings.cameraPositionY,

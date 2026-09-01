@@ -144,6 +144,7 @@
     <None Include="model\aquarium_route_01_02.glb" />
     <None Include="model\aquarium_underwater_arch.glb" />
     <None Include="model\aquarium_watatsumi_hall.glb" />
+    <None Include="model\aquarium_continuous_shell.glb" />
     <None Include="concepts\aquarium-floorplan-concept.png" />
     <None Include="concepts\aquarium-floorplan-v2.png" />
     <None Include="concepts\aquarium-floorplan-v3.png" />
@@ -173,6 +174,7 @@
     <None Include="COLLISION_SYSTEM.md" />
     <None Include="GLASS_VIEW_IMPLEMENTATION.md" />
     <None Include="PORTFOLIO_TECHNICAL_NOTES.md" />
+    <None Include="CONTINUOUS_AQUARIUM_MAP.md" />
     <None Include="REAL_AQUARIUM_REFERENCE_NOTES.md" />
     <None Include="REAL_AQUARIUM_REFERENCE_NOTES_V2.md" />
     <None Include="README.md" />
@@ -196,6 +198,8 @@
     <None Include="tools\generate_route_01_02.py" />
     <None Include="tools\generate_underwater_arch.py" />
     <None Include="tools\generate_watatsumi_hall.py" />
+    <None Include="tools\generate_continuous_aquarium.py" />
+    <None Include="tools\validate_continuous_aquarium.py" />
     <None Include="tools\validate_aquarium_collision_layout.py" />
     <None Include="tools\validate_fish_schooling.py" />
     <None Include="tools\generate_aquarium_floorplan_v2.py" />
@@ -210,7 +214,7 @@
     <MakeDir Directories="$(OutDir)shaders\lighting" />
     <Copy SourceFiles="$(ProjectDir)shaders\lighting\LocalLighting.hlsli" DestinationFolder="$(OutDir)shaders\lighting" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)model" />
-    <Copy SourceFiles="$(ProjectDir)model\map.glb;$(ProjectDir)model\aquarium_greybox.glb;$(ProjectDir)model\aquarium_route_01_02.glb;$(ProjectDir)model\aquarium_underwater_arch.glb;$(ProjectDir)model\aquarium_watatsumi_hall.glb" DestinationFolder="$(OutDir)model" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)model\map.glb;$(ProjectDir)model\aquarium_greybox.glb;$(ProjectDir)model\aquarium_route_01_02.glb;$(ProjectDir)model\aquarium_underwater_arch.glb;$(ProjectDir)model\aquarium_watatsumi_hall.glb;$(ProjectDir)model\aquarium_continuous_shell.glb" DestinationFolder="$(OutDir)model" SkipUnchangedFiles="true" />
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

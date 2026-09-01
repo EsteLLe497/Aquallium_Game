@@ -49,12 +49,14 @@ private:
     void SelectUnderwaterArchView();
     void SelectJellyfishReverseValidationView();
     void SelectWatatsumiTankView();
+    void SelectContinuousAquariumView();
     void UpdatePlayer(float deltaTime, const framework::InputSystem& input);
     void UpdateLightingTuning(float deltaTime, const framework::InputSystem& input);
     void BuildStageGlassCollision();
     void BuildRouteCollision();
     void BuildUnderwaterArchCollision();
     void BuildWatatsumiCollision();
+    void BuildContinuousCollision();
     void ResetPlayer();
 
     AquariumRenderer renderer_;
@@ -64,5 +66,6 @@ private:
     physics::CollisionWorld routeCollision_;
     physics::CollisionWorld underwaterArchCollision_;
     physics::CollisionWorld watatsumiCollision_;
+    physics::CollisionWorld continuousCollision_;
     player::PlayerManager playerManager_;
 };
