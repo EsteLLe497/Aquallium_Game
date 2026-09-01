@@ -10,6 +10,12 @@
     <Filter Include="02 Framework\Object Classes">
       <UniqueIdentifier>{817B7E88-C389-43EF-A9F1-17D9A1BED102}</UniqueIdentifier>
     </Filter>
+    <Filter Include="02 Framework\Physics">
+      <UniqueIdentifier>{60A6B6F5-ED16-4E78-908C-772A70A54FA2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="02 Framework\Player">
+      <UniqueIdentifier>{657B652F-E53F-4C7C-BE89-4BA5B5B58C89}</UniqueIdentifier>
+    </Filter>
     <Filter Include="03 Scenes">
       <UniqueIdentifier>{E1A8B9F0-F53B-457C-A552-03F9C999F188}</UniqueIdentifier>
     </Filter>
@@ -37,6 +43,9 @@
     <Filter Include="04 Rendering\Lighting">
       <UniqueIdentifier>{B512F514-34E8-4FF7-A34B-CE84F195EB0A}</UniqueIdentifier>
     </Filter>
+    <Filter Include="04 Rendering\Biology">
+      <UniqueIdentifier>{A7A8FC99-6187-49D3-A2A4-FA9CE036AD84}</UniqueIdentifier>
+    </Filter>
     <Filter Include="10 ImGui">
       <UniqueIdentifier>{F6864046-0BFC-44F8-BF5E-42DCC6334CE7}</UniqueIdentifier>
     </Filter>
@@ -63,6 +72,12 @@
     <ClCompile Include="src\framework\ObjectWorld.cpp">
       <Filter>02 Framework\Object Classes</Filter>
     </ClCompile>
+    <ClCompile Include="src\physics\CollisionWorld.cpp">
+      <Filter>02 Framework\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\player\PlayerManager.cpp">
+      <Filter>02 Framework\Player</Filter>
+    </ClCompile>
     <ClCompile Include="src\scenes\AquariumScene.cpp">
       <Filter>03 Scenes</Filter>
     </ClCompile>
@@ -71,6 +86,9 @@
     </ClCompile>
     <ClCompile Include="src\JellyfishRenderer.cpp">
       <Filter>04 Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="src\FishRenderer.cpp">
+      <Filter>04 Rendering\Biology</Filter>
     </ClCompile>
     <ClCompile Include="src\StageModel.cpp">
       <Filter>04 Rendering</Filter>
@@ -91,7 +109,9 @@
       <Filter>01 Platform</Filter>
     </ClInclude>
     <ClInclude Include="src\imgui\LightingEditor.h"><Filter>10 ImGui</Filter></ClInclude>
+    <ClInclude Include="src\lighting\HeroTankLighting.h"><Filter>04 Rendering\Lighting</Filter></ClInclude>
     <ClInclude Include="src\lighting\LocalLight.h"><Filter>04 Rendering\Lighting</Filter></ClInclude>
+    <ClInclude Include="src\rendering\AdaptiveResolution.h"><Filter>04 Rendering</Filter></ClInclude>
     <ClInclude Include="third_party\imgui\imgui.h"><Filter>07 Third Party</Filter></ClInclude>
     <ClInclude Include="third_party\imgui\imgui_internal.h"><Filter>07 Third Party</Filter></ClInclude>
     <ClInclude Include="third_party\imgui\imgui_impl_dx11.h"><Filter>07 Third Party</Filter></ClInclude>
@@ -123,6 +143,12 @@
     <ClInclude Include="src\framework\ObjectWorld.h">
       <Filter>02 Framework\Object Classes</Filter>
     </ClInclude>
+    <ClInclude Include="src\physics\CollisionWorld.h">
+      <Filter>02 Framework\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\player\PlayerManager.h">
+      <Filter>02 Framework\Player</Filter>
+    </ClInclude>
     <ClInclude Include="src\scenes\AquariumScene.h">
       <Filter>03 Scenes</Filter>
     </ClInclude>
@@ -131,6 +157,9 @@
     </ClInclude>
     <ClInclude Include="src\JellyfishRenderer.h">
       <Filter>04 Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="src\FishRenderer.h">
+      <Filter>04 Rendering\Biology</Filter>
     </ClInclude>
     <ClInclude Include="src\StageModel.h">
       <Filter>04 Rendering</Filter>
@@ -152,6 +181,9 @@
     <None Include="shaders\Jellyfish.hlsl">
       <Filter>05 Shaders</Filter>
     </None>
+    <None Include="shaders\Fish.hlsl">
+      <Filter>05 Shaders</Filter>
+    </None>
     <None Include="model\map.glb">
       <Filter>06 Models</Filter>
     </None>
@@ -162,6 +194,12 @@
       <Filter>06 Models</Filter>
     </None>
     <None Include="model\aquarium_underwater_arch.glb">
+      <Filter>06 Models</Filter>
+    </None>
+    <None Include="model\aquarium_watatsumi_hall.glb">
+      <Filter>06 Models</Filter>
+    </None>
+    <None Include="model\aquarium_continuous_shell.glb">
       <Filter>06 Models</Filter>
     </None>
     <None Include="concepts\aquarium-floorplan-concept.png">
@@ -239,10 +277,16 @@
     <None Include="FRAMEWORK_ARCHITECTURE.md">
       <Filter>08 Documents</Filter>
     </None>
+    <None Include="COLLISION_SYSTEM.md">
+      <Filter>08 Documents</Filter>
+    </None>
     <None Include="GLASS_VIEW_IMPLEMENTATION.md">
       <Filter>08 Documents</Filter>
     </None>
     <None Include="PORTFOLIO_TECHNICAL_NOTES.md">
+      <Filter>08 Documents</Filter>
+    </None>
+    <None Include="CONTINUOUS_AQUARIUM_MAP.md">
       <Filter>08 Documents</Filter>
     </None>
     <None Include="REAL_AQUARIUM_REFERENCE_NOTES.md">
@@ -311,6 +355,21 @@
       <Filter>09 Tools</Filter>
     </None>
     <None Include="tools\generate_underwater_arch.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_watatsumi_hall.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\generate_continuous_aquarium.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\validate_continuous_aquarium.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\validate_aquarium_collision_layout.py">
+      <Filter>09 Tools</Filter>
+    </None>
+    <None Include="tools\validate_fish_schooling.py">
       <Filter>09 Tools</Filter>
     </None>
     <None Include="tools\generate_aquarium_floorplan_v2.py">

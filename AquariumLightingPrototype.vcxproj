@@ -83,11 +83,14 @@
   <ItemGroup>
     <ClCompile Include="src\AquariumRenderer.cpp" />
     <ClCompile Include="src\JellyfishRenderer.cpp" />
+    <ClCompile Include="src\FishRenderer.cpp" />
     <ClCompile Include="src\imgui\LightingEditor.cpp" />
     <ClCompile Include="src\D3D11App.cpp" />
     <ClCompile Include="src\framework\gameObject.cpp" />
     <ClCompile Include="src\framework\input.cpp" />
     <ClCompile Include="src\framework\ObjectWorld.cpp" />
+    <ClCompile Include="src\physics\CollisionWorld.cpp" />
+    <ClCompile Include="src\player\PlayerManager.cpp" />
     <ClCompile Include="src\framework\manager.cpp" />
     <ClCompile Include="src\framework\renderer.cpp" />
     <ClCompile Include="src\main.cpp" />
@@ -103,14 +106,19 @@
   <ItemGroup>
     <ClInclude Include="src\AquariumRenderer.h" />
     <ClInclude Include="src\JellyfishRenderer.h" />
+    <ClInclude Include="src\FishRenderer.h" />
     <ClInclude Include="src\imgui\LightingEditor.h" />
+    <ClInclude Include="src\lighting\HeroTankLighting.h" />
     <ClInclude Include="src\lighting\LocalLight.h" />
+    <ClInclude Include="src\rendering\AdaptiveResolution.h" />
     <ClInclude Include="src\D3D11App.h" />
     <ClInclude Include="src\framework\component.h" />
     <ClInclude Include="src\framework\FrameContext.h" />
     <ClInclude Include="src\framework\gameObject.h" />
     <ClInclude Include="src\framework\input.h" />
     <ClInclude Include="src\framework\ObjectWorld.h" />
+    <ClInclude Include="src\physics\CollisionWorld.h" />
+    <ClInclude Include="src\player\PlayerManager.h" />
     <ClInclude Include="src\framework\RenderContext.h" />
     <ClInclude Include="src\framework\scene.h" />
     <ClInclude Include="src\framework\manager.h" />
@@ -129,12 +137,14 @@
     <None Include="shaders\AquariumPrototype.hlsl" />
     <None Include="shaders\Stage.hlsl" />
     <None Include="shaders\Jellyfish.hlsl" />
+    <None Include="shaders\Fish.hlsl" />
     <None Include="shaders\lighting\LocalLighting.hlsli" />
     <None Include="model\map.glb" />
     <None Include="model\aquarium_greybox.glb" />
     <None Include="model\aquarium_route_01_02.glb" />
     <None Include="model\aquarium_underwater_arch.glb" />
     <None Include="model\aquarium_watatsumi_hall.glb" />
+    <None Include="model\aquarium_continuous_shell.glb" />
     <None Include="concepts\aquarium-floorplan-concept.png" />
     <None Include="concepts\aquarium-floorplan-v2.png" />
     <None Include="concepts\aquarium-floorplan-v3.png" />
@@ -161,8 +171,10 @@
     <None Include="third_party\cgltf\LICENSE" />
     <None Include="third_party\imgui\LICENSE.txt" />
     <None Include="FRAMEWORK_ARCHITECTURE.md" />
+    <None Include="COLLISION_SYSTEM.md" />
     <None Include="GLASS_VIEW_IMPLEMENTATION.md" />
     <None Include="PORTFOLIO_TECHNICAL_NOTES.md" />
+    <None Include="CONTINUOUS_AQUARIUM_MAP.md" />
     <None Include="REAL_AQUARIUM_REFERENCE_NOTES.md" />
     <None Include="REAL_AQUARIUM_REFERENCE_NOTES_V2.md" />
     <None Include="README.md" />
@@ -186,6 +198,10 @@
     <None Include="tools\generate_route_01_02.py" />
     <None Include="tools\generate_underwater_arch.py" />
     <None Include="tools\generate_watatsumi_hall.py" />
+    <None Include="tools\generate_continuous_aquarium.py" />
+    <None Include="tools\validate_continuous_aquarium.py" />
+    <None Include="tools\validate_aquarium_collision_layout.py" />
+    <None Include="tools\validate_fish_schooling.py" />
     <None Include="tools\generate_aquarium_floorplan_v2.py" />
     <None Include="tools\generate_aquarium_floorplan_v3.py" />
     <None Include="tools\generate_aquarium_floorplan_v4.py" />
@@ -194,11 +210,11 @@
   </ItemGroup>
   <Target Name="CopyShaders" AfterTargets="Build">
     <MakeDir Directories="$(OutDir)shaders" />
-    <Copy SourceFiles="$(ProjectDir)shaders\AquariumPrototype.hlsl;$(ProjectDir)shaders\AquariumFroxel.hlsl;$(ProjectDir)shaders\Stage.hlsl;$(ProjectDir)shaders\Jellyfish.hlsl" DestinationFolder="$(OutDir)shaders" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)shaders\AquariumPrototype.hlsl;$(ProjectDir)shaders\AquariumFroxel.hlsl;$(ProjectDir)shaders\Stage.hlsl;$(ProjectDir)shaders\Jellyfish.hlsl;$(ProjectDir)shaders\Fish.hlsl" DestinationFolder="$(OutDir)shaders" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)shaders\lighting" />
     <Copy SourceFiles="$(ProjectDir)shaders\lighting\LocalLighting.hlsli" DestinationFolder="$(OutDir)shaders\lighting" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)model" />
-    <Copy SourceFiles="$(ProjectDir)model\map.glb;$(ProjectDir)model\aquarium_greybox.glb;$(ProjectDir)model\aquarium_route_01_02.glb;$(ProjectDir)model\aquarium_underwater_arch.glb;$(ProjectDir)model\aquarium_watatsumi_hall.glb" DestinationFolder="$(OutDir)model" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)model\map.glb;$(ProjectDir)model\aquarium_greybox.glb;$(ProjectDir)model\aquarium_route_01_02.glb;$(ProjectDir)model\aquarium_underwater_arch.glb;$(ProjectDir)model\aquarium_watatsumi_hall.glb;$(ProjectDir)model\aquarium_continuous_shell.glb" DestinationFolder="$(OutDir)model" SkipUnchangedFiles="true" />
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

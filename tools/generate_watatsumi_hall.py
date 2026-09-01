@@ -37,6 +37,7 @@ MATERIALS = {
     "WatatsumiWater": (0.010, 0.135, 0.245, 0.84),
     "WatatsumiGlass": (0.055, 0.220, 0.310, 0.16),
     "WatatsumiWaterSurface": (0.025, 0.300, 0.430, 0.58),
+    "WatatsumiBubble": (0.180, 0.620, 1.000, 0.18),
     "WatatsumiEmitter": (0.080, 0.640, 0.920, 1.0),
 }
 groups = {name: MeshGroup(name) for name in MATERIALS}
@@ -65,49 +66,148 @@ def box(material, center, size):
         quad(material, [points[i] for i in ids], normal)
 
 
-def ellipsoid(material, center, radii, seed, latitudes=7, longitudes=12):
+def triangle(material, vertices, uvs=((0, 0), (0.5, 1), (1, 0))):
+    """Append one flat-shaded triangle to an existing material batch."""
+    ax, ay, az = vertices[0]
+    bx, by, bz = vertices[1]
+    cx, cy, cz = vertices[2]
+    ux, uy, uz = bx-ax, by-ay, bz-az
+    vx, vy, vz = cx-ax, cy-ay, cz-az
+    nx, ny, nz = uy*vz-uz*vy, uz*vx-ux*vz, ux*vy-uy*vx
+    inverse = 1.0 / max(math.sqrt(nx*nx + ny*ny + nz*nz), 0.0001)
+    normal = (nx*inverse, ny*inverse, nz*inverse)
     group = groups[material]
     base = len(group.positions) // 3
+    for position, uv in zip(vertices, uvs):
+        group.positions.extend(position)
+        group.normals.extend(normal)
+        group.texcoords.extend(uv)
+    group.indices.extend((base, base+1, base+2))
+
+
+def faceted_rock(center, size, seed, segments=8):
+    """Low-poly irregular reef boulder; all rocks remain one draw batch."""
     cx, cy, cz = center
-    rx, ry, rz = radii
-    for latitude in range(latitudes + 1):
-        v = latitude / latitudes
-        phi = math.pi * v
-        for longitude in range(longitudes + 1):
-            u = longitude / longitudes
-            theta = math.tau * u
-            dx = math.sin(phi) * math.cos(theta)
-            dy = math.cos(phi)
-            dz = math.sin(phi) * math.sin(theta)
-            rough = 1.0 + math.sin(phi) * 0.10 * math.sin(theta * 3 + seed)
-            group.positions.extend((cx + dx*rx*rough, cy + dy*ry*rough, cz + dz*rz*rough))
-            nx, ny, nz = dx/rx, dy/ry, dz/rz
-            inv = 1.0 / max(math.sqrt(nx*nx + ny*ny + nz*nz), 0.0001)
-            group.normals.extend((nx*inv, ny*inv, nz*inv))
-            group.texcoords.extend((u, v))
-    row = longitudes + 1
-    for latitude in range(latitudes):
-        for longitude in range(longitudes):
-            a = base + latitude*row + longitude
-            b = a + row
-            group.indices.extend((a,b,a+1,a+1,b,b+1))
+    rx, ry, rz = size
+    lower, upper = [], []
+    for index in range(segments):
+        angle = math.tau * index / segments
+        variation = 0.84 + 0.16 * math.sin(seed * 1.73 + index * 2.41)
+        twist = 0.13 * math.sin(seed * 0.91 + index * 1.37)
+        lower.append((
+            cx + math.cos(angle) * rx * variation,
+            cy - ry * (0.25 + twist),
+            cz + math.sin(angle) * rz * variation))
+        upper.append((
+            cx + math.cos(angle + 0.16) * rx * variation * 0.78,
+            cy + ry * (0.34 + twist * 0.55),
+            cz + math.sin(angle + 0.16) * rz * variation * 0.78))
+    bottom = (cx - rx * 0.05, cy - ry * 0.72, cz + rz * 0.04)
+    top = (cx + rx * 0.09, cy + ry * 0.82, cz - rz * 0.07)
+    for index in range(segments):
+        next_index = (index + 1) % segments
+        triangle("WatatsumiRock", (bottom, lower[next_index], lower[index]))
+        triangle("WatatsumiRock", (lower[index], lower[next_index], upper[next_index]))
+        triangle("WatatsumiRock", (lower[index], upper[next_index], upper[index]))
+        triangle("WatatsumiRock", (upper[index], upper[next_index], top))
+
+
+def bubble_octahedron(center, radius):
+    cx, cy, cz = center
+    top = (cx, cy + radius * 1.35, cz)
+    bottom = (cx, cy - radius * 1.35, cz)
+    # Eight ring points avoid the conspicuous diamond/square silhouette that
+    # the former four-sided octahedron produced against the bright water.
+    ring = tuple(
+        (cx + math.cos(index * math.tau / 8.0) * radius,
+         cy,
+         cz + math.sin(index * math.tau / 8.0) * radius)
+        for index in range(8))
+    for index in range(8):
+        next_index = (index + 1) % 8
+        triangle("WatatsumiBubble", (top, ring[index], ring[next_index]))
+        triangle("WatatsumiBubble", (bottom, ring[next_index], ring[index]))
 
 
 TANK_FRONT_X = 7.0
 TANK_HALF_WIDTH = 14.50
-TANK_DEPTH = 14.70
+# The public pane keeps its monumental width/height, but the service-side
+# footprint is deliberately shallower. This improves hall circulation and
+# avoids spending transparent fill-rate on invisible rear water.
+TANK_DEPTH = 10.50
 TANK_WATER_BOTTOM = 0.35
 TANK_WATER_SURFACE = 12.45
 UPPER_FLOOR_Y = 12.28
-HALL_CEILING_Y = 18.60
+HALL_CEILING_Y = 19.80
 PORTAL_Z = 17.80
-RAMP_RISE = 12.22
+RAMP_RISE = UPPER_FLOOR_Y
+RAMP_WIDTH = 5.40
+PORTAL_WIDTH = 6.20
+RAMP_WALL_HEIGHT = 2.60
+RAMP_ARCH_RISE = 3.50
+UPPER_ARM_MIN_X = -21.00
+UPPER_ARM_MAX_X = 4.00
+UPPER_ARM_CENTER_X = (UPPER_ARM_MIN_X + UPPER_ARM_MAX_X) * 0.5
+UPPER_CROSS_CENTER_X = -8.50
+UPPER_CROSS_WIDTH = RAMP_WIDTH
+UPPER_OUTER_Z = 20.50
+UPPER_INNER_Z = 15.10
+
+
+def tank_half_width_at_x(x):
+    """Half width of the flat-front/semi-ellipse tank at an X coordinate."""
+    u = max(0.0, min(1.0, (x - TANK_FRONT_X) / TANK_DEPTH))
+    return TANK_HALF_WIDTH * math.sqrt(max(1.0 - u*u, 0.0))
+
+
+def bounded_tank_rock(center, size, seed, margin=0.34):
+    """Clamp an irregular boulder inside the actual tank plan and waterline."""
+    cx, cy, cz = center
+    rx, ry, rz = size
+    cx = max(TANK_FRONT_X + rx + margin, cx)
+    cx = min(TANK_FRONT_X + TANK_DEPTH - rx - margin, cx)
+    # The back-most X has the narrowest ellipse for this entire boulder.
+    allowed_z = max(tank_half_width_at_x(cx + rx) - rz - margin, 0.0)
+    cz = math.copysign(min(abs(cz), allowed_z), cz) if cz else 0.0
+    cy = min(cy, TANK_WATER_SURFACE - margin - ry * 0.82)
+    faceted_rock((cx, cy, cz), size, seed)
+
+
+def ramp_horizontal_distance(t):
+    """Horizontal travel after the flat lower landing, in metres."""
+    if t <= 0.06:
+        return 0.0
+    straight = 12.0
+    arc = math.pi * 17.8
+    if t < 0.20:
+        return straight * ((t - 0.06) / 0.14)
+    if t < 0.80:
+        return straight + arc * ((t - 0.20) / 0.60)
+    if t < 0.97:
+        return straight + arc + straight * ((t - 0.80) / 0.17)
+    return straight * 2.0 + arc
+
+
+def ramp_height(t):
+    """C1 landing blend: zero grade at both floors, constant grade inside."""
+    travel = ramp_horizontal_distance(t)
+    total = 24.0 + math.pi * 17.8
+    blend = 2.0
+    effective = total - blend
+    if travel <= blend:
+        integrated = 0.5 * travel * travel / blend
+    elif travel < total - blend:
+        integrated = travel - blend * 0.5
+    else:
+        remaining = total - travel
+        integrated = effective - 0.5 * remaining * remaining / blend
+    return RAMP_RISE * integrated / effective
 
 
 def ramp_point(t):
     """Lower-right portal to upper-left portal via a concealed half helix."""
     t = max(0.0, min(1.0, t))
-    y = 0.18 + RAMP_RISE * t
+    y = ramp_height(t)
 
     def line(a, b, u):
         return (a[0] + (b[0]-a[0])*u, y, a[1] + (b[1]-a[1])*u)
@@ -120,16 +220,16 @@ def ramp_point(t):
         u = (t-0.20) / 0.60
         angle = math.pi*0.5 - math.pi*u
         return (17.8 + math.cos(angle)*17.8, y, math.sin(angle)*17.8)
-    if t < 0.94:
-        return line((17.8, -PORTAL_Z), (5.8, -PORTAL_Z), (t-0.80) / 0.14)
-    return line((5.8, -PORTAL_Z), (3.6, -PORTAL_Z), (t-0.94) / 0.06)
+    if t < 0.97:
+        return line((17.8, -PORTAL_Z), (5.8, -PORTAL_Z), (t-0.80) / 0.17)
+    return line((5.8, -PORTAL_Z), (3.6, -PORTAL_Z), (t-0.97) / 0.03)
 
 
 def ramp_strip(
         segments=144,
-        width=4.2,
-        wall_height=2.2,
-        arch_rise=3.0,
+        width=RAMP_WIDTH,
+        wall_height=RAMP_WALL_HEIGHT,
+        arch_rise=RAMP_ARCH_RISE,
         arch_segments=8):
     left, right = [], []
     for index in range(segments + 1):
@@ -145,7 +245,7 @@ def ramp_strip(
     for index in range(segments):
         quad("WatatsumiRamp", (left[index], right[index], right[index+1], left[index+1]), (0,1,0))
         midpoint_t = (index + 0.5) / segments
-        enclosed = 0.06 <= midpoint_t <= 0.94
+        enclosed = 0.06 <= midpoint_t <= 0.97
         for edge, sign in ((left, 1.0), (right, -1.0)):
             p0, p1 = edge[index], edge[index+1]
             normal = (sign*(p1[2]-p0[2]), 0.0, sign*(p0[0]-p1[0]))
@@ -234,13 +334,125 @@ def curved_tank_wall(material, segments=40):
         normal = (math.cos(middle)/TANK_DEPTH, 0,
                   math.sin(middle)/TANK_HALF_WIDTH)
         inv = 1.0/max(math.hypot(normal[0],normal[2]),0.0001)
-        quad(material, (p0,p1,p2,p3), (normal[0]*inv,0,normal[2]*inv))
+        # The authored negative-Z quarter becomes the player's left side after
+        # StageModel's glTF Z conversion. Expose this section as acrylic so the
+        # side gallery sees the same hero tank from another angle.
+        segment_material = "WatatsumiGlass" if middle < -0.38 else material
+        quad(segment_material, (p0,p1,p2,p3),
+             (normal[0]*inv,0,normal[2]*inv))
 
 
-def arch_portal_collar(center_z, floor_y, x=6.42, width=4.2,
-                       wall_height=2.2, arch_rise=3.0,
-                       outer_width=5.0, top_clearance=5.9, segments=12):
-    """Close the rectangular facade void tightly around an arch section."""
+def tank_surface_grid(x_segments=24, z_segments=32):
+    """Subdivided semi-ellipse so the vertex wave has visible broad motion."""
+    for x_index in range(x_segments):
+        u0 = x_index / x_segments
+        u1 = (x_index + 1) / x_segments
+        x0 = TANK_FRONT_X + TANK_DEPTH * u0
+        x1 = TANK_FRONT_X + TANK_DEPTH * u1
+        half0 = TANK_HALF_WIDTH * math.sqrt(max(1.0 - u0*u0, 0.0))
+        half1 = TANK_HALF_WIDTH * math.sqrt(max(1.0 - u1*u1, 0.0))
+        for z_index in range(z_segments):
+            v0 = -1.0 + 2.0 * z_index / z_segments
+            v1 = -1.0 + 2.0 * (z_index + 1) / z_segments
+            quad(
+                "WatatsumiWaterSurface",
+                ((x0,TANK_WATER_SURFACE,half0*v0),
+                 (x0,TANK_WATER_SURFACE,half0*v1),
+                 (x1,TANK_WATER_SURFACE,half1*v1),
+                 (x1,TANK_WATER_SURFACE,half1*v0)),
+                (0,1,0),
+                ((u0,(v0+1)*0.5),(u0,(v1+1)*0.5),
+                 (u1,(v1+1)*0.5),(u1,(v0+1)*0.5)))
+
+
+def add_ogasawara_reef():
+    """Dense side cliffs and a sparse central reef inspired by Ogasawara."""
+    seed = 1
+    # Layered shelves grow from both tank walls but preserve a deep central
+    # blue channel for schooling fish and the three overhead light banks.
+    for side in (-1.0, 1.0):
+        for row in range(5):
+            x = 8.8 + row * 1.78
+            plan_half_width = TANK_HALF_WIDTH * math.sqrt(max(
+                1.0 - ((x - TANK_FRONT_X) / TANK_DEPTH) ** 2,
+                0.0))
+            for level in range(3):
+                size = (2.20 + level * 0.32,
+                        1.35 + level * 0.25,
+                        2.45 + (row % 3) * 0.28)
+                # Start near the wall; bounded_tank_rock performs the exact
+                # footprint clamp using the boulder's rear-most X and radius.
+                z = side * (plan_half_width * (0.67 + level * 0.07))
+                y = 1.05 + level * 1.75 + (row % 2) * 0.38
+                bounded_tank_rock((x, y, z), size, seed)
+                seed += 1
+    # Asymmetric tall reef anchors are built from overlapping boulders instead
+    # of stretched single spikes. Distinct tiers create natural shelves while
+    # bounded_tank_rock keeps every crown inside the waterline and rear shell.
+    for center, size in (
+        ((10.2,2.05,-9.7),(2.45,2.45,2.35)),
+        ((10.7,4.65,-9.4),(2.05,2.85,2.00)),
+        ((11.3,7.15,-9.0),(1.55,2.55,1.65)),
+        ((11.6,1.95, 9.6),(2.75,2.20,2.45)),
+        ((12.0,4.15, 9.2),(2.15,2.45,2.05)),
+        ((12.5,6.35, 8.8),(1.45,2.10,1.55))):
+        bounded_tank_rock(center, size, seed)
+        seed += 1
+    # Bottom outcrops produce depth layers without blocking the main window.
+    for center, size in (
+        ((10.4,0.95,-5.2),(2.7,1.35,2.2)),
+        ((12.9,0.82, 4.5),(2.3,1.15,2.7)),
+        ((15.7,0.88,-2.4),(2.8,1.30,2.1)),
+        ((18.1,0.78, 2.8),(2.1,1.05,1.8)),
+        ((19.6,0.70,-1.6),(1.8,0.90,1.6))):
+        bounded_tank_rock(center, size, seed)
+        seed += 1
+
+
+def add_bubble_columns():
+    """72 tiny bubbles in one batch, arranged as three aeration columns."""
+    columns = ((11.2,-8.4),(14.9,0.7),(12.0,8.1))
+    for column_index, (base_x, base_z) in enumerate(columns):
+        for index in range(24):
+            phase = column_index * 2.17 + index * 1.91
+            height = 0.75 + (index % 23) / 22.0 * 10.75
+            drift = 0.16 + height * 0.018
+            center = (
+                base_x + math.sin(phase) * drift,
+                height,
+                base_z + math.cos(phase * 1.13) * drift)
+            radius = 0.022 + (index % 5) * 0.006
+            bubble_octahedron(center, radius)
+
+
+def validate_rock_vertices_inside_tank():
+    """Fail generation if reef or shell geometry escapes the tank volume."""
+    rock = groups["WatatsumiRock"]
+    epsilon = 0.002
+    for vertex_index, (x, y, z) in enumerate(zip(
+            rock.positions[0::3],
+            rock.positions[1::3],
+            rock.positions[2::3])):
+        if x < TANK_FRONT_X - epsilon or \
+                x > TANK_FRONT_X + TANK_DEPTH + epsilon:
+            raise ValueError(
+                f"rock vertex {vertex_index} escapes tank X: {x:.3f}")
+        if y > TANK_WATER_SURFACE + epsilon:
+            raise ValueError(
+                f"rock vertex {vertex_index} escapes waterline: {y:.3f}")
+        half_width = tank_half_width_at_x(x)
+        if abs(z) > half_width + epsilon:
+            raise ValueError(
+                f"rock vertex {vertex_index} escapes tank plan: "
+                f"x={x:.3f}, z={z:.3f}, limit={half_width:.3f}")
+
+
+def arch_portal_collar(center_z, floor_y, x=6.40, width=RAMP_WIDTH,
+                       wall_height=RAMP_WALL_HEIGHT,
+                       arch_rise=RAMP_ARCH_RISE,
+                       outer_width=PORTAL_WIDTH,
+                       top_clearance=7.4, segments=12):
+    """Frame the authored opening without duplicating the structural wall."""
     normal = (-1.0, 0.0, 0.0)
     half_width = width * 0.5
     outer_half = outer_width * 0.5
@@ -249,7 +461,7 @@ def arch_portal_collar(center_z, floor_y, x=6.42, width=4.2,
         z0 = center_z + side * half_width
         z1 = center_z + side * outer_half
         lo, hi = min(z0, z1), max(z0, z1)
-        quad("WatatsumiArchitecture",
+        quad("WatatsumiRamp",
              ((x,floor_y,lo),(x,floor_y+top_clearance,lo),
               (x,floor_y+top_clearance,hi),(x,floor_y,hi)), normal)
     # Curved spandrel fills the space above the elliptical crown.
@@ -261,33 +473,63 @@ def arch_portal_collar(center_z, floor_y, x=6.42, width=4.2,
         inner0 = floor_y + wall_height + math.sin(math.pi*u0) * arch_rise
         inner1 = floor_y + wall_height + math.sin(math.pi*u1) * arch_rise
         top = floor_y + top_clearance
-        quad("WatatsumiArchitecture",
+        quad("WatatsumiRamp",
              ((x,inner0,z0),(x,top,z0),(x,top,z1),(x,inner1,z1)), normal)
 
 
 def build():
     # Enlarged two-storey central hall; the exhibit remains the only source.
-    box("WatatsumiArchitecture", (5.0,-0.18,0), (58,0.36,48))
-    box("WatatsumiArchitecture", (5.0,9.2,23.85), (58,18.4,0.30))
-    box("WatatsumiArchitecture", (5.0,9.2,-23.85), (58,18.4,0.30))
-    box("WatatsumiArchitecture", (-23.85,9.2,0), (0.30,18.4,48))
-    box("WatatsumiArchitecture", (5.0,HALL_CEILING_Y,0), (58,0.40,48))
+    box("WatatsumiArchitecture", (5.0,-0.18,0), (66,0.36,48))
+    wall_height = HALL_CEILING_Y - 0.20
+    wall_center_y = wall_height * 0.5
+    box("WatatsumiArchitecture", (5.0,wall_center_y,23.85), (66,wall_height,0.30))
+    box("WatatsumiArchitecture", (5.0,wall_center_y,-23.85), (66,wall_height,0.30))
+    # Rear entrance opening: two jamb walls plus a header, rather than one
+    # blocker spanning the whole hall. The route shell joins this 4.4 m portal.
+    box("WatatsumiArchitecture", (-27.85,wall_center_y,-14.10),
+        (0.30,wall_height,19.80))
+    box("WatatsumiArchitecture", (-27.85,wall_center_y,14.10),
+        (0.30,wall_height,19.80))
+    box("WatatsumiArchitecture", (-27.85,12.50,0.0),
+        (0.30,HALL_CEILING_Y-5.20,8.40))
+    box("WatatsumiArchitecture", (5.0,HALL_CEILING_Y,0), (66,0.40,48))
 
-    # Fill both unused outer-edge voids up to the enlarged 5.0 m portals.
-    # Their inner faces now terminate on the same authored portal edge, so the
-    # facade no longer contains the thin slits left by the former patchwork.
-    box("WatatsumiArchitecture", (-8.4,9.1,21.55), (30.6,18.2,4.60))
-    box("WatatsumiArchitecture", (-8.4,9.1,-21.55), (30.6,18.2,4.60))
+    # Seal the service voids with non-overlapping solids. The previous 30.6 m
+    # patch blocks crossed both the portal frame and the exterior shell while
+    # still leaving a four-metre rear gap, which read as doubled walls and let
+    # the player enter unmodelled space. Every face now terminates exactly on
+    # the rear wall, facade plane, portal edge, or exterior wall inner face.
+    service_fill_center_x = (-27.70 + 6.45) * 0.5
+    service_fill_size_x = 6.45 - (-27.70)
+    for side in (-1.0, 1.0):
+        box("WatatsumiArchitecture",
+            (service_fill_center_x,wall_center_y,side*22.30),
+            (service_fill_size_x,wall_height,2.80))
 
-    # The 14 x 6.2 m acrylic view opens onto ~651 m3 of water.
+    # The enlarged 29 x 12.2 m acrylic view is the hall's dominant landmark.
     box("WatatsumiArchitecture", (7.0,0.18,0), (1.0,0.36,31.2))
     # A continuous opaque facade closes the entire void above the acrylic.
     # Narrow full-height jambs meet it exactly at the tank's side edges.
-    box("WatatsumiArchitecture", (7.0,15.425,0), (1.0,5.95,29.0))
-    box("WatatsumiArchitecture", (7.0,9.275,-14.575), (1.0,18.2,0.15))
-    box("WatatsumiArchitecture", (7.0,9.275,14.575), (1.0,18.2,0.15))
-    curved_tank_wall("WatatsumiWater")
+    facade_top = HALL_CEILING_Y - 0.20
+    header_bottom = 12.50
+    box("WatatsumiArchitecture", (7.0,(header_bottom+facade_top)*0.5,0),
+        (1.0,facade_top-header_bottom,29.0))
+    box("WatatsumiArchitecture", (7.0,facade_top*0.5,-14.575),
+        (1.0,facade_top,0.15))
+    box("WatatsumiArchitecture", (7.0,facade_top*0.5,14.575),
+        (1.0,facade_top,0.15))
+    # Narrow closures bridge the tank jambs to the portal trim. They replace
+    # the former accidental 0.65 m slots without stacking another room wall.
+    for side in (-1.0, 1.0):
+        box("WatatsumiArchitecture", (6.80,facade_top*0.5,side*14.675),
+            (0.70,facade_top,0.05))
+    # A real exhibit hides its service shell behind reef scenery. Making the
+    # rear semi-ellipse opaque rock also removes a large transparent layer that
+    # previously exposed rectangular hall structures and wasted fill rate.
+    curved_tank_wall("WatatsumiRock")
     half_ellipse_cap("WatatsumiRock", 0.20, 1.0)
+    add_ogasawara_reef()
+    add_bubble_columns()
     # Front water interface then acrylic; both are separate transparent batches.
     quad("WatatsumiWater", ((7.12,TANK_WATER_BOTTOM,-TANK_HALF_WIDTH),
                              (7.12,TANK_WATER_SURFACE,-TANK_HALF_WIDTH),
@@ -295,48 +537,111 @@ def build():
                              (7.12,TANK_WATER_BOTTOM,TANK_HALF_WIDTH)), (-1,0,0))
     quad("WatatsumiGlass", ((6.94,0.30,-14.62),(6.94,12.58,-14.62),
                              (6.94,12.58,14.62),(6.94,0.30,14.62)), (-1,0,0))
-    half_ellipse_cap("WatatsumiWaterSurface", TANK_WATER_SURFACE, 1.0)
-    for index, data in enumerate(((10.0,-9.6,3.8,1.5,2.8),(12.5,7.6,4.5,2.0,3.2),
-                                  (17.0,-3.6,4.0,2.4,3.8),(19.0,10.2,2.8,1.4,2.4),
-                                  (16.0,-12.0,3.0,1.5,2.2))):
-        x,z,rx,ry,rz=data
-        ellipsoid("WatatsumiRock", (x,0.35+ry*0.55,z), (rx,ry,rz), index+0.3)
+    tank_surface_grid()
 
     # The 1F entrance and 2F exit are cut from the same facade grid. The lower
     # header begins above the complete arch crown; the upper opening remains
     # clear all the way to the raised hall ceiling.
-    box("WatatsumiArchitecture", (6.80,12.25,PORTAL_Z), (0.70,12.30,5.00))
-    box("WatatsumiArchitecture", (6.80,6.125,-PORTAL_Z), (0.70,12.25,5.00))
-    arch_portal_collar(PORTAL_Z, 0.18, top_clearance=5.90)
-    arch_portal_collar(-PORTAL_Z, UPPER_FLOOR_Y, top_clearance=5.90)
+    lower_header_bottom = 7.35
+    box("WatatsumiArchitecture",
+        (6.80,(lower_header_bottom+facade_top)*0.5,PORTAL_Z),
+        (0.70,facade_top-lower_header_bottom,PORTAL_WIDTH))
+    # The same facade bay has a ground-level side-gallery opening and the 2F
+    # ramp landing above it. A structural band separates both routes without
+    # sealing either doorway.
+    upper_lower_wall_bottom = 7.35
+    upper_lower_wall_top = UPPER_FLOOR_Y - 0.22
+    box("WatatsumiArchitecture",
+        (6.80,(upper_lower_wall_bottom+upper_lower_wall_top)*0.5,-PORTAL_Z),
+        (0.70,upper_lower_wall_top-upper_lower_wall_bottom,PORTAL_WIDTH))
+    arch_portal_collar(PORTAL_Z, 0.0, top_clearance=7.35)
+    arch_portal_collar(-PORTAL_Z, 0.0, top_clearance=7.35)
+    arch_portal_collar(
+        -PORTAL_Z,
+        UPPER_FLOOR_Y,
+        top_clearance=HALL_CEILING_Y - 0.20 - UPPER_FLOOR_Y)
     ramp_strip()
+
+    # Two quiet bench groups frame the hero view without narrowing the centre
+    # sightline. They share existing batches, so the addition costs no draw call.
+    for side in (-1.0, 1.0):
+        for x in (-14.0, -6.0):
+            z = side * 18.4
+            box("WatatsumiRamp", (x,0.48,z), (4.2,0.20,0.84))
+            box("WatatsumiArchitecture", (x,0.24,z), (3.3,0.48,0.22))
+            box("WatatsumiRamp", (x,1.05,z+side*0.34), (4.2,1.10,0.16))
 
     # Sparse blue practicals follow the enclosed ramp. They are navigation
     # cues, not general hall lighting, and sit near the arch crown.
     for t in (0.075, 0.16, 0.34, 0.52, 0.70, 0.88):
         light = ramp_point(t)
-        box("WatatsumiEmitter", (light[0], light[1]+4.72, light[2]),
+        box("WatatsumiEmitter", (light[0], light[1]+5.72, light[2]),
             (1.15,0.06,0.18))
 
-    # 2F layout: remove the deck directly in front of the acrylic and relocate
-    # circulation to the opposite side of the atrium. Two side arms connect
-    # the portal ends to a rear cross-passage, leaving the tank sightline open.
-    box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y,-PORTAL_Z), (25.0,0.24,4.2))
-    box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y,PORTAL_Z), (25.0,0.24,4.2))
-    box("WatatsumiRamp", (-21.0,UPPER_FLOOR_Y,0.0), (4.2,0.24,39.8))
+    # 2F layout: two complete longitudinal arms and one centred cross-passage
+    # form a legible H. All floors and rails below use these shared extents so
+    # a rail can never continue through a junction or outlive its platform.
+    arm_length = UPPER_ARM_MAX_X - UPPER_ARM_MIN_X
+    box("WatatsumiRamp", (UPPER_ARM_CENTER_X,UPPER_FLOOR_Y,-PORTAL_Z),
+        (arm_length,0.24,RAMP_WIDTH))
+    box("WatatsumiRamp", (UPPER_ARM_CENTER_X,UPPER_FLOOR_Y,PORTAL_Z),
+        (arm_length,0.24,RAMP_WIDTH))
+    box("WatatsumiRamp", (UPPER_CROSS_CENTER_X,UPPER_FLOOR_Y,0.0),
+        (UPPER_CROSS_WIDTH,0.24,UPPER_OUTER_Z*2.0))
 
-    # Low solid fascias and slim rails protect every open atrium edge without
-    # restoring the former tank-front deck.
-    for z in (-19.9, -15.7, 15.7, 19.9):
-        box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y+0.17,z), (25.0,0.34,0.12))
-        box("WatatsumiRamp", (-8.50,UPPER_FLOOR_Y+1.12,z), (25.0,0.08,0.10))
-        for x in (-19.0, -15.5, -12.0, -8.5, -5.0, -1.5, 2.0):
-            box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z), (0.07,0.96,0.07))
+    def horizontal_rail(x0, x1, z):
+        length = x1 - x0
+        center = (x0 + x1) * 0.5
+        box("WatatsumiRamp", (center,UPPER_FLOOR_Y+0.17,z),
+            (length,0.34,0.12))
+        box("WatatsumiRamp", (center,UPPER_FLOOR_Y+1.12,z),
+            (length,0.08,0.10))
+        post_count = max(1, math.ceil(length / 3.5))
+        for index in range(post_count + 1):
+            x = x0 + length * index / post_count
+            box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z),
+                (0.07,0.96,0.07))
+
+    def vertical_rail(x, z0, z1):
+        length = z1 - z0
+        center = (z0 + z1) * 0.5
+        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.17,center),
+            (0.12,0.34,length))
+        box("WatatsumiRamp", (x,UPPER_FLOOR_Y+1.12,center),
+            (0.10,0.08,length))
+        post_count = max(1, math.ceil(length / 3.5))
+        for index in range(post_count + 1):
+            z = z0 + length * index / post_count
+            box("WatatsumiRamp", (x,UPPER_FLOOR_Y+0.64,z),
+                (0.07,0.96,0.07))
+
+    cross_min_x = UPPER_CROSS_CENTER_X - UPPER_CROSS_WIDTH * 0.5
+    cross_max_x = UPPER_CROSS_CENTER_X + UPPER_CROSS_WIDTH * 0.5
+    for z in (-UPPER_OUTER_Z, UPPER_OUTER_Z):
+        horizontal_rail(UPPER_ARM_MIN_X, UPPER_ARM_MAX_X, z)
+    for z in (-UPPER_INNER_Z, UPPER_INNER_Z):
+        horizontal_rail(UPPER_ARM_MIN_X, cross_min_x, z)
+        horizontal_rail(cross_max_x, UPPER_ARM_MAX_X, z)
+    for x in (cross_min_x, cross_max_x):
+        vertical_rail(x, -UPPER_INNER_Z, UPPER_INNER_Z)
+    # Close the three dead ends. The south-east end remains open because it is
+    # the flush hand-off from the concealed ramp's upper portal.
+    vertical_rail(UPPER_ARM_MIN_X, -UPPER_OUTER_Z, -UPPER_INNER_Z)
+    vertical_rail(UPPER_ARM_MIN_X, UPPER_INNER_Z, UPPER_OUTER_Z)
+    vertical_rail(UPPER_ARM_MAX_X, UPPER_INNER_Z, UPPER_OUTER_Z)
     # A single restrained practical at the upper landing. The tank remains
     # the dominant source; this only gives visitors a distant navigation cue.
     box("WatatsumiEmitter", (3.8,UPPER_FLOOR_Y+2.2,-PORTAL_Z), (1.2,0.04,0.05))
-    # A restrained waterline source lets the hall be lit by the exhibit only.
-    box("WatatsumiEmitter", (6.82,TANK_WATER_SURFACE+0.17,0), (0.10,0.08,28.6))
+    # Architectural trim borrows the existing ramp material, keeping this to
+    # one already-issued draw batch. Dark skirting and a framed tank reveal
+    # give the hall a deliberate VR social-world finish without extra lights.
+    for z in (-23.62, 23.62):
+        box("WatatsumiRamp", (4.8,0.24,z), (65.2,0.30,0.12))
+    box("WatatsumiRamp", (-27.62,0.24,0.0), (0.12,0.30,47.2))
+    box("WatatsumiRamp", (6.72,0.46,0.0), (0.18,0.56,29.35))
+    box("WatatsumiRamp", (6.72,12.58,0.0), (0.18,0.20,29.35))
+    for z in (-14.70, 14.70):
+        box("WatatsumiRamp", (6.72,6.45,z), (0.18,12.30,0.18))
 
 
 def pad4(data, value=0):
@@ -346,7 +651,8 @@ def pad4(data, value=0):
 def write_glb():
     binary=bytearray(); views=[]; accessors=[]; meshes=[]; nodes=[]; materials=[]
     material_indices={}
-    transparent={"WatatsumiWater","WatatsumiGlass","WatatsumiWaterSurface"}
+    transparent={"WatatsumiWater","WatatsumiGlass","WatatsumiWaterSurface",
+                 "WatatsumiBubble"}
     for name, rgba in MATERIALS.items():
         material_indices[name]=len(materials)
         materials.append({"name":name,"pbrMetallicRoughness":{"baseColorFactor":list(rgba),
@@ -377,9 +683,14 @@ def write_glb():
          "nodes":nodes,"meshes":meshes,"materials":materials,"accessors":accessors,
          "bufferViews":views,"buffers":[{"byteLength":len(binary)}],
          "extras":{"units":"meters","previewKey":6,"referenceVolumeTonnes":650,
-                   "inferredTankPlan":"flat-front semi-ellipse","inferredTankSize":[9.8,6.1,14.5],
-                   "inferredGrossVolumeM3":681.0,"rampWidth":4.2,"rampRise":6.02,
-                   "tunnelWallHeight":2.2,"tunnelArchRise":3.0,
+                   "inferredTankPlan":"flat-front semi-ellipse","inferredTankSize":[10.5,12.1,29.0],
+                   "inferredGrossVolumeM3":2890.0,
+                   "rampWidth":RAMP_WIDTH,"rampRise":RAMP_RISE,
+                   "tunnelWallHeight":RAMP_WALL_HEIGHT,
+                   "tunnelArchRise":RAMP_ARCH_RISE,
+                   "reefBoulderCount":41,
+                   "bubbleCount":72,
+                   "waterSurfaceGrid":[24,32],
                    "rampSequence":["lower-right entry","concealed wall run",
                                    "rear half-helix tunnel","upper-left re-entry",
                                    "deep side platforms"],
@@ -394,4 +705,7 @@ def write_glb():
 
 
 if __name__ == "__main__":
-    build(); stats=write_glb(); print(json.dumps({"glb":str(OUTPUT),**stats}))
+    build()
+    validate_rock_vertices_inside_tank()
+    stats=write_glb()
+    print(json.dumps({"glb":str(OUTPUT),**stats}))

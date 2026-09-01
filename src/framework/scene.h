@@ -24,6 +24,8 @@ struct SceneDiagnostics
     float volumeStrength = 0.0f;
     float anisotropy = 0.0f;
     float exposure = 0.0f;
+    float renderScale = 1.0f;
+    float smoothedFrameMilliseconds = 0.0f;
     bool paused = false;
 };
 

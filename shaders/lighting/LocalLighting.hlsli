@@ -21,8 +21,13 @@ cbuffer LocalLightingConstants : register(b3)
 
 float3 EvaluateLocalLighting(float3 worldPosition, float3 normal)
 {
-    float3 result = 0.0;
     const uint lightCount = min((uint)gLocalLightControl.x, 8u);
+    if (gLocalLightControl.y < 0.5 || lightCount == 0u)
+    {
+        return 0.0;
+    }
+
+    float3 result = 0.0;
     [loop]
     for (uint index = 0; index < lightCount; ++index)
     {

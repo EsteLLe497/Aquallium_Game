@@ -33,6 +33,31 @@ GameObject* ObjectWorld::FindByName(const std::wstring& name) const
     return pending != pendingObjects_.end() ? pending->get() : nullptr;
 }
 
+GameObject* ObjectWorld::FindFirstByTag(const std::wstring& tag) const
+{
+    const std::vector<GameObject*> matches = FindAllByTag(tag);
+    return matches.empty() ? nullptr : matches.front();
+}
+
+std::vector<GameObject*> ObjectWorld::FindAllByTag(
+    const std::wstring& tag) const
+{
+    std::vector<GameObject*> matches;
+    const auto appendMatches = [&matches, &tag](const auto& source)
+    {
+        for (const auto& object : source)
+        {
+            if (!object->IsDestroyRequested() && object->HasTag(tag))
+            {
+                matches.push_back(object.get());
+            }
+        }
+    };
+    appendMatches(objects_);
+    appendMatches(pendingObjects_);
+    return matches;
+}
+
 void ObjectWorld::Update(const FrameContext& frame)
 {
     ActivatePendingObjects();

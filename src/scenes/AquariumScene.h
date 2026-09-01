@@ -10,6 +10,8 @@
 
 #include "../AquariumRenderer.h"
 #include "../framework/scene.h"
+#include "../physics/CollisionWorld.h"
+#include "../player/PlayerManager.h"
 
 #include <filesystem>
 
@@ -34,6 +36,10 @@ public:
     {
         return settings_.localLighting;
     }
+    [[nodiscard]] lighting::HeroTankLightingRig& GetHeroTankLighting() noexcept
+    {
+        return settings_.heroTankLighting;
+    }
 
 private:
     void ResetSettings();
@@ -43,13 +49,23 @@ private:
     void SelectUnderwaterArchView();
     void SelectJellyfishReverseValidationView();
     void SelectWatatsumiTankView();
-    void UpdateCamera(float deltaTime, const framework::InputSystem& input);
+    void SelectContinuousAquariumView();
+    void UpdatePlayer(float deltaTime, const framework::InputSystem& input);
     void UpdateLightingTuning(float deltaTime, const framework::InputSystem& input);
+    void BuildStageGlassCollision();
+    void BuildRouteCollision();
+    void BuildUnderwaterArchCollision();
+    void BuildWatatsumiCollision();
+    void BuildContinuousCollision();
+    void ResetPlayer();
 
     AquariumRenderer renderer_;
     AquariumSettings settings_;
     float simulationTime_ = 0.0f;
-    bool watatsumiRampTracking_ = false;
-    float watatsumiRampT_ = 0.0f;
-    float watatsumiRampMaximumT_ = 0.0f;
+    physics::CollisionWorld stageGlassCollision_;
+    physics::CollisionWorld routeCollision_;
+    physics::CollisionWorld underwaterArchCollision_;
+    physics::CollisionWorld watatsumiCollision_;
+    physics::CollisionWorld continuousCollision_;
+    player::PlayerManager playerManager_;
 };

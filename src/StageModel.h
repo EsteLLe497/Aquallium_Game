@@ -23,8 +23,8 @@ public:
     enum class TransparentLayer
     {
         All,
-        ArchMedium,
-        ArchGlass
+        Medium,
+        Glass
     };
 
     struct ImportOptions
@@ -110,6 +110,8 @@ private:
         std::uint32_t indexStart = 0;
         std::uint32_t indexCount = 0;
         DirectX::XMFLOAT4 baseColor{0.8f, 0.8f, 0.8f, 1.0f};
+        DirectX::XMFLOAT3 boundsMinimum{};
+        DirectX::XMFLOAT3 boundsMaximum{};
         float surfaceType = 0.0f;
         bool transparent = false;
     };

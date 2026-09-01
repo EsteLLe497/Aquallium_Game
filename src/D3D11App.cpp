@@ -285,12 +285,17 @@ void D3D11App::Resize(UINT width, UINT height)
 
 void D3D11App::Update(float deltaTime)
 {
+    // F2 opens the lighting editor. Gameplay owns the cursor only while that
+    // editor is hidden, so mouse-look and ImGui never fight over input.
+    input_.SetRelativeMouseMode(!lightingEditor_.IsVisible());
     input_.Update();
     lightingEditor_.BeginFrame();
     if (auto* aquariumScene = dynamic_cast<AquariumScene*>(
         sceneManager_.GetCurrentScene()))
     {
-        lightingEditor_.Draw(aquariumScene->GetLocalLighting());
+        lightingEditor_.Draw(
+            aquariumScene->GetLocalLighting(),
+            aquariumScene->GetHeroTankLighting());
     }
     if (input_.WasPressed('V'))
     {
@@ -334,10 +339,12 @@ void D3D11App::UpdateWindowTitle(float deltaTime)
     const framework::SceneDiagnostics diagnostics =
         sceneManager_.GetDiagnostics();
     const std::wstring title = std::format(
-        L"Aquarium Lighting Prototype | {:.0f} FPS | {} | {} | Caustics {:.2f} | Volume {:.2f} | g {:.2f} | Exposure {:.2f}{}",
+        L"Aquarium Lighting Prototype | {:.0f} FPS | {} | {} | Scale {:.0f}% / {:.1f} ms | Caustics {:.2f} | Volume {:.2f} | g {:.2f} | Exposure {:.2f}{}",
         fps,
         diagnostics.viewLabel,
         vsyncEnabled_ ? L"VSYNC" : L"UNLOCKED",
+        diagnostics.renderScale * 100.0f,
+        diagnostics.smoothedFrameMilliseconds,
         diagnostics.causticsStrength,
         diagnostics.volumeStrength,
         diagnostics.anisotropy,

@@ -49,6 +49,7 @@ MATERIALS = {
     "ArchWaterSurface": (0.040, 0.360, 0.560, 0.32),
     "TankWaterArch": (0.008, 0.120, 0.300, 0.58),
     "TankGlassArch": (0.055, 0.230, 0.400, 0.16),
+    "ArchBubble": (0.260, 0.720, 1.000, 0.20),
 }
 groups = {name: MeshGroup(name) for name in MATERIALS}
 
@@ -180,6 +181,33 @@ def add_water_surface_grid(x_segments=48, z_segments=24):
             group.indices.extend((a, a + 1, b, a + 1, b + 1, b))
 
 
+def add_bubble_plumes():
+    """One draw-batch of fine bubbles rising from side diffusers to the surface."""
+    banks = (8.0, 24.0, 40.0)
+    for bank_index, bank_x in enumerate(banks):
+        for side_index, side in enumerate((-1.0, 1.0)):
+            plume_z = side * (4.85 + bank_index * 0.12)
+            floor = route_height(bank_x) - 0.42
+            for bubble_index in range(24):
+                u = (bubble_index + 0.35 * side_index) / 23.5
+                height_t = 1.0 - pow(1.0 - min(u, 1.0), 1.55)
+                phase = (
+                    bubble_index * 2.399963 +
+                    bank_index * 1.73 + side_index * 0.91)
+                x = bank_x + math.sin(phase * 1.31) * (0.18 + 0.20 * height_t)
+                z = plume_z + math.cos(phase * 0.87) * (0.14 + 0.24 * height_t)
+                y = floor + (WATER_SURFACE_HEIGHT - 0.12 - floor) * height_t
+                radius = 0.035 + 0.060 * (0.5 + 0.5 * math.sin(phase * 1.91))
+                radius *= 0.76 + height_t * 0.42
+                add_ellipsoid(
+                    "ArchBubble",
+                    (x, y, z),
+                    (radius * 0.84, radius * 1.15, radius),
+                    latitude_segments=4,
+                    longitude_segments=6,
+                    seed=phase)
+
+
 def route_height(x: float) -> float:
     t = max(0.0, min(1.0, x / 48.0))
     smooth = t * t * (3.0 - 2.0 * t)
@@ -309,6 +337,7 @@ def build_layout():
     # A fixed world-space tank surface remains above the descending tunnel.
     # Water depth therefore increases naturally toward the route exit.
     add_water_surface_grid()
+    add_bubble_plumes()
 
     # The published reference uses opaque waist rails below a broad acrylic
     # canopy. Avoid stacked transparent side sheets: their blend order reads as
@@ -417,13 +446,19 @@ def write_glb():
                 "metallicFactor": 0.58 if name == "Metal" else 0.02,
                 "roughnessFactor": 0.16 if name.startswith("Tank") else 0.72,
             },
-            "emissiveFactor": ([0.04, 1.1, 2.0] if name == "EmissiveCyan" else [0, 0, 0]),
+            "emissiveFactor": (
+                [0.04, 1.1, 2.0]
+                if name == "EmissiveCyan"
+                else [0, 0, 0]),
             "alphaMode": (
                 "BLEND"
-                if name.startswith("Tank") or name == "ArchWaterSurface"
+                if (name.startswith("Tank") or
+                    name in {"ArchWaterSurface", "ArchBubble"})
                 else "OPAQUE"
             ),
-            "doubleSided": name.startswith("Tank") or name == "ArchWaterSurface",
+            "doubleSided": (
+                name.startswith("Tank") or
+                name in {"ArchWaterSurface", "ArchBubble"}),
         })
 
     def view(payload, target):

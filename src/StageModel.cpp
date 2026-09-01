@@ -15,8 +15,10 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <bit>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #define CGLTF_IMPLEMENTATION
@@ -164,6 +166,7 @@ void StageModel::Initialize(
     std::vector<std::uint32_t> indices;
     drawBatches_.clear();
     meshCount_ = 0;
+    std::unordered_set<std::uint64_t> geometrySignatures;
 
     using namespace DirectX;
     for (cgltf_size nodeIndex = 0;
@@ -323,6 +326,46 @@ void StageModel::Initialize(
                 }
             }
 
+            // Blender exports can contain several differently named nodes
+            // with byte-identical transformed geometry. Rendering all of them
+            // causes z-fighting and makes a single wall look doubled. Hash the
+            // complete baked primitive and remove exact duplicates only;
+            // nearby, coplanar, or differently materialed pieces remain.
+            constexpr std::uint64_t fnvOffset = 14695981039346656037ull;
+            constexpr std::uint64_t fnvPrime = 1099511628211ull;
+            std::uint64_t geometrySignature = fnvOffset;
+            const auto hashValue = [&geometrySignature](std::uint32_t value)
+            {
+                geometrySignature ^= value;
+                geometrySignature *= fnvPrime;
+            };
+            for (std::size_t vertexIndex = baseVertex;
+                 vertexIndex < vertices.size(); ++vertexIndex)
+            {
+                const Vertex& vertex = vertices[vertexIndex];
+                for (const float value : {
+                    vertex.position.x, vertex.position.y, vertex.position.z,
+                    vertex.normal.x, vertex.normal.y, vertex.normal.z,
+                    vertex.uv.x, vertex.uv.y})
+                {
+                    hashValue(std::bit_cast<std::uint32_t>(value));
+                }
+            }
+            for (const std::uint32_t index : primitiveIndices)
+            {
+                hashValue(index - baseVertex);
+            }
+            if (primitive.material)
+            {
+                hashValue(static_cast<std::uint32_t>(
+                    primitive.material - rawData->materials));
+            }
+            if (!geometrySignatures.insert(geometrySignature).second)
+            {
+                vertices.resize(baseVertex);
+                continue;
+            }
+
             // Flipping Z changes handedness, so reverse triangle winding.
             const std::uint32_t batchIndexStart =
                 static_cast<std::uint32_t>(indices.size());
@@ -459,15 +502,41 @@ void StageModel::Initialize(
                 {
                     primitiveSurfaceType = 22.0f;
                 }
+                else if (std::strcmp(materialName, "ArchBubble") == 0)
+                {
+                    primitiveSurfaceType = 23.0f;
+                }
+                else if (std::strcmp(materialName, "WatatsumiBubble") == 0)
+                {
+                    primitiveSurfaceType = 24.0f;
+                }
                 primitiveTransparent =
                     primitive.material->alpha_mode ==
                     cgltf_alpha_mode_blend;
+            }
+
+            DirectX::XMFLOAT3 boundsMinimum{
+                vertices[baseVertex].position};
+            DirectX::XMFLOAT3 boundsMaximum{
+                vertices[baseVertex].position};
+            for (std::size_t vertexIndex = baseVertex + 1;
+                 vertexIndex < vertices.size(); ++vertexIndex)
+            {
+                const auto& position = vertices[vertexIndex].position;
+                boundsMinimum.x = std::min(boundsMinimum.x, position.x);
+                boundsMinimum.y = std::min(boundsMinimum.y, position.y);
+                boundsMinimum.z = std::min(boundsMinimum.z, position.z);
+                boundsMaximum.x = std::max(boundsMaximum.x, position.x);
+                boundsMaximum.y = std::max(boundsMaximum.y, position.y);
+                boundsMaximum.z = std::max(boundsMaximum.z, position.z);
             }
             drawBatches_.push_back({
                 batchIndexStart,
                 static_cast<std::uint32_t>(
                     indices.size() - batchIndexStart),
                 primitiveBaseColor,
+                boundsMinimum,
+                boundsMaximum,
                 primitiveSurfaceType,
                 primitiveTransparent
             });
@@ -798,8 +867,51 @@ void StageModel::RenderPass(
     }
     context->RSSetState(rasterizerState_.Get());
 
+    const auto isVisible = [&currentViewProjection](const DrawBatch& batch)
+    {
+        using namespace DirectX;
+        const XMFLOAT3& minimum = batch.boundsMinimum;
+        const XMFLOAT3& maximum = batch.boundsMaximum;
+        unsigned outsideLeft = 0;
+        unsigned outsideRight = 0;
+        unsigned outsideBottom = 0;
+        unsigned outsideTop = 0;
+        unsigned outsideNear = 0;
+        unsigned outsideFar = 0;
+        for (unsigned corner = 0; corner < 8; ++corner)
+        {
+            const XMVECTOR position = XMVectorSet(
+                ((corner & 1u) != 0 ? maximum.x : minimum.x) +
+                    ((corner & 1u) != 0 ? 0.35f : -0.35f),
+                ((corner & 2u) != 0 ? maximum.y : minimum.y) +
+                    ((corner & 2u) != 0 ? 0.35f : -0.35f),
+                ((corner & 4u) != 0 ? maximum.z : minimum.z) +
+                    ((corner & 4u) != 0 ? 0.35f : -0.35f),
+                1.0f);
+            const XMVECTOR clip = XMVector4Transform(
+                position, currentViewProjection);
+            const float x = XMVectorGetX(clip);
+            const float y = XMVectorGetY(clip);
+            const float z = XMVectorGetZ(clip);
+            const float w = XMVectorGetW(clip);
+            outsideLeft += x < -w;
+            outsideRight += x > w;
+            outsideBottom += y < -w;
+            outsideTop += y > w;
+            outsideNear += z < 0.0f;
+            outsideFar += z > w;
+        }
+        return outsideLeft != 8u && outsideRight != 8u &&
+            outsideBottom != 8u && outsideTop != 8u &&
+            outsideNear != 8u && outsideFar != 8u;
+    };
+
     auto drawBatch = [&](const DrawBatch& batch)
     {
+        if (!isVisible(batch))
+        {
+            return;
+        }
         D3D11_MAPPED_SUBRESOURCE mapped{};
         ThrowIfFailed(
             context->Map(
@@ -865,12 +977,13 @@ void StageModel::RenderPass(
     context->PSSetSamplers(3, 1, &refractionSampler);
     for (const DrawBatch& batch : drawBatches_)
     {
-        const bool isArchGlass =
-            batch.surfaceType > 8.5f && batch.surfaceType < 9.5f;
+        const bool isRefractiveGlass =
+            (batch.surfaceType > 8.5f && batch.surfaceType < 9.5f) ||
+            (batch.surfaceType > 16.5f && batch.surfaceType < 17.5f);
         const bool matchesLayer =
             layer == TransparentLayer::All ||
-            (layer == TransparentLayer::ArchMedium && !isArchGlass) ||
-            (layer == TransparentLayer::ArchGlass && isArchGlass);
+            (layer == TransparentLayer::Medium && !isRefractiveGlass) ||
+            (layer == TransparentLayer::Glass && isRefractiveGlass);
         if (batch.transparent && matchesLayer)
         {
             drawBatch(batch);

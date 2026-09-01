@@ -256,9 +256,299 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
   closest point on the authored window rectangle once per dry pixel, while the
   depth atmosphere uses the already available world/camera distance. All color,
   intensity, extent, range and fog values are exposed in the F2 lighting editor.
+- Enlarged the Watatsumi hero tank to a 29.0 m-wide, 12.1 m-high flat-front
+  semi-elliptical volume and kept its CPU lighting bounds, HLSL absorption,
+  acrylic edge response, generated geometry and traversal collision in one
+  consistent meter-scale coordinate system.
+- Raised the two-storey hall and concealed ramp together instead of scaling the
+  render mesh alone. The 89.272 m route validates at a 17.31% maximum grade,
+  3.52 m usable width and 3.38 m player head clearance across 2,880 samples.
+- Replaced rectangular portal gaps with generated elliptical portal collars:
+  side shoulders and segmented curved spandrels meet the tunnel crown while
+  retaining 6.16 m lower-entry clearance and a clear upper landing.
+- Added a texture-free architectural material hierarchy inspired by optimized
+  social-VR aquarium worlds. World-space hashed stone modules, large wall
+  panels, dark ceilings and brushed trim share the existing Stage shader and
+  require no new textures, samplers, lights or render passes.
+- Rebalanced dark-scene visibility with low-level hemispherical ambience and
+  material-aware tank/local-light response instead of a global fill light.
+  This preserves silhouettes and navigation seams without flattening depth.
+- Reused the existing Watatsumi ramp batch for skirting and the hero-window
+  reveal frame, so the added architectural detail introduces no new material
+  batch. Disabled/empty local-light rigs now exit before entering the GPU loop.
+- Added zero-contribution pass elimination: Watatsumi and plain-greybox modes
+  no longer execute the one-third-resolution six-step volume ray march or its
+  temporal history pass when their authored volume strength is zero. The final
+  composite also skips its five bilateral volume taps through a uniform branch.
+- Extended the tagged capsule controller from the hero hall to the entrance,
+  vestibule, jellyfish gallery and descending underwater arch. Adjacent floor
+  rectangles now meet without artificial capsule-radius seams; authored wall,
+  furniture, acrylic, rail and ramp tags provide the physical boundaries.
+- Re-authored the Watatsumi facade as exact non-overlapping intervals. The rear
+  shell, sealed service voids, portal shoulders and tank jambs now share edge
+  coordinates, removing the former four-metre hidden gap and portal overlap.
+- Completed the upper-floor safety envelope with rendered and collidable rear
+  cross-passage rails. Portal collars reuse the existing brushed ramp material,
+  adding contrast and wayfinding without another material batch or light pass.
+- Added external regression validation instead of startup assertions: a grid
+  reachability probe verifies both directions through Route 01-02, while exact
+  rail clearance and Watatsumi seam dimensions are checked alongside the
+  existing 2,880-sample helical-ramp traversal.
+- Added capsule collision to the imported glass-side preview as well, including
+  a tagged acrylic boundary and dry-side perimeter walls. The GLB importer now
+  hashes fully baked vertices, indices and material identity to suppress exact
+  duplicate mesh instances while preserving merely adjacent or coplanar parts.
+- Unified generated-stage rendering and collision under the same -2.25 m world
+  floor offset. Entrance, jellyfish, underwater-arch and Watatsumi eye heights,
+  wall volumes, ramp points and upper-floor rails now share one coordinate
+  convention, eliminating the apparent 2.25 m player hover.
+- Expanded the Watatsumi concealed arch from 4.20 m to 5.40 m wide and from
+  5.20 m to 6.10 m high. Entrance/exit portals grew to 6.20 m, both upper side
+  walks and the rear cross-passage grew to 5.40 m, and the hall ceiling rose
+  to preserve a 4.28 m head-clearance margin above the player capsule.
+- Added a 0.12 m camera/body safety inset to path-wall resolution. Static and
+  live wall-push probes keep the underwater-arch centre within 2.60 m and the
+  widened Watatsumi ramp within 2.24 m, preventing near-plane peeks outside
+  the rendered glass/architecture without adding per-frame render work.
+- Rebuilt the Watatsumi upper gallery as a dimension-driven H plan: two
+  complete 25.0 x 5.4 m arms joined by a centred 5.4 m cross-passage. Rails
+  are emitted only along exposed perimeter segments, split at every walkway
+  junction, and mirrored by named collision rails so geometry cannot pierce
+  an opening or extend beyond its supporting floor.
+- Reparameterized the concealed ramp height from horizontal travel distance.
+  A two-metre integrated grade blend produces zero slope and exact floor
+  height at both portals while holding the internal maximum grade to 15.76%,
+  removing the former 0.18 m / 0.12 m landing snaps.
+- Calibrated the first-person capsule to a deliberately tall 1.95 m adult:
+  1.95 m body height, a game-readable 1.89 m eye height, 0.32 m radius and
+  0.32 m step height.
+  Rendering, collision clearance and all preview spawn heights consume the
+  same capsule values.
+- Upgraded the Watatsumi tank to the arch-quality sequential transparency
+  path: water first refracts the opaque tank, the HDR result is copied once,
+  then thick acrylic refracts the already-filtered water. Beer-Lambert
+  transmission now uses the actual rendered 10.20 m waterline instead of the
+  pre-offset 12.45 m authoring coordinate.
+- Re-authored three water-surface light banks from the same CPU definitions
+  used by highlights, refracted axes and caustics. The full-screen volume pass
+  remains disabled in this hall, retaining the prior GPU budget while adding
+  only one HDR copy and no extra transparent geometry draws.
+- Removed all five ellipsoid placeholder rocks from the hero tank, leaving a
+  clear exhibit volume for later fish and environment authoring.
+- Added a route-aware render graph fast path. Authored rooms no longer execute
+  the full-screen analytic aquarium that was immediately cleared, nor render
+  three unused 512 x 512 prototype shadow maps. Routes without temporal volume
+  bind only the HDR color target, eliminating full-resolution depth and motion
+  writes without changing the visible lighting result.
+- Split the route composite from the underwater composite. Practical-light
+  bloom uses two symmetric bilinear taps instead of the generic four-corner
+  filter, and the zero-volume route path avoids an unnecessary depth fetch.
+- Reduced thick-acrylic screen-space refraction from three scene fetches to one
+  while retaining restrained chromatic dispersion analytically at grazing
+  angles. Water absorption, Fresnel reflection, caustics and lighting remain
+  unchanged.
+- Added hysteretic dynamic resolution with discrete 100%, 90%, 82%, 76% and
+  70% tiers. It targets 100 FPS, waits 0.8 seconds between decisions, ignores
+  large timing spikes and requires 24% headroom before increasing quality,
+  preventing resource-allocation thrash and resolution oscillation.
+- Added primitive-batch AABB frustum culling with a 0.35 m displacement safety
+  margin, preparing later rooms and instanced fish schools to skip completely
+  off-camera geometry before issuing draw calls.
+- Added reproducible route benchmarks through `AQUARIUM_START_VIEW` and exposed
+  render scale plus smoothed frame time in the window diagnostics. On the same
+  Debug x64 1280 x 720 capture, the Watatsumi view improved from 89 FPS to
+  127 FPS at native scale; the entrance/jellyfish route measured 115 FPS and
+  the underwater arch 151 FPS. A 1920 x 1080 stress capture recovered to
+  105 FPS at the 70% safety tier.
 
 References:
 
 - https://shikoku-aquarium.jp/special/blog/archive/8/
 - https://shikoku-aquarium.jp/information/
 - https://www.taisei-design.jp/de/works/2020/shikokuaquarium.html
+# Tagged capsule collision and NavMesh-ready traversal
+
+- Implemented a reusable player capsule controller with sub-stepped movement
+  to prevent tunnelling and axis-separated wall sliding.
+- Replaced brute-force helical-ramp sampling with stateful local polyline
+  projection, preventing vertically overlapping turns from being confused.
+- Separated render geometry from tagged collision records (`Walkable`, `Ramp`,
+  `Glass`, `Rail`, `Water`, and `Trigger`) and layer masks.
+- Added tag queries to the reusable `GameObject` / `ObjectWorld` framework.
+- Authored walkable and ramp surfaces so the same semantic data can later feed
+  an enemy-AI NavMesh without coupling player collision to pathfinding.
+
+# Lightweight underwater-arch surface lighting
+
+- Preserved the open-water composition and fixed 5.80 m water surface instead
+  of covering the route with additional service-ceiling geometry.
+- Added 144 small low-poly bubbles as one transparent material batch. Side
+  diffuser plumes widen and become denser toward the surface; a thin-film
+  Fresnel/glint shader leaves the bubble interiors nearly invisible.
+- Removed the six crossed transparent light cards after their boundaries
+  became visible from moving viewpoints. The production path now evaluates
+  true water-volume scattering from the authored fixture positions; there is
+  no beam geometry or camera-facing light curtain in the stage GLB.
+- Re-enabled the existing one-third-resolution temporal volume buffer for the
+  arch. Three centered ray samples evaluate the relevant adjacent light pair,
+  then temporal reprojection and depth-aware bilateral upsampling restore a
+  continuous shaft without paying for a full-resolution march.
+- Matched the CPU refraction surface to the exact multi-octave displaced water
+  mesh, including diffuser-linked radial waves and the capillary octave. Two
+  fixed-point intersections place each light on the moving surface; its height
+  gradient supplies the normal used by Snell refraction (air IOR 1.0 to water
+  IOR 1.333), so the shaft origin and direction move with visible water.
+- Corrected Henyey-Greenstein evaluation to use the light travel direction and
+  the direction from the sample toward the eye. Shaft brightness therefore
+  changes naturally as the player walks around or looks toward/away from a
+  source instead of behaving like a fixed translucent decal.
+- Raised only the arch scattering multiplier from 0.26 to 0.34 after visual
+  review. This makes the physical shaft readable without adding samples or
+  transparent draws; the repeatable 1280 x 720 benchmark measured 143 FPS at
+  100% render scale, and the final capture reported 146 FPS.
+- Strengthened the arch-only water displacement by 34% and added a capillary
+  octave. Each of the six authored bubble diffusers now acts as the nearest
+  radial wave source; the analytic height and gradient drive both displaced
+  vertices and the water normal without CPU particle simulation.
+- Added a coherent wobble to the existing single-batch bubble mesh, visually
+  connecting the rising plumes to their surface disturbances. The dry route
+  remains static and keeps the after-hours contrast.
+- Enlarged receiver caustics from a 0.42 to 0.20 world-space frequency scale,
+  widened the ridge threshold from 0.22 to 0.38, and increased floor/rock
+  response. The pattern uses the refracted surface projection and a faster
+  water time axis, producing broad moving bands instead of dense thin lines.
+- Rejected the first per-pixel bubble-gradient caustics experiment after a
+  113 FPS capture. Removing its floor-wide sqrt/exp/gradient work retained the
+  linked surface motion and bold caustics; the final repeatable 1280 x 720
+  route benchmark measured 144 FPS at 100% render scale.
+
+References:
+
+- https://www.georgiaaquarium.org/gallery/ocean-voyager/
+- https://www.visitsealife.com/sydney/information/news/7-most-instagrammable-places-in-sydney-aquarium/
+- https://www.visitsealife.com/birmingham/explore/aquarium-zones/ocean-tunnel/
+- https://canadianpond.ca/solutions/bubble-curtains/
+
+# Data-oriented multi-species aquarium schooling
+
+- Added a procedural 130-triangle small-fish mesh with GPU vertex deformation:
+  the head remains stable while phase-shifted amplitude grows toward the tail.
+  Per-instance scale, tint, swim rate and phase create variation without extra
+  models, bones or animation draws.
+- Implemented fixed-30 Hz CPU Boids using a 2.4 m spatial hash. Alignment,
+  cohesion and separation search only the 27 adjacent grid cells, while an
+  authored looping school target controls exhibit composition and dedicated
+  habitat steering prevents fish from entering glass, floor or dry walkways.
+- Added a second sparse medium-fish profile without duplicating geometry. The
+  species id changes proportions, tint, glint and Boids weights in the existing
+  instanced shader, producing slower and less cohesive individuals at negligible
+  CPU and asset cost.
+- Rendered 54 small fish, 9 medium fish and 2 rays in the underwater arch; the
+  Watatsumi tank uses 108 small fish, 12 medium fish and 3 rays. Per-instance
+  frustum/distance rejection happens before compact dynamic-buffer uploads.
+- Split the arch's small population into three 15-fish wide-route schools and
+  one 9-fish entrance school, keeping the total at 54. Distinct route centres
+  cover the entrance, middle and deep end without raising the simulation or
+  instance budget. The overhead habitat derives its lower bound from the same
+  semi-ellipse used by the acrylic canopy, keeping fish between glass and the
+  water surface throughout the descending route.
+- Used an analytic authored spline for the large rays instead of applying Boids
+  to every species. A 27-triangle procedural ray mesh receives GPU wing
+  deformation, keeping these sparse hero silhouettes deterministic and cheap.
+- Added a true 22 m geometry LOD for small fish. Near silhouettes retain the
+  130-triangle mesh; distant instances use a 10-triangle octahedral fish,
+  reducing their triangle cost by 92%. Near, far and ray batches require at
+  most three `DrawIndexedInstanced` calls for the whole habitat.
+- Added a view-from-below silhouette response for overhead fish. Dark bodies
+  with a restrained cyan Fresnel rim provide a fish-shadow cue without another
+  draw call or shadow map. Biology is submitted before water and acrylic, so it
+  participates in the established sequential absorption/refraction path.
+- The arch's global exposure remains unchanged for an after-hours mood. A long
+  broken emissive spine is evaluated directly on the displaced water surface,
+  while stronger Beer-Lambert distance absorption and cyan in-scattering make
+  the outer water volume readable without lifting the dry walkway.
+- Reused the existing one-third-resolution, two-step temporal volume buffer.
+  An initial all-three-light evaluation measured 126 FPS in capture and was
+  rejected. A fixed coherent route split samples banks 0/1 before 32 m and
+  banks 1/2 afterwards, covering the entire route without per-pixel ranking.
+- Debug x64 validation reported zero warnings and zero errors. The repeatable
+  1280 x 720 route benchmark retained 100% render scale at 174 FPS in the
+  underwater arch, 122 FPS in the entrance route and 124 FPS in Watatsumi.
+  The final full-resolution visual capture measured 146 FPS while screen
+  capture and the development UI were active.
+
+# Sumida-inspired hero-tank art and runtime light puzzle
+
+- Reworked the large viewing tank around Sumida Aquarium's Ogasawara Sea
+  composition: a bright Bonin-blue upper layer, three separated fish layers,
+  a darker central channel, side reef shelves and a sparse open-water ray
+  silhouette. This is an original layout using the real exhibit as lighting
+  and habitat reference, not a literal venue copy.
+- Replaced placeholder round rocks with 35 deterministic faceted boulders.
+  Side cliffs and lower outcrops share one opaque material batch; broad and
+  fine shader mottling adds wet volcanic variation without texture fetches.
+- Added three 24-bubble aeration columns as one transparent draw. The water
+  surface is a 24 x 32 displaced grid whose analytic wave gradient includes
+  the same three diffuser positions, linking bubbles and surface motion.
+- Kept the established 108 small fish, 12 medium fish and three rays within
+  three instanced biology draws. Distinct upper, middle, lower and crossing
+  targets, plus yellow and deep-cyan school palettes, create species variety
+  without raising the Boids or draw-call budget.
+- Split the large tank's optical responsibilities: water performs the single
+  screen-space refraction and Beer-Lambert absorption, while the flat acrylic
+  is now a lightweight Fresnel/edge/source-reflection overlay. The second
+  full-resolution scene copy used by curved arch glass is skipped here.
+- Added `HeroTankLightingRig` as gameplay-owned state with default and
+  alternate HDR colours, intensity and a switch flag. F2 / Lighting exposes
+  both palettes and a preview toggle; future puzzle code only changes the flag
+  and can use the same value to reveal colour-keyed cipher materials.
+- Replaced the large pane's generic three-light exponential evaluation with a
+  three-bank polynomial footprint and two broad travelling caustic ridges.
+  Detailed tunnel caustics remain unchanged. Cell-based shader motes were
+  removed after visual review exposed square artifacts; real geometry bubbles
+  now provide that depth cue.
+- Corrected adaptive-resolution recovery from an overly conservative 24%
+  headroom requirement to a 9% guard band. After an expensive load frame the
+  renderer can recover quality instead of remaining stranded at 82% scale.
+- Final Debug x64 build completed with zero warnings and zero errors. A
+  1280 x 720, 15-second warm capture reported 99 FPS at 90% render scale and
+  10.2 ms while the development title diagnostics and screen capture were
+  active. The generated hall contains eight material batches, 8,467 triangles,
+  35 reef boulders and 72 bubbles.
+- Re-composed the final hero lighting from aquarium installation references:
+  one broad 58-degree, 5000 K-like key sits 1.10 m above the central water
+  surface, while two smaller 32-degree fixtures sit over the side reefs and
+  aim inward. The former acrylic-edge emitter was removed. All three reuse the
+  existing shadow/light slots, so no shadow map, light loop or draw was added.
+- Extended the fish constant buffer with the shared hero-light palette. A
+  front-to-rear key-light falloff, paired polynomial side footprints and blue
+  rear-depth attenuation separate overlapping schools without sorting them or
+  rendering a second lighting pass. Fixed side-light directions avoid two
+  per-pixel normalizations on the small silhouettes.
+- Added F2 controls for the overhead key colour, key intensity and paired side
+  intensity. The side sources follow the default/alternate puzzle palette,
+  while the cool-white key preserves navigation and fish readability during a
+  colour-switch event.
+- Added generation-time containment for every rock vertex against the actual
+  flat-front/semi-ellipse tank equation and waterline. Forty-one boulders,
+  including asymmetric three-tier side reefs, pass the test; no reef can cross the
+  acrylic, rear shell or surface after procedural parameter edits.
+- The rear service shell is detected analytically inside the existing rock
+  batch. Its tiled caustic/mottle response is replaced by low-frequency blue
+  geological variation, removing the visible wallpaper pattern without a new
+  material or draw call.
+- Visual iteration retained a 5000 K-like 1.00/0.91/0.76 source but applies
+  wavelength-biased attenuation only to the water shaft. Fish retain natural
+  colour rendering while the visible volume remains cyan-blue. The final model
+  contains 8,647 triangles and 41 reef boulders in one batch. A Debug
+  1280 x 720, 15-second warm capture reported 111 FPS at 82% render scale and
+  9.2 ms. A 5% recovery experiment reached 90% scale but oscillated near the
+  target (94 FPS / 10.7 ms), so the stable 9% guard was retained.
+
+References:
+
+- https://www.sumida-aquarium.com/about/floor/ogasawara/
+- https://sumida-aquarium.com/column/hkj7xueuc2/
+- https://sumida-aquarium.com/column/4843/
+- https://www.iwasaki.co.jp/tech-rep/facility/95/
+- https://www.michida.com/detail/12/

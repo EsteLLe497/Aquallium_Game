@@ -106,6 +106,89 @@ DirectX::XMMATRIX BuildStageViewProjection(
         120.0f);
     return view * projection;
 }
+
+struct ArchSurfaceWaveSample
+{
+    float heightOffset;
+    float derivativeX;
+    float derivativeZ;
+};
+
+ArchSurfaceWaveSample EvaluateArchSurfaceWave(
+    float surfaceX,
+    float surfaceZ,
+    float time)
+{
+    // Keep the CPU light refraction surface identical to the water mesh in
+    // Stage.hlsl. Light launch points and Snell axes therefore move with the
+    // surface that the player can actually see instead of a hidden proxy wave.
+    const float phaseA =
+        surfaceX * 0.48f + surfaceZ * 0.31f + time * 0.55f;
+    const float phaseB =
+        surfaceX * -0.27f + surfaceZ * 0.63f - time * 0.42f;
+    const float phaseC =
+        surfaceX * 1.08f + surfaceZ * -0.86f + time * 0.73f;
+    const float phaseD =
+        surfaceX * 2.15f + surfaceZ * 1.72f - time * 1.08f;
+    constexpr float waveScale = 1.34f;
+    ArchSurfaceWaveSample sample{
+        (std::sin(phaseA) * 0.140f +
+         std::sin(phaseB) * 0.090f +
+         std::sin(phaseC) * 0.035f +
+         std::sin(phaseD) * 0.018f) * waveScale,
+        (std::cos(phaseA) * 0.140f * 0.48f +
+         std::cos(phaseB) * 0.090f * -0.27f +
+         std::cos(phaseC) * 0.035f * 1.08f +
+         std::cos(phaseD) * 0.018f * 2.15f) * waveScale,
+        (std::cos(phaseA) * 0.140f * 0.31f +
+         std::cos(phaseB) * 0.090f * 0.63f +
+         std::cos(phaseC) * 0.035f * -0.86f +
+         std::cos(phaseD) * 0.018f * 1.72f) * waveScale
+    };
+
+    const float bankIndex = std::clamp(
+        std::round((surfaceX - 8.0f) / 16.0f),
+        0.0f,
+        2.0f);
+    const float bankX = 8.0f + bankIndex * 16.0f;
+    const float plumeMagnitude = 4.85f + bankIndex * 0.12f;
+    const float plumeZ = surfaceZ < 0.0f
+        ? -plumeMagnitude
+        : plumeMagnitude;
+    const float deltaX = surfaceX - bankX;
+    const float deltaZ = surfaceZ - plumeZ;
+    const float radiusSquared =
+        deltaX * deltaX + deltaZ * deltaZ;
+    const float falloff = std::clamp(
+        1.0f - radiusSquared * 0.034f,
+        0.0f,
+        1.0f);
+    const float envelope = falloff * falloff;
+    const float bubblePhase =
+        radiusSquared * 0.58f - time * 1.55f + bankIndex * 0.83f;
+    constexpr float bubbleAmplitude = 0.082f;
+    sample.heightOffset +=
+        std::sin(bubblePhase) * bubbleAmplitude * envelope;
+    const float envelopeDerivative = falloff > 0.0f
+        ? -0.068f * falloff
+        : 0.0f;
+    const float derivativeByRadiusSquared = bubbleAmplitude * (
+        std::cos(bubblePhase) * 0.58f * envelope +
+        std::sin(bubblePhase) * envelopeDerivative);
+    sample.derivativeX +=
+        2.0f * deltaX * derivativeByRadiusSquared;
+    sample.derivativeZ +=
+        2.0f * deltaZ * derivativeByRadiusSquared;
+
+    const float capillaryPhase =
+        surfaceX * 3.60f + surfaceZ * 2.90f + time * 1.35f;
+    sample.heightOffset += std::sin(capillaryPhase) * 0.026f;
+    sample.derivativeX +=
+        std::cos(capillaryPhase) * 0.026f * 3.60f;
+    sample.derivativeZ +=
+        std::cos(capillaryPhase) * 0.026f * 2.90f;
+    return sample;
+}
 }
 
 void AquariumRenderer::Initialize(ID3D11Device* device, const std::filesystem::path& shaderPath)
@@ -238,9 +321,29 @@ void AquariumRenderer::Initialize(ID3D11Device* device, const std::filesystem::p
         watatsumiTankPath,
         stageShaderPath,
         aquariumGreyboxImport);
+
+    const std::filesystem::path continuousShellPath =
+        shaderPath.parent_path().parent_path() /
+        L"model" /
+        L"aquarium_continuous_shell.glb";
+    continuousShellModel_.Initialize(
+        device,
+        continuousShellPath,
+        stageShaderPath,
+        aquariumGreyboxImport);
+    StageModel::ImportOptions continuousArchImport = aquariumGreyboxImport;
+    continuousArchImport.translation = {22.0f, 0.0f, 17.80f};
+    continuousArchModel_.Initialize(
+        device,
+        underwaterArchPath,
+        stageShaderPath,
+        continuousArchImport);
     jellyfishRenderer_.Initialize(
         device,
         shaderPath.parent_path() / L"Jellyfish.hlsl");
+    fishRenderer_.Initialize(
+        device,
+        shaderPath.parent_path() / L"Fish.hlsl");
 }
 
 void AquariumRenderer::Render(
@@ -260,7 +363,39 @@ void AquariumRenderer::Render(
     // 5. ガラス屈折、色収差、Bloom、Tone Mappingを含む最終合成
     Microsoft::WRL::ComPtr<ID3D11Device> device;
     context->GetDevice(device.GetAddressOf());
-    EnsureSizeResources(device.Get(), width, height);
+    adaptiveResolution_.Update(
+        deltaTime,
+        settings.adaptiveResolution && settings.stageMode,
+        settings.targetFrameRate);
+    const float renderScale = adaptiveResolution_.Scale();
+    // Eight-pixel alignment keeps viewport/resource changes infrequent and is
+    // friendly to common GPU tile and compute group dimensions.
+    const UINT renderWidth = std::max(
+        8u,
+        std::min(
+            width,
+            (static_cast<UINT>(width * renderScale) + 7u) & ~7u));
+    const UINT renderHeight = std::max(
+        8u,
+        std::min(
+            height,
+            (static_cast<UINT>(height * renderScale) + 7u) & ~7u));
+    EnsureSizeResources(device.Get(), renderWidth, renderHeight);
+
+    const bool heroTankScene =
+        settings.watatsumiTankMode || settings.continuousMapMode;
+    const bool translatedArchRegion =
+        settings.continuousMapMode && settings.cameraPositionX > 19.0f;
+    const bool archLightingScene =
+        settings.underwaterArchMode || translatedArchRegion;
+    const bool volumePassEnabled =
+        settings.volumeStrength > 0.001f &&
+        !settings.greyboxMode &&
+        !heroTankScene;
+    // Authored route views completely replace the old analytic aquarium.
+    // They also need depth/motion MRTs only when the temporal volume pass is
+    // active. Keeping those attachments off saves two full-resolution writes.
+    const UINT sceneTargetCount = volumePassEnabled ? 3u : 1u;
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
     ThrowIfFailed(
@@ -273,23 +408,24 @@ void AquariumRenderer::Render(
         previousStageMode_ == settings.stageMode &&
         previousGreyboxMode_ == settings.greyboxMode &&
         previousUnderwaterArchMode_ == settings.underwaterArchMode &&
-        previousWatatsumiTankMode_ == settings.watatsumiTankMode;
+        previousWatatsumiTankMode_ == settings.watatsumiTankMode &&
+        previousContinuousMapMode_ == settings.continuousMapMode;
     auto* constants = static_cast<FrameConstants*>(mapped.pData);
     *constants = {
         time,
         deltaTime,
-        static_cast<float>(width),
-        static_cast<float>(height),
+        static_cast<float>(renderWidth),
+        static_cast<float>(renderHeight),
         settings.cameraYaw,
         settings.cameraPitch,
         settings.causticsStrength,
         (settings.greyboxMode && !settings.underwaterArchMode &&
-         !settings.watatsumiTankMode)
+         !heroTankScene)
             ? 0.0f
             : settings.volumeStrength *
                 (settings.underwaterArchMode
-                    ? 0.20f
-                    : (settings.watatsumiTankMode ? 0.0f : 1.0f)),
+                    ? 0.34f
+                    : (heroTankScene ? 0.0f : 1.0f)),
         settings.exposure,
         settings.waterClarity,
         settings.anisotropy,
@@ -305,7 +441,7 @@ void AquariumRenderer::Render(
         settings.cameraPositionX,
         settings.cameraPositionY,
         settings.cameraPositionZ,
-        settings.underwaterArchMode ? 1.0f : 0.0f,
+        archLightingScene ? 1.0f : 0.0f,
         previousCameraPosition_.x,
         previousCameraPosition_.y,
         previousCameraPosition_.z,
@@ -316,7 +452,7 @@ void AquariumRenderer::Render(
     using namespace DirectX;
     std::array<AquariumLight, kMaxAquariumLights> lights{};
     UINT activeLightCount = 3;
-    if (settings.underwaterArchMode)
+    if (archLightingScene)
     {
         activeLightCount = 3;
         constexpr std::array<float, 4> routePositions{
@@ -337,8 +473,11 @@ void AquariumRenderer::Render(
         for (UINT lightIndex = 0; lightIndex < activeLightCount; ++lightIndex)
         {
             lights[lightIndex] = {
-                {routePositions[lightIndex], 7.40f,
-                 lateralPositions[lightIndex]},
+                {routePositions[lightIndex] +
+                    (translatedArchRegion ? 22.0f : 0.0f),
+                 7.40f,
+                 lateralPositions[lightIndex] +
+                    (translatedArchRegion ? 17.80f : 0.0f)},
                 intensity[lightIndex],
                 lightDirections[lightIndex],
                 31.0f,
@@ -347,20 +486,41 @@ void AquariumRenderer::Render(
             };
         }
     }
-    else if (settings.watatsumiTankMode)
+    else if (heroTankScene)
     {
-        activeLightCount = 2;
-        // Broad banks sit above the inferred 650 m3 water surface.  They are
-        // deliberately unequal so the tank reads as the hall's only source.
+        activeLightCount = 3;
+        const DirectX::XMFLOAT3 selectedColor =
+            settings.heroTankLighting.alternateEnabled
+                ? settings.heroTankLighting.alternateColor
+                : settings.heroTankLighting.defaultColor;
+        const float paletteIntensity = std::max(
+            settings.heroTankLighting.intensity,
+            0.0f);
+        // Real exhibit luminaires sit roughly one metre above the water, not on
+        // the viewing acrylic. One broad 5000 K-like key occupies the centre;
+        // two smaller puzzle-colour luminaires sit over the side reefs and aim
+        // inward. All source positions remain inside the tank footprint.
         lights[0] = {
-            {10.0f, 9.2f, -3.6f}, 0.90f,
-            {0.12f, -1.0f, 0.08f}, 42.0f,
-            {0.045f, 0.44f, 1.10f}, 6.45f
+            {14.0f, 11.30f, 0.0f},
+            settings.heroTankLighting.overheadKeyIntensity * paletteIntensity,
+            {0.0f, -1.0f, 0.0f}, 58.0f,
+            settings.heroTankLighting.overheadKeyColor, 10.20f
         };
         lights[1] = {
-            {14.5f, 9.2f, 3.8f}, 0.72f,
-            {-0.10f, -1.0f, -0.06f}, 45.0f,
-            {0.020f, 0.25f, 0.82f}, 6.45f
+            {12.2f, 11.30f, -8.8f},
+            settings.heroTankLighting.sideLightIntensity * paletteIntensity,
+            {0.10f, -1.0f, 0.24f}, 32.0f,
+            {selectedColor.x * 0.88f,
+             selectedColor.y * 0.88f,
+             selectedColor.z * 0.88f}, 10.20f
+        };
+        lights[2] = {
+            {12.2f, 11.30f, 8.8f},
+            settings.heroTankLighting.sideLightIntensity * paletteIntensity,
+            {0.10f, -1.0f, -0.24f}, 32.0f,
+            {selectedColor.x * 0.88f,
+             selectedColor.y * 0.88f,
+             selectedColor.z * 0.88f}, 10.20f
         };
     }
     else
@@ -400,35 +560,73 @@ void AquariumRenderer::Render(
         XMVECTOR surfacePoint =
             lightOrigin + lightAxis * surfaceDistance;
 
-        const float surfaceX = XMVectorGetX(surfacePoint);
-        const float surfaceZ = XMVectorGetZ(surfacePoint);
-        const float waveA = surfaceX * 1.4f + time * 0.63f;
-        const float waveB =
-            (surfaceX * 0.7f + surfaceZ * 1.1f) * 2.2f -
-            time * 0.48f;
-        const float waveC = surfaceZ * 1.7f - time * 0.54f;
-        const float waveD =
-            (-surfaceX * 1.2f + surfaceZ * 0.6f) * 2.5f +
-            time * 0.39f;
-        const float surfaceHeight =
-            lights[lightIndex].surfaceHeight +
-            std::sin(waveA) * 0.055f +
-            std::sin(waveB) * 0.028f +
-            std::sin(waveC) * 0.045f +
-            std::sin(waveD) * 0.022f;
+        float surfaceX = XMVectorGetX(surfacePoint);
+        float surfaceZ = XMVectorGetZ(surfacePoint);
+        ArchSurfaceWaveSample archWave{};
+        float surfaceHeight = lights[lightIndex].surfaceHeight;
+        float derivativeX = 0.0f;
+        float derivativeZ = 0.0f;
+        if (archLightingScene)
+        {
+            // Two cheap fixed-point iterations account for the small X/Z
+            // shift of an angled ray as the displaced surface height changes.
+            for (int surfaceIteration = 0;
+                 surfaceIteration < 2;
+                 ++surfaceIteration)
+            {
+                archWave = EvaluateArchSurfaceWave(
+                    surfaceX,
+                    surfaceZ,
+                    time);
+                surfaceHeight =
+                    lights[lightIndex].surfaceHeight +
+                    archWave.heightOffset;
+                surfaceDistance =
+                    (surfaceHeight - XMVectorGetY(lightOrigin)) / axisY;
+                surfacePoint =
+                    lightOrigin + lightAxis * surfaceDistance;
+                surfaceX = XMVectorGetX(surfacePoint);
+                surfaceZ = XMVectorGetZ(surfacePoint);
+            }
+            archWave = EvaluateArchSurfaceWave(
+                surfaceX,
+                surfaceZ,
+                time);
+            surfaceHeight =
+                lights[lightIndex].surfaceHeight +
+                archWave.heightOffset;
+            derivativeX = archWave.derivativeX;
+            derivativeZ = archWave.derivativeZ;
+        }
+        else
+        {
+            const float waveA = surfaceX * 1.4f + time * 0.63f;
+            const float waveB =
+                (surfaceX * 0.7f + surfaceZ * 1.1f) * 2.2f -
+                time * 0.48f;
+            const float waveC = surfaceZ * 1.7f - time * 0.54f;
+            const float waveD =
+                (-surfaceX * 1.2f + surfaceZ * 0.6f) * 2.5f +
+                time * 0.39f;
+            surfaceHeight =
+                lights[lightIndex].surfaceHeight +
+                std::sin(waveA) * 0.055f +
+                std::sin(waveB) * 0.028f +
+                std::sin(waveC) * 0.045f +
+                std::sin(waveD) * 0.022f;
+            derivativeX =
+                std::cos(waveA) * 0.055f * 1.4f +
+                std::cos(waveB) * 0.028f * 0.7f * 2.2f +
+                std::cos(waveD) * 0.022f * -1.2f * 2.5f;
+            derivativeZ =
+                std::cos(waveB) * 0.028f * 1.1f * 2.2f +
+                std::cos(waveC) * 0.045f * 1.7f +
+                std::cos(waveD) * 0.022f * 0.6f * 2.5f;
+        }
         surfaceDistance =
             (surfaceHeight - XMVectorGetY(lightOrigin)) / axisY;
         surfacePoint =
             lightOrigin + lightAxis * surfaceDistance;
-
-        const float derivativeX =
-            std::cos(waveA) * 0.055f * 1.4f +
-            std::cos(waveB) * 0.028f * 0.7f * 2.2f +
-            std::cos(waveD) * 0.022f * -1.2f * 2.5f;
-        const float derivativeZ =
-            std::cos(waveB) * 0.028f * 1.1f * 2.2f +
-            std::cos(waveC) * 0.045f * 1.7f +
-            std::cos(waveD) * 0.022f * 0.6f * 2.5f;
         const XMVECTOR surfaceNormal = XMVector3Normalize(
             XMVectorSet(-derivativeX, 1.0f, -derivativeZ, 0.0f));
         const XMVECTOR refractedAxis = XMVector3Normalize(
@@ -463,7 +661,7 @@ void AquariumRenderer::Render(
             XMConvertToRadians(lights[lightIndex].coneAngleDegrees),
             1.0f,
             0.03f,
-            settings.underwaterArchMode ? 22.0f : 15.0f);
+            archLightingScene ? 22.0f : 15.0f);
         XMStoreFloat4x4(
             &shadowConstants.lightViewProjection[lightIndex],
             view * projection);
@@ -502,8 +700,11 @@ void AquariumRenderer::Render(
     context->VSSetConstantBuffers(1, 1, &shadowBuffer);
     context->PSSetShader(nullptr, nullptr, 0);
 
+    // Stage lighting evaluates the shared refracted light definitions in
+    // Stage.hlsl and does not sample the prototype shadow array. Do not render
+    // three 512x512 maps that are invisible in every authored route view.
     const UINT shadowLightCount =
-        settings.underwaterArchMode ? 0u : 3u;
+        settings.greyboxMode || archLightingScene ? 0u : 3u;
     for (UINT lightIndex = 0;
          lightIndex < shadowLightCount;
          ++lightIndex)
@@ -525,7 +726,15 @@ void AquariumRenderer::Render(
     context->OMSetRenderTargets(0, nullptr, nullptr);
     context->RSSetState(nullptr);
 
-    const D3D11_VIEWPORT fullViewport{
+    const D3D11_VIEWPORT sceneViewport{
+        0.0f,
+        0.0f,
+        static_cast<float>(renderWidth),
+        static_cast<float>(renderHeight),
+        0.0f,
+        1.0f
+    };
+    const D3D11_VIEWPORT outputViewport{
         0.0f,
         0.0f,
         static_cast<float>(width),
@@ -543,27 +752,25 @@ void AquariumRenderer::Render(
     context->PSSetConstantBuffers(1, 1, &shadowBuffer);
 
     // Pass 1: full-resolution HDR scene and analytic linear depth.
-    context->RSSetViewports(1, &fullViewport);
+    context->RSSetViewports(1, &sceneViewport);
     ID3D11RenderTargetView* sceneTargets[] = {
         sceneColorTarget_.Get(),
         sceneDepthTarget_.Get(),
         motionTarget_.Get()
     };
-    context->OMSetRenderTargets(3, sceneTargets, nullptr);
-    context->PSSetShader(scenePixelShader_.Get(), nullptr, 0);
-    context->Draw(3, 0);
-
-    // Route preview owns the complete frame. Remove the old analytic room so
-    // the authored tanks, rather than a full-screen aquarium, light the hall.
     if (settings.greyboxMode)
     {
+        context->OMSetRenderTargets(
+            sceneTargetCount, sceneTargets, nullptr);
+        // Route preview owns the complete frame. Start directly from its dark
+        // hall instead of raymarching a full-screen aquarium and clearing it.
         const float routeDarkHall[4] = {
             0.00015f, 0.00035f, 0.00065f, 1.0f
         };
         const float watatsumiBlueBlack[4] = {
             0.000015f, 0.000040f, 0.000100f, 1.0f
         };
-        const float* darkHall = settings.watatsumiTankMode
+        const float* darkHall = heroTankScene
             ? watatsumiBlueBlack
             : routeDarkHall;
         const float farDepth[4] = {30.0f, 30.0f, 30.0f, 30.0f};
@@ -571,23 +778,49 @@ void AquariumRenderer::Render(
         context->ClearRenderTargetView(
             sceneColorTarget_.Get(),
             darkHall);
-        context->ClearRenderTargetView(
-            sceneDepthTarget_.Get(),
-            farDepth);
-        context->ClearRenderTargetView(
-            motionTarget_.Get(),
-            zeroMotion);
+        if (volumePassEnabled)
+        {
+            context->ClearRenderTargetView(
+                sceneDepthTarget_.Get(),
+                farDepth);
+            context->ClearRenderTargetView(
+                motionTarget_.Get(),
+                zeroMotion);
+        }
+    }
+    else
+    {
+        context->OMSetRenderTargets(3, sceneTargets, nullptr);
+        context->PSSetShader(scenePixelShader_.Get(), nullptr, 0);
+        context->Draw(3, 0);
     }
 
     // Draw the imported stage over either the analytic tank or the dark route.
-    StageModel* activeStageModel = settings.watatsumiTankMode
-        ? &watatsumiTankModel_
-        : (settings.underwaterArchMode
-        ? &underwaterArchModel_
-        : (settings.greyboxMode
-            ? &aquariumGreyboxModel_
-            : &stageModel_));
-    if (settings.stageMode && activeStageModel->IsLoaded())
+    std::array<StageModel*, 3> activeStageModels{};
+    std::size_t activeStageModelCount = 1;
+    if (settings.continuousMapMode)
+    {
+        activeStageModels = {
+            &watatsumiTankModel_,
+            &continuousShellModel_,
+            &continuousArchModel_};
+        activeStageModelCount = activeStageModels.size();
+    }
+    else
+    {
+        activeStageModels[0] = settings.watatsumiTankMode
+            ? &watatsumiTankModel_
+            : (settings.underwaterArchMode
+            ? &underwaterArchModel_
+            : (settings.greyboxMode
+                ? &aquariumGreyboxModel_
+                : &stageModel_));
+    }
+    const bool hasLoadedStage = std::any_of(
+        activeStageModels.begin(),
+        activeStageModels.begin() + activeStageModelCount,
+        [](const StageModel* model) { return model->IsLoaded(); });
+    if (settings.stageMode && hasLoadedStage)
     {
         context->ClearDepthStencilView(
             stageDepthView_.Get(),
@@ -595,7 +828,7 @@ void AquariumRenderer::Render(
             1.0f,
             0);
         context->OMSetRenderTargets(
-            3,
+            sceneTargetCount,
             sceneTargets,
             stageDepthView_.Get());
 
@@ -609,27 +842,51 @@ void AquariumRenderer::Render(
                 settings.cameraYaw,
                 settings.cameraPitch,
                 currentCameraPosition,
-                width,
-                height);
+                renderWidth,
+                renderHeight);
         const DirectX::XMMATRIX previousViewProjection =
             BuildStageViewProjection(
                 previousCameraYaw_,
                 previousCameraPitch_,
                 previousCameraPosition_,
-                width,
-                height);
+                renderWidth,
+                renderHeight);
         const float openingMask =
             settings.greyboxMode ? 0.0f : 1.0f;
-        activeStageModel->RenderOpaque(
-            context,
-            currentViewProjection,
-            previousViewProjection,
-            currentCameraPosition,
-            time,
-            openingMask,
-            &settings.localLighting);
+        lighting::LocalLightingRig stageLocalLighting =
+            settings.localLighting;
+        if (heroTankScene)
+        {
+            const DirectX::XMFLOAT3 selectedColor =
+                settings.heroTankLighting.alternateEnabled
+                    ? settings.heroTankLighting.alternateColor
+                    : settings.heroTankLighting.defaultColor;
+            stageLocalLighting.tankBounceColor = {
+                selectedColor.x * 0.18f,
+                selectedColor.y * 0.50f,
+                selectedColor.z * 0.58f};
+            stageLocalLighting.tankBounceIntensity =
+                settings.localLighting.tankBounceIntensity *
+                std::max(settings.heroTankLighting.intensity, 0.0f);
+        }
+        for (std::size_t modelIndex = 0;
+             modelIndex < activeStageModelCount;
+             ++modelIndex)
+        {
+            if (activeStageModels[modelIndex]->IsLoaded())
+            {
+                activeStageModels[modelIndex]->RenderOpaque(
+                    context,
+                    currentViewProjection,
+                    previousViewProjection,
+                    currentCameraPosition,
+                    time,
+                    openingMask,
+                    &stageLocalLighting);
+            }
+        }
         if (settings.greyboxMode && !settings.underwaterArchMode &&
-            !settings.watatsumiTankMode)
+            !heroTankScene)
         {
             jellyfishRenderer_.Render(
                 context,
@@ -637,6 +894,26 @@ void AquariumRenderer::Render(
                 previousViewProjection,
                 currentCameraPosition,
                 time);
+        }
+        if (settings.underwaterArchMode || heroTankScene)
+        {
+            const FishRenderer::Habitat fishHabitat =
+                settings.underwaterArchMode
+                    ? FishRenderer::Habitat::UnderwaterArch
+                    : FishRenderer::Habitat::WatatsumiTank;
+            // Opaque biology is rendered before both water and acrylic copies.
+            // The existing sequential refraction path therefore treats the
+            // fish as tank contents instead of a decal pasted onto the glass.
+            fishRenderer_.Render(
+                context,
+                currentViewProjection,
+                currentCameraPosition,
+                time,
+                deltaTime,
+                fishHabitat,
+                heroTankScene
+                    ? &settings.heroTankLighting
+                    : nullptr);
         }
 
         // Glass cannot sample the HDR target while that same texture is bound
@@ -650,134 +927,178 @@ void AquariumRenderer::Render(
             refractionCopyTexture_.Get(),
             sceneColorTexture_.Get());
         context->OMSetRenderTargets(
-            3,
+            sceneTargetCount,
             sceneTargets,
             stageDepthView_.Get());
 
-        if (settings.underwaterArchMode)
+        if (settings.underwaterArchMode || heroTankScene)
         {
-            // First refract the opaque scene through the water medium. Glass
-            // must then sample a second copy containing that water result;
-            // otherwise it replaces the underwater lighting with the older
-            // opaque-only image and makes the overhead banks disappear.
-            activeStageModel->RenderTransparent(
-                context,
-                currentViewProjection,
-                previousViewProjection,
-                currentCameraPosition,
-                time,
-                openingMask,
-                refractionCopyView_.Get(),
-                StageModel::TransparentLayer::ArchMedium,
-                nullptr);
+            // First refract the opaque scene through the water medium. The
+            // acrylic then samples a second copy containing that water result;
+            // otherwise it replaces the tank lighting with the older
+            // opaque-only image. This path is shared by the arch and hero tank.
+            for (std::size_t modelIndex = 0;
+                 modelIndex < activeStageModelCount;
+                 ++modelIndex)
+            {
+                if (activeStageModels[modelIndex]->IsLoaded())
+                {
+                    activeStageModels[modelIndex]->RenderTransparent(
+                        context,
+                        currentViewProjection,
+                        previousViewProjection,
+                        currentCameraPosition,
+                        time,
+                        openingMask,
+                        refractionCopyView_.Get(),
+                        StageModel::TransparentLayer::Medium,
+                        nullptr);
+                }
+            }
 
-            context->OMSetRenderTargets(3, unboundTargets, nullptr);
-            context->CopyResource(
-                refractionCopyTexture_.Get(),
-                sceneColorTexture_.Get());
-            context->OMSetRenderTargets(
-                3,
-                sceneTargets,
-                stageDepthView_.Get());
+            if (settings.underwaterArchMode || settings.continuousMapMode)
+            {
+                // Curved tunnel acrylic still needs a second scene copy because
+                // it visibly bends the already-refracted water layer. The hero
+                // tank uses a huge almost-flat pane, so its dedicated glass
+                // shader is a cheap Fresnel/edge overlay and skips this full-
+                // resolution GPU copy entirely.
+                context->OMSetRenderTargets(3, unboundTargets, nullptr);
+                context->CopyResource(
+                    refractionCopyTexture_.Get(),
+                    sceneColorTexture_.Get());
+                context->OMSetRenderTargets(
+                    sceneTargetCount,
+                    sceneTargets,
+                    stageDepthView_.Get());
+            }
 
-            activeStageModel->RenderTransparent(
-                context,
-                currentViewProjection,
-                previousViewProjection,
-                currentCameraPosition,
-                time,
-                openingMask,
-                refractionCopyView_.Get(),
-                StageModel::TransparentLayer::ArchGlass,
-                nullptr);
+            for (std::size_t modelIndex = 0;
+                 modelIndex < activeStageModelCount;
+                 ++modelIndex)
+            {
+                StageModel* model = activeStageModels[modelIndex];
+                if (!model->IsLoaded())
+                {
+                    continue;
+                }
+                // The huge flat hero pane uses its cheap Fresnel path. Curved
+                // arch and jelly acrylic sample the already-rendered medium.
+                const bool cheapHeroGlass =
+                    model == &watatsumiTankModel_;
+                model->RenderTransparent(
+                    context,
+                    currentViewProjection,
+                    previousViewProjection,
+                    currentCameraPosition,
+                    time,
+                    openingMask,
+                    cheapHeroGlass ? nullptr : refractionCopyView_.Get(),
+                    StageModel::TransparentLayer::Glass,
+                    nullptr);
+            }
         }
         else
         {
-            activeStageModel->RenderTransparent(
-                context,
-                currentViewProjection,
-                previousViewProjection,
-                currentCameraPosition,
-                time,
-                openingMask,
-                refractionCopyView_.Get(),
-                StageModel::TransparentLayer::All,
-                nullptr);
+            for (std::size_t modelIndex = 0;
+                 modelIndex < activeStageModelCount;
+                 ++modelIndex)
+            {
+                if (activeStageModels[modelIndex]->IsLoaded())
+                {
+                    activeStageModels[modelIndex]->RenderTransparent(
+                        context,
+                        currentViewProjection,
+                        previousViewProjection,
+                        currentCameraPosition,
+                        time,
+                        openingMask,
+                        refractionCopyView_.Get(),
+                        StageModel::TransparentLayer::All,
+                        nullptr);
+                }
+            }
         }
     }
 
-    // Pass 2: half-resolution volumetric lighting.
+    // Full-screen setup is shared by the optional volume path and composite.
     ID3D11RenderTargetView* nullTargets[] = {nullptr, nullptr, nullptr};
     context->OMSetRenderTargets(3, nullTargets, nullptr);
     context->IASetInputLayout(nullptr);
     context->IASetPrimitiveTopology(
         D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     context->VSSetShader(vertexShader_.Get(), nullptr, 0);
-
-    const UINT volumeWidth = (width + 2) / 3;
-    const UINT volumeHeight = (height + 2) / 3;
-    const D3D11_VIEWPORT volumeViewport{
-        0.0f,
-        0.0f,
-        static_cast<float>(volumeWidth),
-        static_cast<float>(volumeHeight),
-        0.0f,
-        1.0f
-    };
-    context->RSSetViewports(1, &volumeViewport);
-    ID3D11RenderTargetView* volumeTarget = volumeTarget_.Get();
-    context->OMSetRenderTargets(1, &volumeTarget, nullptr);
-    context->PSSetShader(volumePixelShader_.Get(), nullptr, 0);
-
-    ID3D11ShaderResourceView* volumeInputs[] = {
-        noiseTextureView_.Get(),
-        nullptr,
-        sceneDepthView_.Get(),
-        nullptr,
-        nullptr,
-        shadowTextureView_.Get()
-    };
-    context->PSSetShaderResources(0, 6, volumeInputs);
     ID3D11SamplerState* samplers[] = {
         linearWrapSampler_.Get(),
         linearClampSampler_.Get(),
         shadowComparisonSampler_.Get()
     };
-    context->PSSetSamplers(0, 3, samplers);
-    context->Draw(3, 0);
-
-    // Pass 3: temporal reprojection into a ping-pong history buffer.
     ID3D11ShaderResourceView* nullViews[] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-    context->PSSetShaderResources(0, 7, nullViews);
-    context->OMSetRenderTargets(0, nullptr, nullptr);
-
     const UINT historyWriteIndex = 1u - historyReadIndex_;
-    ID3D11RenderTargetView* historyTarget = historyTargets_[historyWriteIndex].Get();
-    context->OMSetRenderTargets(1, &historyTarget, nullptr);
-    context->PSSetShader(temporalPixelShader_.Get(), nullptr, 0);
-    ID3D11ShaderResourceView* temporalInputs[] = {
-        nullptr,
-        nullptr,
-        sceneDepthView_.Get(),
-        volumeView_.Get(),
-        historyViews_[historyReadIndex_].Get(),
-        nullptr,
-        motionView_.Get()
-    };
-    context->PSSetShaderResources(0, 7, temporalInputs);
-    context->Draw(3, 0);
+    if (volumePassEnabled)
+    {
+        // Pass 2: one-third-resolution volumetric lighting.
+        const UINT volumeWidth = (renderWidth + 2) / 3;
+        const UINT volumeHeight = (renderHeight + 2) / 3;
+        const D3D11_VIEWPORT volumeViewport{
+            0.0f,
+            0.0f,
+            static_cast<float>(volumeWidth),
+            static_cast<float>(volumeHeight),
+            0.0f,
+            1.0f
+        };
+        context->RSSetViewports(1, &volumeViewport);
+        ID3D11RenderTargetView* volumeTarget = volumeTarget_.Get();
+        context->OMSetRenderTargets(1, &volumeTarget, nullptr);
+        context->PSSetShader(volumePixelShader_.Get(), nullptr, 0);
+
+        ID3D11ShaderResourceView* volumeInputs[] = {
+            noiseTextureView_.Get(),
+            nullptr,
+            sceneDepthView_.Get(),
+            nullptr,
+            nullptr,
+            shadowTextureView_.Get()
+        };
+        context->PSSetShaderResources(0, 6, volumeInputs);
+        context->PSSetSamplers(0, 3, samplers);
+        context->Draw(3, 0);
+
+        // Pass 3: temporal reprojection into a ping-pong history buffer.
+        context->PSSetShaderResources(0, 7, nullViews);
+        context->OMSetRenderTargets(0, nullptr, nullptr);
+
+        ID3D11RenderTargetView* historyTarget =
+            historyTargets_[historyWriteIndex].Get();
+        context->OMSetRenderTargets(1, &historyTarget, nullptr);
+        context->PSSetShader(temporalPixelShader_.Get(), nullptr, 0);
+        ID3D11ShaderResourceView* temporalInputs[] = {
+            nullptr,
+            nullptr,
+            sceneDepthView_.Get(),
+            volumeView_.Get(),
+            historyViews_[historyReadIndex_].Get(),
+            nullptr,
+            motionView_.Get()
+        };
+        context->PSSetShaderResources(0, 7, temporalInputs);
+        context->Draw(3, 0);
+    }
 
     // Pass 4: depth-aware volume upsample, HDR composite and tone mapping.
     context->PSSetShaderResources(0, 7, nullViews);
     context->OMSetRenderTargets(0, nullptr, nullptr);
-    context->RSSetViewports(1, &fullViewport);
+    context->RSSetViewports(1, &outputViewport);
     context->OMSetRenderTargets(1, &target, nullptr);
     context->PSSetShader(compositePixelShader_.Get(), nullptr, 0);
     ID3D11ShaderResourceView* compositeInputs[] = {
         nullptr,
         sceneColorView_.Get(),
         sceneDepthView_.Get(),
-        historyViews_[historyWriteIndex].Get()
+        volumePassEnabled
+            ? historyViews_[historyWriteIndex].Get()
+            : nullptr
     };
     context->PSSetShaderResources(0, 4, compositeInputs);
     context->PSSetSamplers(0, 3, samplers);
@@ -785,8 +1106,11 @@ void AquariumRenderer::Render(
 
     context->PSSetShaderResources(0, 7, nullViews);
 
-    historyReadIndex_ = historyWriteIndex;
-    historyValid_ = true;
+    if (volumePassEnabled)
+    {
+        historyReadIndex_ = historyWriteIndex;
+    }
+    historyValid_ = volumePassEnabled;
     previousCameraYaw_ = settings.cameraYaw;
     previousCameraPitch_ = settings.cameraPitch;
     previousViewMode_ = settings.viewMode;
@@ -794,6 +1118,7 @@ void AquariumRenderer::Render(
     previousGreyboxMode_ = settings.greyboxMode;
     previousUnderwaterArchMode_ = settings.underwaterArchMode;
     previousWatatsumiTankMode_ = settings.watatsumiTankMode;
+    previousContinuousMapMode_ = settings.continuousMapMode;
     previousCameraPosition_ = {
         settings.cameraPositionX,
         settings.cameraPositionY,
