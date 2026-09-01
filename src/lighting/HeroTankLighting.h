@@ -11,11 +11,11 @@ struct HeroTankLightingRig
 {
     DirectX::XMFLOAT3 defaultColor{0.035f, 0.390f, 1.000f};
     DirectX::XMFLOAT3 alternateColor{0.950f, 0.075f, 0.280f};
-    // A mostly neutral key light separates foreground fish from the blue
-    // water. The two small inward-facing side sources retain the puzzle colour.
-    DirectX::XMFLOAT3 frontKeyColor{0.620f, 0.840f, 1.000f};
+    // The overhead source is authored close to 5000 K. Water attenuation turns
+    // its volume blue while fish near the key retain natural colour rendering.
+    DirectX::XMFLOAT3 overheadKeyColor{1.000f, 0.910f, 0.760f};
     float intensity = 1.0f;
-    float frontKeyIntensity = 0.86f;
+    float overheadKeyIntensity = 0.78f;
     float sideLightIntensity = 0.46f;
     bool alternateEnabled = false;
 };

@@ -515,25 +515,40 @@ References:
   10.2 ms while the development title diagnostics and screen capture were
   active. The generated hall contains eight material batches, 8,467 triangles,
   35 reef boulders and 72 bubbles.
-- Re-composed the hero lighting as one broad 62-degree cool-white key entering
-  from above the front centre plus two smaller 34-degree corner sources aimed
-  inward. All three reuse the existing shadow/light slots, so the change adds
-  no shadow map, light loop or draw call.
+- Re-composed the final hero lighting from aquarium installation references:
+  one broad 58-degree, 5000 K-like key sits 1.10 m above the central water
+  surface, while two smaller 32-degree fixtures sit over the side reefs and
+  aim inward. The former acrylic-edge emitter was removed. All three reuse the
+  existing shadow/light slots, so no shadow map, light loop or draw was added.
 - Extended the fish constant buffer with the shared hero-light palette. A
   front-to-rear key-light falloff, paired polynomial side footprints and blue
   rear-depth attenuation separate overlapping schools without sorting them or
   rendering a second lighting pass. Fixed side-light directions avoid two
   per-pixel normalizations on the small silhouettes.
-- Added F2 controls for the neutral key colour, key intensity and paired side
+- Added F2 controls for the overhead key colour, key intensity and paired side
   intensity. The side sources follow the default/alternate puzzle palette,
   while the cool-white key preserves navigation and fish readability during a
   colour-switch event.
-- Two visual iterations rejected an overexposed warm-white cone, then retained
-  a cooler 0.62/0.84/1.00 key at lower intensity. The final Debug 1280 x 720,
-  15-second warm capture reported 98 FPS at 90% render scale and 10.3 ms.
+- Added generation-time containment for every rock vertex against the actual
+  flat-front/semi-ellipse tank equation and waterline. Forty-one boulders,
+  including asymmetric three-tier side reefs, pass the test; no reef can cross the
+  acrylic, rear shell or surface after procedural parameter edits.
+- The rear service shell is detected analytically inside the existing rock
+  batch. Its tiled caustic/mottle response is replaced by low-frequency blue
+  geological variation, removing the visible wallpaper pattern without a new
+  material or draw call.
+- Visual iteration retained a 5000 K-like 1.00/0.91/0.76 source but applies
+  wavelength-biased attenuation only to the water shaft. Fish retain natural
+  colour rendering while the visible volume remains cyan-blue. The final model
+  contains 8,647 triangles and 41 reef boulders in one batch. A Debug
+  1280 x 720, 15-second warm capture reported 111 FPS at 82% render scale and
+  9.2 ms. A 5% recovery experiment reached 90% scale but oscillated near the
+  target (94 FPS / 10.7 ms), so the stable 9% guard was retained.
 
 References:
 
 - https://www.sumida-aquarium.com/about/floor/ogasawara/
 - https://sumida-aquarium.com/column/hkj7xueuc2/
 - https://sumida-aquarium.com/column/4843/
+- https://www.iwasaki.co.jp/tech-rep/facility/95/
+- https://www.michida.com/detail/12/

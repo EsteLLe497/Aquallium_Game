@@ -63,12 +63,12 @@ def main() -> None:
     assert "alternateEnabled" in light_rig
     assert "Activate alternate colour" in editor
     assert "defaultColor" in renderer and "alternateColor" in renderer
-    assert "frontKeyIntensity" in renderer
+    assert "overheadKeyIntensity" in renderer
     assert "sideLightIntensity" in renderer
-    assert "{7.8f, 15.0f, 0.0f}" in renderer
-    assert "{7.6f, 12.9f, -12.0f}" in renderer
-    assert "{7.6f, 12.9f, 12.0f}" in renderer
-    assert "Front key intensity" in editor
+    assert "{14.0f, 11.30f, 0.0f}" in renderer
+    assert "{12.2f, 11.30f, -8.8f}" in renderer
+    assert "{12.2f, 11.30f, 8.8f}" in renderer
+    assert "Overhead key intensity" in editor
     assert "Side lights intensity" in editor
     assert "heroTankLighting" in fish_source
     assert "Ogasawara composition" in fish_source
@@ -78,8 +78,11 @@ def main() -> None:
     assert "ellipsoid(" not in generator
     assert "add_ogasawara_reef()" in generator
     assert "add_bubble_columns()" in generator
+    assert "validate_rock_vertices_inside_tank()" in generator
+    assert "TANK_WATER_SURFACE+0.17" not in generator
+    assert "rearShell" in stage_shader
     extras = model["extras"]
-    assert extras["reefBoulderCount"] == 35
+    assert extras["reefBoulderCount"] == 41
     assert extras["bubbleCount"] == 72
     assert extras["waterSurfaceGrid"] == [24, 32]
     # Accessor indices are references; triangle counts come from their metadata.
@@ -96,9 +99,12 @@ def main() -> None:
         "second_hero_tank_scene_copy": False,
         "rendered_water_surface_y_m": 10.20,
         "water_light_banks": 3,
-        "broad_front_white_key": True,
-        "inward_front_side_lights": 2,
+        "overhead_key_metres_above_surface": 1.10,
+        "inward_overhead_side_lights": 2,
         "fish_depth_lighting": True,
+        "glass_attached_emitter": False,
+        "rock_boundary_validation": True,
+        "natural_rear_shell": True,
         "runtime_editable_light_palettes": 2,
         "reef_boulders_single_batch": extras["reefBoulderCount"],
         "bubbles_single_batch": extras["bubbleCount"],

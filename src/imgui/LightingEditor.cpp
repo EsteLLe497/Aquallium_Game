@@ -164,8 +164,8 @@ void LightingEditor::Draw(
             &heroTankRig.alternateColor.x,
             ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
         ImGui::ColorEdit3(
-            "Front key colour",
-            &heroTankRig.frontKeyColor.x,
+            "Overhead key colour",
+            &heroTankRig.overheadKeyColor.x,
             ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
         ImGui::SliderFloat(
             "Tank light intensity",
@@ -174,8 +174,8 @@ void LightingEditor::Draw(
             2.5f,
             "%.2f");
         ImGui::SliderFloat(
-            "Front key intensity",
-            &heroTankRig.frontKeyIntensity,
+            "Overhead key intensity",
+            &heroTankRig.overheadKeyIntensity,
             0.0f,
             2.5f,
             "%.2f");

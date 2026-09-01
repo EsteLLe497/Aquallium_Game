@@ -151,6 +151,25 @@ UPPER_OUTER_Z = 20.50
 UPPER_INNER_Z = 15.10
 
 
+def tank_half_width_at_x(x):
+    """Half width of the flat-front/semi-ellipse tank at an X coordinate."""
+    u = max(0.0, min(1.0, (x - TANK_FRONT_X) / TANK_DEPTH))
+    return TANK_HALF_WIDTH * math.sqrt(max(1.0 - u*u, 0.0))
+
+
+def bounded_tank_rock(center, size, seed, margin=0.34):
+    """Clamp an irregular boulder inside the actual tank plan and waterline."""
+    cx, cy, cz = center
+    rx, ry, rz = size
+    cx = max(TANK_FRONT_X + rx + margin, cx)
+    cx = min(TANK_FRONT_X + TANK_DEPTH - rx - margin, cx)
+    # The back-most X has the narrowest ellipse for this entire boulder.
+    allowed_z = max(tank_half_width_at_x(cx + rx) - rz - margin, 0.0)
+    cz = math.copysign(min(abs(cz), allowed_z), cz) if cz else 0.0
+    cy = min(cy, TANK_WATER_SURFACE - margin - ry * 0.82)
+    faceted_rock((cx, cy, cz), size, seed)
+
+
 def ramp_horizontal_distance(t):
     """Horizontal travel after the flat lower landing, in metres."""
     if t <= 0.06:
@@ -350,15 +369,27 @@ def add_ogasawara_reef():
                 1.0 - ((x - TANK_FRONT_X) / TANK_DEPTH) ** 2,
                 0.0))
             for level in range(3):
-                z = side * (plan_half_width * (0.68 + level * 0.075))
+                size = (2.20 + level * 0.32,
+                        1.35 + level * 0.25,
+                        2.45 + (row % 3) * 0.28)
+                # Start near the wall; bounded_tank_rock performs the exact
+                # footprint clamp using the boulder's rear-most X and radius.
+                z = side * (plan_half_width * (0.67 + level * 0.07))
                 y = 1.05 + level * 1.75 + (row % 2) * 0.38
-                faceted_rock(
-                    (x, y, z),
-                    (2.20 + level * 0.32,
-                     1.35 + level * 0.25,
-                     2.45 + (row % 3) * 0.28),
-                    seed)
+                bounded_tank_rock((x, y, z), size, seed)
                 seed += 1
+    # Asymmetric tall reef anchors are built from overlapping boulders instead
+    # of stretched single spikes. Distinct tiers create natural shelves while
+    # bounded_tank_rock keeps every crown inside the waterline and rear shell.
+    for center, size in (
+        ((10.2,2.05,-9.7),(2.45,2.45,2.35)),
+        ((10.7,4.65,-9.4),(2.05,2.85,2.00)),
+        ((11.3,7.15,-9.0),(1.55,2.55,1.65)),
+        ((11.6,1.95, 9.6),(2.75,2.20,2.45)),
+        ((12.0,4.15, 9.2),(2.15,2.45,2.05)),
+        ((12.5,6.35, 8.8),(1.45,2.10,1.55))):
+        bounded_tank_rock(center, size, seed)
+        seed += 1
     # Bottom outcrops produce depth layers without blocking the main window.
     for center, size in (
         ((10.4,0.95,-5.2),(2.7,1.35,2.2)),
@@ -366,7 +397,7 @@ def add_ogasawara_reef():
         ((15.7,0.88,-2.4),(2.8,1.30,2.1)),
         ((18.1,0.78, 2.8),(2.1,1.05,1.8)),
         ((19.6,0.70,-1.6),(1.8,0.90,1.6))):
-        faceted_rock(center, size, seed)
+        bounded_tank_rock(center, size, seed)
         seed += 1
 
 
@@ -384,6 +415,28 @@ def add_bubble_columns():
                 base_z + math.cos(phase * 1.13) * drift)
             radius = 0.022 + (index % 5) * 0.006
             bubble_octahedron(center, radius)
+
+
+def validate_rock_vertices_inside_tank():
+    """Fail generation if reef or shell geometry escapes the tank volume."""
+    rock = groups["WatatsumiRock"]
+    epsilon = 0.002
+    for vertex_index, (x, y, z) in enumerate(zip(
+            rock.positions[0::3],
+            rock.positions[1::3],
+            rock.positions[2::3])):
+        if x < TANK_FRONT_X - epsilon or \
+                x > TANK_FRONT_X + TANK_DEPTH + epsilon:
+            raise ValueError(
+                f"rock vertex {vertex_index} escapes tank X: {x:.3f}")
+        if y > TANK_WATER_SURFACE + epsilon:
+            raise ValueError(
+                f"rock vertex {vertex_index} escapes waterline: {y:.3f}")
+        half_width = tank_half_width_at_x(x)
+        if abs(z) > half_width + epsilon:
+            raise ValueError(
+                f"rock vertex {vertex_index} escapes tank plan: "
+                f"x={x:.3f}, z={z:.3f}, limit={half_width:.3f}")
 
 
 def arch_portal_collar(center_z, floor_y, x=6.40, width=RAMP_WIDTH,
@@ -549,9 +602,6 @@ def build():
     # A single restrained practical at the upper landing. The tank remains
     # the dominant source; this only gives visitors a distant navigation cue.
     box("WatatsumiEmitter", (3.8,UPPER_FLOOR_Y+2.2,-PORTAL_Z), (1.2,0.04,0.05))
-    # A restrained waterline source lets the hall be lit by the exhibit only.
-    box("WatatsumiEmitter", (6.82,TANK_WATER_SURFACE+0.17,0), (0.10,0.08,28.6))
-
     # Architectural trim borrows the existing ramp material, keeping this to
     # one already-issued draw batch. Dark skirting and a framed tank reveal
     # give the hall a deliberate VR social-world finish without extra lights.
@@ -608,7 +658,7 @@ def write_glb():
                    "rampWidth":RAMP_WIDTH,"rampRise":RAMP_RISE,
                    "tunnelWallHeight":RAMP_WALL_HEIGHT,
                    "tunnelArchRise":RAMP_ARCH_RISE,
-                   "reefBoulderCount":35,
+                   "reefBoulderCount":41,
                    "bubbleCount":72,
                    "waterSurfaceGrid":[24,32],
                    "rampSequence":["lower-right entry","concealed wall run",
@@ -625,4 +675,7 @@ def write_glb():
 
 
 if __name__ == "__main__":
-    build(); stats=write_glb(); print(json.dumps({"glb":str(OUTPUT),**stats}))
+    build()
+    validate_rock_vertices_inside_tank()
+    stats=write_glb()
+    print(json.dumps({"glb":str(OUTPUT),**stats}))

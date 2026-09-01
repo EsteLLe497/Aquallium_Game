@@ -469,28 +469,28 @@ void AquariumRenderer::Render(
         const float paletteIntensity = std::max(
             settings.heroTankLighting.intensity,
             0.0f);
-        // One broad, nearly white key enters from above the front centre. Two
-        // smaller blue/puzzle-colour sources sit at the front corners and aim
-        // inward. The converging arrangement separates foreground fish from
-        // the reef while keeping the dry visitor floor dark.
+        // Real exhibit luminaires sit roughly one metre above the water, not on
+        // the viewing acrylic. One broad 5000 K-like key occupies the centre;
+        // two smaller puzzle-colour luminaires sit over the side reefs and aim
+        // inward. All source positions remain inside the tank footprint.
         lights[0] = {
-            {7.8f, 15.0f, 0.0f},
-            settings.heroTankLighting.frontKeyIntensity * paletteIntensity,
-            {0.32f, -1.0f, 0.0f}, 62.0f,
-            settings.heroTankLighting.frontKeyColor, 10.20f
+            {14.0f, 11.30f, 0.0f},
+            settings.heroTankLighting.overheadKeyIntensity * paletteIntensity,
+            {0.0f, -1.0f, 0.0f}, 58.0f,
+            settings.heroTankLighting.overheadKeyColor, 10.20f
         };
         lights[1] = {
-            {7.6f, 12.9f, -12.0f},
+            {12.2f, 11.30f, -8.8f},
             settings.heroTankLighting.sideLightIntensity * paletteIntensity,
-            {0.52f, -0.82f, 0.38f}, 34.0f,
+            {0.10f, -1.0f, 0.24f}, 32.0f,
             {selectedColor.x * 0.88f,
              selectedColor.y * 0.88f,
              selectedColor.z * 0.88f}, 10.20f
         };
         lights[2] = {
-            {7.6f, 12.9f, 12.0f},
+            {12.2f, 11.30f, 8.8f},
             settings.heroTankLighting.sideLightIntensity * paletteIntensity,
-            {0.52f, -0.82f, -0.38f}, 34.0f,
+            {0.10f, -1.0f, -0.24f}, 32.0f,
             {selectedColor.x * 0.88f,
              selectedColor.y * 0.88f,
              selectedColor.z * 0.88f}, 10.20f

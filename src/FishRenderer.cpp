@@ -939,15 +939,15 @@ void FishRenderer::Render(
                 ? heroTankLighting->alternateColor
                 : heroTankLighting->defaultColor;
         constants->keyLightDirectionIntensity = {
-            -0.305f,
-            0.952f,
             0.0f,
-            heroTankLighting->frontKeyIntensity *
+            1.0f,
+            0.0f,
+            heroTankLighting->overheadKeyIntensity *
                 heroTankLighting->intensity};
         constants->keyLightColor = {
-            heroTankLighting->frontKeyColor.x,
-            heroTankLighting->frontKeyColor.y,
-            heroTankLighting->frontKeyColor.z,
+            heroTankLighting->overheadKeyColor.x,
+            heroTankLighting->overheadKeyColor.y,
+            heroTankLighting->overheadKeyColor.z,
             1.0f};
         constants->sideLightColorIntensity = {
             selectedColor.x,

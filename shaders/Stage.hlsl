@@ -1357,7 +1357,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
             tankLightColor * broadCaustics * lightBank *
                 exp(-waterDepth * 0.16) * 0.24 +
             float3(0.010, 0.105, 0.245) * fresnel +
-            tankLightColor *
+            tankLightColor * float3(0.44, 0.75, 1.00) *
                 (shaftCenter * 0.52 +
                  shaftLeft * 0.24 +
                  shaftRight * 0.24) * slowShaftRipple;
@@ -1434,18 +1434,48 @@ StagePixelOutput PSStage(StageVertexOutput input)
             const float rockLight = StageHeroTankLightData(
                 input.worldPosition, rockLightDirection,
                 rockLightColor, rockSurfacePosition);
-            const float caustics = StageHeroTankBroadCaustics(
-                rockSurfacePosition,
-                gStageSurfaceParameters.y);
-            const float upwardWetFace = saturate(normal.y * 0.5 + 0.5);
-            const float3 boninRock = float3(0.050, 0.122, 0.150) *
-                mottling;
-            finalColor = boninRock *
-                (0.22 + diffuse * 0.21 + upwardWetFace * 0.075) +
-                float3(0.003, 0.022, 0.048) *
-                    exp(-waterDepth * 0.12) +
-                rockLightColor * caustics * rockLight *
-                exp(-waterDepth * 0.17) * 0.30;
+            // The service shell follows the exact rear semi-ellipse. Detect it
+            // analytically so it can share the rock batch but avoid the tiled
+            // caustic/mottle response that looked like a patterned wallpaper.
+            const float2 tankFootprint = float2(
+                (input.worldPosition.x - 7.0) / 14.7,
+                input.worldPosition.z / 14.5);
+            const float rearShell = smoothstep(
+                0.94, 0.995, dot(tankFootprint, tankFootprint)) *
+                (1.0 - smoothstep(0.28, 0.58, abs(normal.y)));
+            if (rearShell > 0.5)
+            {
+                const float broadNaturalVariation =
+                    0.88 +
+                    sin(input.worldPosition.z * 0.115 +
+                        input.worldPosition.y * 0.075) * 0.075 +
+                    sin(input.worldPosition.x * 0.19 -
+                        input.worldPosition.y * 0.13) * 0.045;
+                const float verticalBlue = saturate(
+                    (input.worldPosition.y - 0.35) / 11.85);
+                const float3 backdropColor = lerp(
+                    float3(0.004, 0.021, 0.050),
+                    float3(0.010, 0.072, 0.125),
+                    verticalBlue) * broadNaturalVariation;
+                finalColor = backdropColor +
+                    rockLightColor * rockLight *
+                    exp(-waterDepth * 0.19) * 0.045;
+            }
+            else
+            {
+                const float caustics = StageHeroTankBroadCaustics(
+                    rockSurfacePosition,
+                    gStageSurfaceParameters.y);
+                const float upwardWetFace = saturate(normal.y * 0.5 + 0.5);
+                const float3 boninRock = float3(0.050, 0.122, 0.150) *
+                    mottling;
+                finalColor = boninRock *
+                    (0.22 + diffuse * 0.21 + upwardWetFace * 0.075) +
+                    float3(0.003, 0.022, 0.048) *
+                        exp(-waterDepth * 0.12) +
+                    rockLightColor * caustics * rockLight *
+                    exp(-waterDepth * 0.17) * 0.30;
+            }
         }
         else
         {

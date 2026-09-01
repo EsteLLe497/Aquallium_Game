@@ -112,7 +112,7 @@ float4 PSFish(VertexOutput input, bool frontFace : SV_IsFrontFace) : SV_TARGET0
         gKeyLightDirectionIntensity.xyz,
         float3(0.0, 1.0, 0.0));
     const bool heroTankLighting = gSideLightColorIntensity.w > 0.0001;
-    // The neutral front key falls off toward the rear wall. This deliberate
+    // The neutral overhead key falls off toward the rear wall. This deliberate
     // value separation makes overlapping schools readable as depth layers.
     const float frontDepth = saturate(
         1.0 - (input.worldPosition.x - 7.5) / 14.0);
@@ -152,8 +152,8 @@ float4 PSFish(VertexOutput input, bool frontFace : SV_IsFrontFace) : SV_TARGET0
     rightPool *= rightPool;
     // Fixed inward directions closely approximate the corner sources across
     // the distant fish silhouettes and avoid two normalizations per pixel.
-    const float3 leftDirection = float3(-0.405, 0.505, -0.762);
-    const float3 rightDirection = float3(-0.405, 0.505, 0.762);
+    const float3 leftDirection = float3(-0.158, 0.573, -0.804);
+    const float3 rightDirection = float3(-0.158, 0.573, 0.804);
     const float sideDiffuse =
         (saturate(dot(normal, leftDirection)) * leftPool +
          saturate(dot(normal, rightDirection)) * rightPool) *
