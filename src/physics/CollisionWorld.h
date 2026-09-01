@@ -36,12 +36,12 @@ enum class CollisionLayer : std::uint32_t
 
 struct CharacterCapsule
 {
-    // Approximate 170 cm adult proportions. Eye height is measured from the
-    // floor so camera and collision remain one physical character.
+    // Tall 195 cm adult proportions. Eye height is measured from the floor so
+    // camera and collision remain one physical character.
     float radius = 0.32f;
-    float height = 1.70f;
-    // Slightly elevated game camera while keeping the physical body 170 cm.
-    float eyeHeight = 1.65f;
+    float height = 1.95f;
+    // A high but still anatomically plausible eye line for a 195 cm adult.
+    float eyeHeight = 1.89f;
     float stepHeight = 0.32f;
 };
 

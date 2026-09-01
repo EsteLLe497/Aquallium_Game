@@ -319,8 +319,8 @@ Debug x64、1300×760の画面キャプチャ時に正面約133 FPS、上向き�
   A two-metre integrated grade blend produces zero slope and exact floor
   height at both portals while holding the internal maximum grade to 15.76%,
   removing the former 0.18 m / 0.12 m landing snaps.
-- Calibrated the first-person capsule to an approximately 1.70 m adult:
-  1.70 m body height, a game-readable 1.65 m eye height, 0.32 m radius and
+- Calibrated the first-person capsule to a deliberately tall 1.95 m adult:
+  1.95 m body height, a game-readable 1.89 m eye height, 0.32 m radius and
   0.32 m step height.
   Rendering, collision clearance and all preview spawn heights consume the
   same capsule values.

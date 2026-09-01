@@ -177,10 +177,10 @@ def main() -> None:
     assert 'horizontal_rail(UPPER_ARM_MIN_X, cross_min_x, z)' in generator
     assert 'horizontal_rail(cross_max_x, UPPER_ARM_MAX_X, z)' in generator
     assert 'Watatsumi_2F_RearWalkway' not in scene
-    assert 'float height = 1.70f;' in (
+    assert 'float height = 1.95f;' in (
         ROOT / "src" / "physics" / "CollisionWorld.h"
     ).read_text(encoding="utf-8")
-    assert 'float eyeHeight = 1.65f;' in (
+    assert 'float eyeHeight = 1.89f;' in (
         ROOT / "src" / "physics" / "CollisionWorld.h"
     ).read_text(encoding="utf-8")
     assert 'quad("WatatsumiRamp"' in generator
@@ -194,8 +194,8 @@ def main() -> None:
         "watatsumi_player_center_limit_m": watatsumi_center_limit,
         "watatsumi_upper_layout": "H",
         "watatsumi_upper_all_arms_reachable": True,
-        "player_height_m": 1.70,
-        "player_eye_height_m": 1.65,
+        "player_height_m": 1.95,
+        "player_eye_height_m": 1.89,
         "watatsumi_service_fill_width_m": round(facade_rear_x - rear_inner_x, 2),
         "watatsumi_outer_seal_depth_m": round(outer_wall_inner_z - portal_outer_z, 2),
         "watatsumi_tank_portal_seal_m": round(portal_inner_z - tank_jamb_outer_z, 2),
