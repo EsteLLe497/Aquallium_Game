@@ -51,7 +51,10 @@ public:
         {
             ++tier_;
         }
-        else if (smoothedFrameTime_ < targetFrameTime * 0.76f &&
+        // A 9% guard band is enough for the discrete next tier. The former
+        // 24% requirement could strand the renderer at 82% after an expensive
+        // loading frame even while the steady-state view was well over target.
+        else if (smoothedFrameTime_ < targetFrameTime * 0.91f &&
                  tier_ > 0)
         {
             --tier_;

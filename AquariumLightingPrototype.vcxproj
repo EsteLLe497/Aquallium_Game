@@ -107,6 +107,7 @@
     <ClInclude Include="src\JellyfishRenderer.h" />
     <ClInclude Include="src\FishRenderer.h" />
     <ClInclude Include="src\imgui\LightingEditor.h" />
+    <ClInclude Include="src\lighting\HeroTankLighting.h" />
     <ClInclude Include="src\lighting\LocalLight.h" />
     <ClInclude Include="src\rendering\AdaptiveResolution.h" />
     <ClInclude Include="src\D3D11App.h" />

@@ -472,11 +472,35 @@ XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
             side * ((school == 3u ? 4.75f : 5.25f) +
                 std::cos(route) * 0.78f)};
     }
-    const float route = time * 0.19f + schoolPhase;
-    return {
-        14.2f + std::cos(route) * 5.0f,
-        3.35f + std::sin(route * 0.63f + schoolPhase) * 1.65f,
-        std::sin(route) * (7.5f + static_cast<float>(school) * 0.75f)};
+    // Ogasawara composition: three small-fish layers orbit at distinct depth
+    // and speed, while the sparse medium group crosses the open blue channel.
+    // Separate authored targets keep one giant Boids blob from filling the
+    // whole tank without adding simulation agents or draw calls.
+    const float routeSpeed = school == 0u
+        ? 0.25f
+        : (school == 1u ? 0.19f : (school == 2u ? 0.145f : 0.105f));
+    const float route = time * routeSpeed + schoolPhase;
+    if (school == 0u)
+    {
+        return {13.1f + std::cos(route) * 4.7f,
+            7.15f + std::sin(route * 0.71f) * 0.82f,
+            std::sin(route) * 8.6f};
+    }
+    if (school == 1u)
+    {
+        return {14.6f + std::cos(route) * 5.2f,
+            4.65f + std::sin(route * 0.59f + 0.8f) * 1.05f,
+            std::sin(route) * 10.0f};
+    }
+    if (school == 2u)
+    {
+        return {13.8f + std::cos(route) * 4.1f,
+            2.15f + std::sin(route * 0.53f + 1.7f) * 0.72f,
+            std::sin(route) * 7.1f};
+    }
+    return {14.7f + std::cos(route) * 5.5f,
+        4.05f + std::sin(route * 0.47f) * 1.55f,
+        std::sin(route) * 8.2f};
 }
 
 void FishRenderer::ApplyHabitatSteering(
@@ -838,6 +862,30 @@ void FishRenderer::Render(
             : 0.58f + agent.tint * 0.14f;
         const bool overheadSilhouette =
             habitat_ == Habitat::UnderwaterArch && agent.school == 2u;
+        const bool boninYellowSchool =
+            habitat_ == Habitat::WatatsumiTank &&
+            agent.species == 0u && agent.school == 1u;
+        const bool boninDeepSchool =
+            habitat_ == Habitat::WatatsumiTank &&
+            agent.species == 0u && agent.school == 2u;
+        const XMFLOAT3 bodyTint = boninYellowSchool
+            ? XMFLOAT3{
+                0.36f + agent.tint * 0.10f,
+                0.40f + agent.tint * 0.10f,
+                0.16f + agent.tint * 0.05f}
+            : (boninDeepSchool
+                ? XMFLOAT3{
+                    0.12f + agent.tint * 0.06f,
+                    0.34f + agent.tint * 0.10f,
+                    0.48f + agent.tint * 0.12f}
+                : XMFLOAT3{
+                    mediumSpecies
+                        ? 0.20f + agent.tint * 0.08f
+                        : 0.18f + agent.tint * 0.10f,
+                    mediumSpecies
+                        ? 0.34f + agent.tint * 0.10f
+                        : 0.42f + agent.tint * 0.13f,
+                    silver});
         const float cameraDistanceSquared = LengthSquared(
             Subtract(agent.position, cameraPosition));
         const bool useLowDetail =
@@ -848,13 +896,9 @@ void FishRenderer::Render(
         destination.push_back({
             {agent.position.x, agent.position.y, agent.position.z, agent.scale},
             {forward.x, forward.y, forward.z, agent.phase},
-            {mediumSpecies
-                 ? 0.20f + agent.tint * 0.08f
-                 : 0.18f + agent.tint * 0.10f,
-             mediumSpecies
-                 ? 0.34f + agent.tint * 0.10f
-                 : 0.42f + agent.tint * 0.13f,
-             silver,
+            {bodyTint.x,
+             bodyTint.y,
+             bodyTint.z,
              (overheadSilhouette ? -1.0f : 1.0f) *
                  (mediumSpecies ? 3.15f : 4.3f + agent.tint * 1.5f)},
             {static_cast<float>(agent.species),

@@ -32,7 +32,7 @@ cbuffer StageConstants : register(b2)
     //    13 arch seam, 14 arch rail, 15 arch trim,
     //    16 Watatsumi water, 17 acrylic, 18 architecture, 19 ramp,
     //    20 tank rock, 21 waterline emitter, 22 upper water surface,
-    //    23 arch bubble
+    //    23 arch bubble, 24 Watatsumi bubble
     // y: simulation time
     // z: material alpha
     float4 gStageSurfaceParameters;
@@ -75,6 +75,43 @@ float StageArchBubbleSurfaceWave(
         cos(phase) * 0.58 * envelope +
         sin(phase) * envelopeDerivative);
     gradient = 2.0 * delta * derivativeByRadiusSquared;
+    return wave;
+}
+
+float StageWatatsumiAerationWave(
+    float2 surfacePosition,
+    float time,
+    out float2 gradient)
+{
+    // Three real geometry bubble columns and the surface use the same source
+    // coordinates. This keeps the broad disturbance attached to aeration
+    // instead of sliding as an unrelated normal-map animation.
+    const float2 sources[3] = {
+        float2(11.2, -8.4),
+        float2(14.9, 0.7),
+        float2(12.0, 8.1)
+    };
+    float wave = 0.0;
+    gradient = 0.0;
+    [unroll]
+    for (int sourceIndex = 0; sourceIndex < 3; ++sourceIndex)
+    {
+        const float2 delta = surfacePosition - sources[sourceIndex];
+        const float radiusSquared = dot(delta, delta);
+        const float falloff = saturate(1.0 - radiusSquared * 0.020);
+        const float envelope = falloff * falloff;
+        const float phase = radiusSquared * 0.36 - time * 1.18 +
+            sourceIndex * 1.73;
+        const float amplitude = 0.055;
+        wave += sin(phase) * amplitude * envelope;
+        const float envelopeDerivative = falloff > 0.0
+            ? -0.040 * falloff
+            : 0.0;
+        const float derivativeByRadiusSquared = amplitude * (
+            cos(phase) * 0.36 * envelope +
+            sin(phase) * envelopeDerivative);
+        gradient += 2.0 * delta * derivativeByRadiusSquared;
+    }
     return wave;
 }
 
@@ -123,7 +160,7 @@ StageVertexOutput VSStage(StageVertexInput input)
             gStageSurfaceParameters.y * 1.08;
         const bool archWaterSurface =
             gStageSurfaceParameters.x < 10.5;
-        const float waveScale = archWaterSurface ? 1.34 : 1.0;
+        const float waveScale = archWaterSurface ? 1.34 : 1.18;
         float waterHeight = (
             sin(phaseA) * 0.140 +
             sin(phaseB) * 0.090 +
@@ -157,6 +194,16 @@ StageVertexOutput VSStage(StageVertexInput input)
             derivativeX += cos(capillaryPhase) * 0.026 * 3.60;
             derivativeZ += cos(capillaryPhase) * 0.026 * 2.90;
         }
+        else
+        {
+            float2 aerationGradient;
+            waterHeight += StageWatatsumiAerationWave(
+                worldPosition.xz,
+                gStageSurfaceParameters.y,
+                aerationGradient);
+            derivativeX += aerationGradient.x;
+            derivativeZ += aerationGradient.y;
+        }
         worldPosition.y += waterHeight;
         worldNormal = normalize(float3(
             derivativeX,
@@ -164,17 +211,19 @@ StageVertexOutput VSStage(StageVertexInput input)
             derivativeZ));
     }
     else if (gStageSurfaceParameters.x > 22.5 &&
-             gStageSurfaceParameters.x < 23.5)
+             gStageSurfaceParameters.x < 24.5)
     {
         // The low-poly plume remains one batch; a coherent wobble makes the
         // bubbles visibly feed the moving surface without CPU particle work.
+        const bool heroTankBubble = gStageSurfaceParameters.x > 23.5;
         const float bubblePhase =
-            worldPosition.y * 3.15 +
+            worldPosition.y * (heroTankBubble ? 2.35 : 3.15) +
             worldPosition.x * 0.91 +
-            gStageSurfaceParameters.y * 1.18;
-        worldPosition.x += sin(bubblePhase) * 0.032;
-        worldPosition.z += cos(bubblePhase * 0.83) * 0.028;
-        worldPosition.y += sin(bubblePhase * 0.47) * 0.045;
+            gStageSurfaceParameters.y * (heroTankBubble ? 1.42 : 1.18);
+        const float wobbleScale = heroTankBubble ? 1.45 : 1.0;
+        worldPosition.x += sin(bubblePhase) * 0.032 * wobbleScale;
+        worldPosition.z += cos(bubblePhase * 0.83) * 0.028 * wobbleScale;
+        worldPosition.y += sin(bubblePhase * 0.47) * 0.045 * wobbleScale;
     }
     output.worldPosition = worldPosition;
     output.normal = worldNormal;
@@ -427,6 +476,81 @@ float StageArchOverheadLightData(
         }
     }
     return saturate(illumination);
+}
+
+// The hero pane can cover most of the screen. Re-evaluating the generic
+// spotlight projection (normalization + exp) for every water/glass pixel was
+// needlessly expensive, so the fixed three-bank hero rig uses a polynomial
+// footprint. The light data still comes from the CPU rig; only its falloff is
+// approximated here. This keeps palette switching and moving-source support.
+float StageHeroTankLightData(
+    float3 worldPosition,
+    out float3 dominantDirection,
+    out float3 dominantColor,
+    out float2 dominantSurfacePosition)
+{
+    float3 lightDirection0 = normalize(gStageLightRefractedAxis[0].xyz);
+    float3 lightDirection1 = normalize(gStageLightRefractedAxis[1].xyz);
+    float3 lightDirection2 = normalize(gStageLightRefractedAxis[2].xyz);
+    const float waterDepth0 = max(
+        gStageLightSurfaceOrigin[0].y - worldPosition.y, 0.0);
+    const float waterDepth1 = max(
+        gStageLightSurfaceOrigin[1].y - worldPosition.y, 0.0);
+    const float waterDepth2 = max(
+        gStageLightSurfaceOrigin[2].y - worldPosition.y, 0.0);
+    const float2 surfacePosition0 = worldPosition.xz -
+        lightDirection0.xz * (waterDepth0 / max(-lightDirection0.y, 0.001));
+    const float2 surfacePosition1 = worldPosition.xz -
+        lightDirection1.xz * (waterDepth1 / max(-lightDirection1.y, 0.001));
+    const float2 surfacePosition2 = worldPosition.xz -
+        lightDirection2.xz * (waterDepth2 / max(-lightDirection2.y, 0.001));
+
+    const float2 delta0 = (surfacePosition0 -
+        gStageLightSurfaceOrigin[0].xz) / float2(7.2, 3.25);
+    const float2 delta1 = (surfacePosition1 -
+        gStageLightSurfaceOrigin[1].xz) / float2(7.8, 3.55);
+    const float2 delta2 = (surfacePosition2 -
+        gStageLightSurfaceOrigin[2].xz) / float2(7.2, 3.25);
+    float pool0 = saturate(1.0 - dot(delta0, delta0));
+    float pool1 = saturate(1.0 - dot(delta1, delta1));
+    float pool2 = saturate(1.0 - dot(delta2, delta2));
+    pool0 *= pool0 * gStageLightColorStrength[0].w;
+    pool1 *= pool1 * gStageLightColorStrength[1].w;
+    pool2 *= pool2 * gStageLightColorStrength[2].w;
+
+    dominantDirection = lightDirection0;
+    dominantColor = gStageLightColorStrength[0].rgb;
+    dominantSurfacePosition = surfacePosition0;
+    float illumination = pool0;
+    if (pool1 > illumination)
+    {
+        illumination = pool1;
+        dominantDirection = lightDirection1;
+        dominantColor = gStageLightColorStrength[1].rgb;
+        dominantSurfacePosition = surfacePosition1;
+    }
+    if (pool2 > illumination)
+    {
+        illumination = pool2;
+        dominantDirection = lightDirection2;
+        dominantColor = gStageLightColorStrength[2].rgb;
+        dominantSurfacePosition = surfacePosition2;
+    }
+    return saturate(illumination);
+}
+
+float StageHeroTankBroadCaustics(float2 position, float time)
+{
+    // Two broad travelling ridges are enough through a distant viewing pane.
+    // The detailed three-layer pattern is retained on the tunnel receivers.
+    const float waveA = abs(sin(
+        position.x * 0.58 + position.y * 0.34 + time * 0.22));
+    const float waveB = abs(sin(
+        position.x * -0.31 + position.y * 0.51 - time * 0.17 +
+        sin(position.x * 0.12 + time * 0.11) * 0.48));
+    const float ridge = min(waveA, waveB);
+    const float broad = saturate(1.0 - ridge / 0.42);
+    return broad * broad;
 }
 
 float3 ShadeAuthoredTank(
@@ -1196,48 +1320,42 @@ StagePixelOutput PSStage(StageVertexOutput input)
             1.25 + waterDepth * 0.30 + (1.0 - facing) * 4.2,
             9.0);
         const float3 transmittance = exp(
-            -float3(0.135, 0.046, 0.013) * opticalDistance);
+            -float3(0.108, 0.038, 0.011) * opticalDistance);
         float3 tankLightDirection;
         float3 tankLightColor;
         float2 tankSurfacePosition;
-        const float lightBank = StageArchOverheadLightData(
+        const float lightBank = StageHeroTankLightData(
             input.worldPosition,
             tankLightDirection,
             tankLightColor,
             tankSurfacePosition);
-        const float broadCaustics = StageTankCaustics(
-            tankSurfacePosition * 0.31,
-            gStageSurfaceParameters.y * 0.48,
-            0.24);
+        const float broadCaustics = StageHeroTankBroadCaustics(
+            tankSurfacePosition,
+            gStageSurfaceParameters.y);
         const float3 deepColor = lerp(
             float3(0.002, 0.024, 0.070),
             float3(0.007, 0.135, 0.260),
             saturate(1.0 - waterDepth / 8.2));
         const float upperFade = saturate(
             (input.worldPosition.y - 0.25) / 6.2);
-        const float shaftA = exp(-pow(
-            (input.worldPosition.z + 3.4) / 2.35, 2.0)) *
-            upperFade;
-        const float shaftB = exp(-pow(
-            (input.worldPosition.z - 3.1) / 2.85, 2.0)) *
-            upperFade;
+        float shaftA = saturate(1.0 - abs(
+            (input.worldPosition.z + 3.4) / 3.40));
+        float shaftB = saturate(1.0 - abs(
+            (input.worldPosition.z - 3.1) / 3.95));
+        shaftA *= shaftA * upperFade;
+        shaftB *= shaftB * upperFade;
         const float slowShaftRipple = 0.84 + 0.16 * sin(
             input.worldPosition.y * 0.46 +
             input.worldPosition.z * 0.31 +
             gStageSurfaceParameters.y * 0.24);
-        const float moteCell = StageHash21(floor(
-            input.worldPosition.yz * float2(4.0, 3.2)));
-        const float revealedMotes = step(0.976, moteCell) *
-            (shaftA + shaftB) * upperFade;
         const float3 inScattering =
             deepColor * (0.52 + lightBank * 0.62) *
                 (1.0 - transmittance) +
             tankLightColor * broadCaustics * lightBank *
                 exp(-waterDepth * 0.16) * 0.24 +
             float3(0.010, 0.105, 0.245) * fresnel +
-            float3(0.012, 0.135, 0.34) *
-                (shaftA * 0.62 + shaftB * 0.48) * slowShaftRipple +
-            float3(0.12, 0.48, 0.92) * revealedMotes * 0.25;
+            tankLightColor *
+                (shaftA * 0.62 + shaftB * 0.48) * slowShaftRipple;
         finalColor = backgroundColor * transmittance + inScattering;
         // The shader already sampled the scene through the water, so this is
         // a near-replacement blend rather than an opaque blue overlay.
@@ -1246,65 +1364,40 @@ StagePixelOutput PSStage(StageVertexOutput input)
     else if (!preserveAnalyticAquarium &&
         surfaceType > 16.5 && surfaceType < 17.5)
     {
-        // Thick aquarium acrylic: small Snell refraction at normal incidence,
-        // strong Fresnel only toward the edge, and restrained RGB separation.
+        // This huge pane is almost flat. Water already refracted the opaque
+        // scene, so a second screen-space refraction only doubled distortion
+        // and required another full-resolution GPU copy. Retain the physically
+        // important grazing Fresnel, edge thickness and soft source reflection.
         const float3 interfaceNormal =
             dot(normal, -viewDirection) >= 0.0 ? normal : -normal;
         const float facing = saturate(dot(-viewDirection, interfaceNormal));
         const float fresnel = 0.040 + 0.960 * pow(1.0 - facing, 5.0);
-        const float2 currentUv = ClipToUv(input.currentClip);
-        const float3 acrylicRay = refract(
-            viewDirection, interfaceNormal, 1.0 / 1.49);
-        const float4 refractedClip = mul(
-            float4(input.worldPosition + acrylicRay * 0.22, 1.0),
-            gStageViewProjection);
-        float2 offset = ClipToUv(refractedClip) - currentUv;
-        const float2 pressureWave = float2(
-            sin(input.worldPosition.y * 2.1 +
-                input.worldPosition.z * 0.31 +
-                gStageSurfaceParameters.y * 0.18),
-            cos(input.worldPosition.y * 4.7 -
-                input.worldPosition.z * 0.22 -
-                gStageSurfaceParameters.y * 0.13)) * 0.00046;
-        offset += pressureWave;
-        offset = clamp(offset, -0.014, 0.014);
-        const float2 safeUv = clamp(currentUv, 0.003, 0.997);
-        const float3 refractedSample = gStageSurfaceParameters.w > 0.5
-            ? gStageRefractionScene.Sample(
-                gStageRefractionSampler,
-                clamp(safeUv + offset, 0.002, 0.998)).rgb
-            : float3(0.003, 0.065, 0.145);
-        const float dispersion = saturate(length(offset) * 46.0) *
-            (1.0 - facing);
-        const float3 refracted = refractedSample *
-            (1.0 + float3(0.024, 0.0, -0.024) * dispersion);
         const float verticalEdge = pow(
             saturate(abs(input.worldPosition.z) / 14.62), 10.0);
         float3 glassLightDirection;
         float3 glassLightColor;
         float2 glassSurfacePosition;
-        const float glassLightBank = StageArchOverheadLightData(
+        const float glassLightBank = StageHeroTankLightData(
             input.worldPosition,
             glassLightDirection,
             glassLightColor,
             glassSurfacePosition);
-        const float lightRipple =
-            sin(glassSurfacePosition.x * 0.24 +
-                glassSurfacePosition.y * 0.17 +
-                gStageSurfaceParameters.y * 0.19) * 0.5 + 0.5;
+        const float lightRipple = 0.82 + 0.18 * sin(
+            glassSurfacePosition.x * 0.24 +
+            glassSurfacePosition.y * 0.17 +
+            gStageSurfaceParameters.y * 0.19);
+        const float cleaningVariation = 0.5 + 0.5 * sin(
+            input.worldPosition.y * 0.37 +
+            input.worldPosition.z * 0.21);
         const float3 reflection =
-            float3(0.035, 0.25, 0.60) *
-                (fresnel * 0.46 + verticalEdge * 0.18) +
+            float3(0.018, 0.080, 0.145) *
+                (fresnel * 0.58 + verticalEdge * 0.22) +
             glassLightColor * glassLightBank *
-                (0.035 + fresnel * 0.085) *
-                (0.76 + lightRipple * 0.24);
-        finalColor = lerp(
-            refracted * float3(0.960, 0.985, 0.995),
-            reflection,
-            saturate(fresnel * 0.60));
+                (0.020 + fresnel * 0.075) * lightRipple;
+        finalColor = reflection * (0.94 + cleaningVariation * 0.06);
         finalOpacity = saturate(
-            0.075 + fresnel * 0.30 +
-            verticalEdge * 0.035 + glassLightBank * 0.025);
+            0.030 + fresnel * 0.24 +
+            verticalEdge * 0.050 + glassLightBank * 0.018);
     }
     else if (!preserveAnalyticAquarium &&
         surfaceType > 17.5 && surfaceType < 21.5)
@@ -1314,30 +1407,40 @@ StagePixelOutput PSStage(StageVertexOutput input)
         const bool isEmitter = surfaceType > 20.5;
         if (isEmitter)
         {
-            finalColor = float3(0.035, 0.48, 1.04) *
+            finalColor = gStageLightColorStrength[0].rgb *
                 (0.64 + 0.04 * sin(gStageSurfaceParameters.y * 0.42));
         }
         else if (isRock)
         {
-            const float mottling = 0.72 + 0.28 * sin(
+            const float broadMottle = 0.5 + 0.5 * sin(
                 input.worldPosition.x * 1.1 +
                 input.worldPosition.y * 1.7 +
                 input.worldPosition.z * 0.8);
+            const float fineMottle = 0.5 + 0.5 * sin(
+                input.worldPosition.x * 3.7 -
+                input.worldPosition.y * 2.9 +
+                input.worldPosition.z * 2.3);
+            const float mottling = lerp(0.62, 1.30,
+                broadMottle * 0.68 + fineMottle * 0.32);
             const float waterDepth = max(10.20 - input.worldPosition.y, 0.0);
             float3 rockLightDirection;
             float3 rockLightColor;
             float2 rockSurfacePosition;
-            const float rockLight = StageArchOverheadLightData(
+            const float rockLight = StageHeroTankLightData(
                 input.worldPosition, rockLightDirection,
                 rockLightColor, rockSurfacePosition);
-            const float caustics = StageTankCaustics(
-                rockSurfacePosition * 0.30,
-                gStageSurfaceParameters.y * 0.48,
-                0.24);
-            finalColor = gStageBaseColor.rgb * mottling *
-                (0.065 + diffuse * 0.075) +
+            const float caustics = StageHeroTankBroadCaustics(
+                rockSurfacePosition,
+                gStageSurfaceParameters.y);
+            const float upwardWetFace = saturate(normal.y * 0.5 + 0.5);
+            const float3 boninRock = float3(0.050, 0.122, 0.150) *
+                mottling;
+            finalColor = boninRock *
+                (0.22 + diffuse * 0.21 + upwardWetFace * 0.075) +
+                float3(0.003, 0.022, 0.048) *
+                    exp(-waterDepth * 0.12) +
                 rockLightColor * caustics * rockLight *
-                exp(-waterDepth * 0.19) * 0.18;
+                exp(-waterDepth * 0.17) * 0.30;
         }
         else
         {
@@ -1373,7 +1476,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
         float3 surfaceLightDirection;
         float3 surfaceLightColor;
         float2 surfaceLightPosition;
-        const float surfaceLightBank = StageArchOverheadLightData(
+        const float surfaceLightBank = StageHeroTankLightData(
             input.worldPosition,
             surfaceLightDirection,
             surfaceLightColor,
@@ -1388,7 +1491,7 @@ StagePixelOutput PSStage(StageVertexOutput input)
         finalOpacity = saturate(0.24 + fresnel * 0.26);
     }
     else if (!preserveAnalyticAquarium &&
-        surfaceType > 22.5 && surfaceType < 23.5)
+        surfaceType > 22.5 && surfaceType < 24.5)
     {
         // Fine air bubbles are one combined low-poly batch. Their transparent
         // interiors stay nearly invisible; only the Fresnel rim and a small
@@ -1405,13 +1508,19 @@ StagePixelOutput PSStage(StageVertexOutput input)
             input.worldPosition.y * 13.0 +
             input.worldPosition.x * 5.3 +
             gStageSurfaceParameters.y * 0.55);
+        const bool heroTankBubble = surfaceType > 23.5;
+        const float3 bubbleLightColor = heroTankBubble
+            ? gStageLightColorStrength[0].rgb
+            : float3(0.66, 0.92, 1.20);
         finalColor =
             lerp(
                 float3(0.045, 0.24, 0.52),
-                float3(0.28, 0.82, 1.18),
+                bubbleLightColor,
                 film) * rim * 0.72 +
-            float3(0.66, 0.92, 1.20) * glint * 0.88;
-        finalOpacity = saturate(0.012 + rim * 0.20 + glint * 0.30);
+            bubbleLightColor * glint * 0.88;
+        finalOpacity = saturate(
+            (heroTankBubble ? 0.008 : 0.012) +
+            rim * (heroTankBubble ? 0.16 : 0.20) + glint * 0.30);
     }
     else if (!preserveAnalyticAquarium &&
         surfaceType > 3.5 && surfaceType < 6.5)

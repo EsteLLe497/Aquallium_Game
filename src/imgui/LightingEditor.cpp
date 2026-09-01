@@ -58,7 +58,9 @@ void LightingEditor::BeginFrame()
     ImGui::NewFrame();
 }
 
-void LightingEditor::Draw(lighting::LocalLightingRig& rig)
+void LightingEditor::Draw(
+    lighting::LocalLightingRig& rig,
+    lighting::HeroTankLightingRig& heroTankRig)
 {
     if (!initialized_ || !visible_)
     {
@@ -138,6 +140,35 @@ void LightingEditor::Draw(lighting::LocalLightingRig& rig)
         ImGui::SeparatorText("Accent lights");
         ImGui::Text("GPU cap: %u local lights", lighting::kMaximumLocalLights);
         ImGui::TextUnformatted("Water lighting remains a separate shader path.");
+
+        ImGui::SeparatorText("Hero tank puzzle lighting");
+        ImGui::TextUnformatted(
+            "Game switches can toggle the same alternateEnabled flag.");
+        if (ImGui::Button(
+            heroTankRig.alternateEnabled
+                ? "Restore default blue"
+                : "Activate alternate colour"))
+        {
+            heroTankRig.alternateEnabled =
+                !heroTankRig.alternateEnabled;
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted(
+            heroTankRig.alternateEnabled ? "ALT" : "DEFAULT");
+        ImGui::ColorEdit3(
+            "Default tank colour",
+            &heroTankRig.defaultColor.x,
+            ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+        ImGui::ColorEdit3(
+            "Switch tank colour",
+            &heroTankRig.alternateColor.x,
+            ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+        ImGui::SliderFloat(
+            "Tank light intensity",
+            &heroTankRig.intensity,
+            0.0f,
+            2.5f,
+            "%.2f");
     }
     ImGui::End();
 }

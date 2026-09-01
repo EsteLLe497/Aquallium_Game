@@ -462,24 +462,37 @@ void AquariumRenderer::Render(
     else if (settings.watatsumiTankMode)
     {
         activeLightCount = 3;
+        const DirectX::XMFLOAT3 selectedColor =
+            settings.heroTankLighting.alternateEnabled
+                ? settings.heroTankLighting.alternateColor
+                : settings.heroTankLighting.defaultColor;
+        const float paletteIntensity = std::max(
+            settings.heroTankLighting.intensity,
+            0.0f);
         // Three unequal banks sit above the actual rendered water surface
         // (12.45 m authored height plus the -2.25 m stage offset). Their
         // refracted axes drive surface highlights, water shafts and caustics
         // from one definition, matching the underwater-arch lighting path.
         lights[0] = {
-            {12.0f, 14.4f, -8.0f}, 0.94f,
+            {12.0f, 14.4f, -8.0f}, 0.94f * paletteIntensity,
             {0.08f, -1.0f, 0.06f}, 46.0f,
-            {0.055f, 0.48f, 1.12f}, 10.20f
+            {selectedColor.x * 1.05f,
+             selectedColor.y * 1.05f,
+             selectedColor.z * 1.05f}, 10.20f
         };
         lights[1] = {
-            {15.0f, 14.7f, 0.0f}, 0.82f,
+            {15.0f, 14.7f, 0.0f}, 0.82f * paletteIntensity,
             {-0.04f, -1.0f, -0.02f}, 48.0f,
-            {0.035f, 0.36f, 0.98f}, 10.20f
+            {selectedColor.x * 0.88f,
+             selectedColor.y * 0.88f,
+             selectedColor.z * 0.88f}, 10.20f
         };
         lights[2] = {
-            {11.2f, 14.2f, 8.0f}, 0.70f,
+            {11.2f, 14.2f, 8.0f}, 0.70f * paletteIntensity,
             {-0.09f, -1.0f, -0.05f}, 46.0f,
-            {0.020f, 0.27f, 0.84f}, 10.20f
+            {selectedColor.x * 0.72f,
+             selectedColor.y * 0.72f,
+             selectedColor.z * 0.72f}, 10.20f
         };
     }
     else
@@ -795,6 +808,22 @@ void AquariumRenderer::Render(
                 renderHeight);
         const float openingMask =
             settings.greyboxMode ? 0.0f : 1.0f;
+        lighting::LocalLightingRig stageLocalLighting =
+            settings.localLighting;
+        if (settings.watatsumiTankMode)
+        {
+            const DirectX::XMFLOAT3 selectedColor =
+                settings.heroTankLighting.alternateEnabled
+                    ? settings.heroTankLighting.alternateColor
+                    : settings.heroTankLighting.defaultColor;
+            stageLocalLighting.tankBounceColor = {
+                selectedColor.x * 0.18f,
+                selectedColor.y * 0.50f,
+                selectedColor.z * 0.58f};
+            stageLocalLighting.tankBounceIntensity =
+                settings.localLighting.tankBounceIntensity *
+                std::max(settings.heroTankLighting.intensity, 0.0f);
+        }
         activeStageModel->RenderOpaque(
             context,
             currentViewProjection,
@@ -802,7 +831,7 @@ void AquariumRenderer::Render(
             currentCameraPosition,
             time,
             openingMask,
-            &settings.localLighting);
+            &stageLocalLighting);
         if (settings.greyboxMode && !settings.underwaterArchMode &&
             !settings.watatsumiTankMode)
         {
@@ -863,14 +892,22 @@ void AquariumRenderer::Render(
                 StageModel::TransparentLayer::Medium,
                 nullptr);
 
-            context->OMSetRenderTargets(3, unboundTargets, nullptr);
-            context->CopyResource(
-                refractionCopyTexture_.Get(),
-                sceneColorTexture_.Get());
-            context->OMSetRenderTargets(
-                sceneTargetCount,
-                sceneTargets,
-                stageDepthView_.Get());
+            if (settings.underwaterArchMode)
+            {
+                // Curved tunnel acrylic still needs a second scene copy because
+                // it visibly bends the already-refracted water layer. The hero
+                // tank uses a huge almost-flat pane, so its dedicated glass
+                // shader is a cheap Fresnel/edge overlay and skips this full-
+                // resolution GPU copy entirely.
+                context->OMSetRenderTargets(3, unboundTargets, nullptr);
+                context->CopyResource(
+                    refractionCopyTexture_.Get(),
+                    sceneColorTexture_.Get());
+                context->OMSetRenderTargets(
+                    sceneTargetCount,
+                    sceneTargets,
+                    stageDepthView_.Get());
+            }
 
             activeStageModel->RenderTransparent(
                 context,
@@ -879,7 +916,9 @@ void AquariumRenderer::Render(
                 currentCameraPosition,
                 time,
                 openingMask,
-                refractionCopyView_.Get(),
+                settings.underwaterArchMode
+                    ? refractionCopyView_.Get()
+                    : nullptr,
                 StageModel::TransparentLayer::Glass,
                 nullptr);
         }

@@ -103,6 +103,7 @@
       <Filter>01 Platform</Filter>
     </ClInclude>
     <ClInclude Include="src\imgui\LightingEditor.h"><Filter>10 ImGui</Filter></ClInclude>
+    <ClInclude Include="src\lighting\HeroTankLighting.h"><Filter>04 Rendering\Lighting</Filter></ClInclude>
     <ClInclude Include="src\lighting\LocalLight.h"><Filter>04 Rendering\Lighting</Filter></ClInclude>
     <ClInclude Include="src\rendering\AdaptiveResolution.h"><Filter>04 Rendering</Filter></ClInclude>
     <ClInclude Include="third_party\imgui\imgui.h"><Filter>07 Third Party</Filter></ClInclude>

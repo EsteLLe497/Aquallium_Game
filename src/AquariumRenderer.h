@@ -17,6 +17,7 @@
 #include "StageModel.h"
 #include "JellyfishRenderer.h"
 #include "FishRenderer.h"
+#include "lighting/HeroTankLighting.h"
 #include "lighting/LocalLight.h"
 #include "rendering/AdaptiveResolution.h"
 
@@ -61,6 +62,7 @@ struct AquariumSettings
     bool adaptiveResolution = true;
     float targetFrameRate = 100.0f;
     lighting::LocalLightingRig localLighting{};
+    lighting::HeroTankLightingRig heroTankLighting{};
 };
 
 class AquariumRenderer

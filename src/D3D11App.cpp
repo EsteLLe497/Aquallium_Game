@@ -290,7 +290,9 @@ void D3D11App::Update(float deltaTime)
     if (auto* aquariumScene = dynamic_cast<AquariumScene*>(
         sceneManager_.GetCurrentScene()))
     {
-        lightingEditor_.Draw(aquariumScene->GetLocalLighting());
+        lightingEditor_.Draw(
+            aquariumScene->GetLocalLighting(),
+            aquariumScene->GetHeroTankLighting());
     }
     if (input_.WasPressed('V'))
     {

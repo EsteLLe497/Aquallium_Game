@@ -602,8 +602,11 @@ framework::SceneDiagnostics AquariumScene::GetDiagnostics() const
 void AquariumScene::ResetSettings()
 {
     const lighting::LocalLightingRig localLighting = settings_.localLighting;
+    const lighting::HeroTankLightingRig heroTankLighting =
+        settings_.heroTankLighting;
     settings_ = {};
     settings_.localLighting = localLighting;
+    settings_.heroTankLighting = heroTankLighting;
     playerCharacter_.activePath = -1;
     playerCharacter_.activeSegment = 0;
 }

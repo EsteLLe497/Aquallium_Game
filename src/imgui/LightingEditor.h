@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../lighting/LocalLight.h"
+#include "../lighting/HeroTankLighting.h"
 
 #include <d3d11.h>
 #include <windows.h>
@@ -14,7 +15,9 @@ public:
     void Shutdown();
     bool HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
     void BeginFrame();
-    void Draw(lighting::LocalLightingRig& rig);
+    void Draw(
+        lighting::LocalLightingRig& rig,
+        lighting::HeroTankLightingRig& heroTankRig);
     void Render(ID3D11DeviceContext* context);
     [[nodiscard]] bool IsVisible() const noexcept { return visible_; }
     [[nodiscard]] bool WantsInput() const noexcept;

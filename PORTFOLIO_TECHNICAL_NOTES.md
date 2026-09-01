@@ -476,3 +476,48 @@ References:
   underwater arch, 122 FPS in the entrance route and 124 FPS in Watatsumi.
   The final full-resolution visual capture measured 146 FPS while screen
   capture and the development UI were active.
+
+# Sumida-inspired hero-tank art and runtime light puzzle
+
+- Reworked the large viewing tank around Sumida Aquarium's Ogasawara Sea
+  composition: a bright Bonin-blue upper layer, three separated fish layers,
+  a darker central channel, side reef shelves and a sparse open-water ray
+  silhouette. This is an original layout using the real exhibit as lighting
+  and habitat reference, not a literal venue copy.
+- Replaced placeholder round rocks with 35 deterministic faceted boulders.
+  Side cliffs and lower outcrops share one opaque material batch; broad and
+  fine shader mottling adds wet volcanic variation without texture fetches.
+- Added three 24-bubble aeration columns as one transparent draw. The water
+  surface is a 24 x 32 displaced grid whose analytic wave gradient includes
+  the same three diffuser positions, linking bubbles and surface motion.
+- Kept the established 108 small fish, 12 medium fish and three rays within
+  three instanced biology draws. Distinct upper, middle, lower and crossing
+  targets, plus yellow and deep-cyan school palettes, create species variety
+  without raising the Boids or draw-call budget.
+- Split the large tank's optical responsibilities: water performs the single
+  screen-space refraction and Beer-Lambert absorption, while the flat acrylic
+  is now a lightweight Fresnel/edge/source-reflection overlay. The second
+  full-resolution scene copy used by curved arch glass is skipped here.
+- Added `HeroTankLightingRig` as gameplay-owned state with default and
+  alternate HDR colours, intensity and a switch flag. F2 / Lighting exposes
+  both palettes and a preview toggle; future puzzle code only changes the flag
+  and can use the same value to reveal colour-keyed cipher materials.
+- Replaced the large pane's generic three-light exponential evaluation with a
+  three-bank polynomial footprint and two broad travelling caustic ridges.
+  Detailed tunnel caustics remain unchanged. Cell-based shader motes were
+  removed after visual review exposed square artifacts; real geometry bubbles
+  now provide that depth cue.
+- Corrected adaptive-resolution recovery from an overly conservative 24%
+  headroom requirement to a 9% guard band. After an expensive load frame the
+  renderer can recover quality instead of remaining stranded at 82% scale.
+- Final Debug x64 build completed with zero warnings and zero errors. A
+  1280 x 720, 15-second warm capture reported 99 FPS at 90% render scale and
+  10.2 ms while the development title diagnostics and screen capture were
+  active. The generated hall contains eight material batches, 8,467 triangles,
+  35 reef boulders and 72 bubbles.
+
+References:
+
+- https://www.sumida-aquarium.com/about/floor/ogasawara/
+- https://sumida-aquarium.com/column/hkj7xueuc2/
+- https://sumida-aquarium.com/column/4843/

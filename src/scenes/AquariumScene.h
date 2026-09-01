@@ -35,6 +35,10 @@ public:
     {
         return settings_.localLighting;
     }
+    [[nodiscard]] lighting::HeroTankLightingRig& GetHeroTankLighting() noexcept
+    {
+        return settings_.heroTankLighting;
+    }
 
 private:
     void ResetSettings();

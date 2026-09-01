@@ -37,6 +37,7 @@ MATERIALS = {
     "WatatsumiWater": (0.010, 0.135, 0.245, 0.84),
     "WatatsumiGlass": (0.055, 0.220, 0.310, 0.16),
     "WatatsumiWaterSurface": (0.025, 0.300, 0.430, 0.58),
+    "WatatsumiBubble": (0.180, 0.620, 1.000, 0.18),
     "WatatsumiEmitter": (0.080, 0.640, 0.920, 1.0),
 }
 groups = {name: MeshGroup(name) for name in MATERIALS}
@@ -63,6 +64,69 @@ def box(material, center, size):
                         ((0,4,7,3),(-1,0,0)),((1,2,6,5),(1,0,0)),
                         ((3,7,6,2),(0,1,0)),((0,1,5,4),(0,-1,0))):
         quad(material, [points[i] for i in ids], normal)
+
+
+def triangle(material, vertices, uvs=((0, 0), (0.5, 1), (1, 0))):
+    """Append one flat-shaded triangle to an existing material batch."""
+    ax, ay, az = vertices[0]
+    bx, by, bz = vertices[1]
+    cx, cy, cz = vertices[2]
+    ux, uy, uz = bx-ax, by-ay, bz-az
+    vx, vy, vz = cx-ax, cy-ay, cz-az
+    nx, ny, nz = uy*vz-uz*vy, uz*vx-ux*vz, ux*vy-uy*vx
+    inverse = 1.0 / max(math.sqrt(nx*nx + ny*ny + nz*nz), 0.0001)
+    normal = (nx*inverse, ny*inverse, nz*inverse)
+    group = groups[material]
+    base = len(group.positions) // 3
+    for position, uv in zip(vertices, uvs):
+        group.positions.extend(position)
+        group.normals.extend(normal)
+        group.texcoords.extend(uv)
+    group.indices.extend((base, base+1, base+2))
+
+
+def faceted_rock(center, size, seed, segments=8):
+    """Low-poly irregular reef boulder; all rocks remain one draw batch."""
+    cx, cy, cz = center
+    rx, ry, rz = size
+    lower, upper = [], []
+    for index in range(segments):
+        angle = math.tau * index / segments
+        variation = 0.84 + 0.16 * math.sin(seed * 1.73 + index * 2.41)
+        twist = 0.13 * math.sin(seed * 0.91 + index * 1.37)
+        lower.append((
+            cx + math.cos(angle) * rx * variation,
+            cy - ry * (0.25 + twist),
+            cz + math.sin(angle) * rz * variation))
+        upper.append((
+            cx + math.cos(angle + 0.16) * rx * variation * 0.78,
+            cy + ry * (0.34 + twist * 0.55),
+            cz + math.sin(angle + 0.16) * rz * variation * 0.78))
+    bottom = (cx - rx * 0.05, cy - ry * 0.72, cz + rz * 0.04)
+    top = (cx + rx * 0.09, cy + ry * 0.82, cz - rz * 0.07)
+    for index in range(segments):
+        next_index = (index + 1) % segments
+        triangle("WatatsumiRock", (bottom, lower[next_index], lower[index]))
+        triangle("WatatsumiRock", (lower[index], lower[next_index], upper[next_index]))
+        triangle("WatatsumiRock", (lower[index], upper[next_index], upper[index]))
+        triangle("WatatsumiRock", (upper[index], upper[next_index], top))
+
+
+def bubble_octahedron(center, radius):
+    cx, cy, cz = center
+    top = (cx, cy + radius * 1.35, cz)
+    bottom = (cx, cy - radius * 1.35, cz)
+    # Eight ring points avoid the conspicuous diamond/square silhouette that
+    # the former four-sided octahedron produced against the bright water.
+    ring = tuple(
+        (cx + math.cos(index * math.tau / 8.0) * radius,
+         cy,
+         cz + math.sin(index * math.tau / 8.0) * radius)
+        for index in range(8))
+    for index in range(8):
+        next_index = (index + 1) % 8
+        triangle("WatatsumiBubble", (top, ring[index], ring[next_index]))
+        triangle("WatatsumiBubble", (bottom, ring[next_index], ring[index]))
 
 
 TANK_FRONT_X = 7.0
@@ -251,6 +315,77 @@ def curved_tank_wall(material, segments=40):
         quad(material, (p0,p1,p2,p3), (normal[0]*inv,0,normal[2]*inv))
 
 
+def tank_surface_grid(x_segments=24, z_segments=32):
+    """Subdivided semi-ellipse so the vertex wave has visible broad motion."""
+    for x_index in range(x_segments):
+        u0 = x_index / x_segments
+        u1 = (x_index + 1) / x_segments
+        x0 = TANK_FRONT_X + TANK_DEPTH * u0
+        x1 = TANK_FRONT_X + TANK_DEPTH * u1
+        half0 = TANK_HALF_WIDTH * math.sqrt(max(1.0 - u0*u0, 0.0))
+        half1 = TANK_HALF_WIDTH * math.sqrt(max(1.0 - u1*u1, 0.0))
+        for z_index in range(z_segments):
+            v0 = -1.0 + 2.0 * z_index / z_segments
+            v1 = -1.0 + 2.0 * (z_index + 1) / z_segments
+            quad(
+                "WatatsumiWaterSurface",
+                ((x0,TANK_WATER_SURFACE,half0*v0),
+                 (x0,TANK_WATER_SURFACE,half0*v1),
+                 (x1,TANK_WATER_SURFACE,half1*v1),
+                 (x1,TANK_WATER_SURFACE,half1*v0)),
+                (0,1,0),
+                ((u0,(v0+1)*0.5),(u0,(v1+1)*0.5),
+                 (u1,(v1+1)*0.5),(u1,(v0+1)*0.5)))
+
+
+def add_ogasawara_reef():
+    """Dense side cliffs and a sparse central reef inspired by Ogasawara."""
+    seed = 1
+    # Layered shelves grow from both tank walls but preserve a deep central
+    # blue channel for schooling fish and the three overhead light banks.
+    for side in (-1.0, 1.0):
+        for row in range(5):
+            x = 8.8 + row * 1.78
+            plan_half_width = TANK_HALF_WIDTH * math.sqrt(max(
+                1.0 - ((x - TANK_FRONT_X) / TANK_DEPTH) ** 2,
+                0.0))
+            for level in range(3):
+                z = side * (plan_half_width * (0.68 + level * 0.075))
+                y = 1.05 + level * 1.75 + (row % 2) * 0.38
+                faceted_rock(
+                    (x, y, z),
+                    (2.20 + level * 0.32,
+                     1.35 + level * 0.25,
+                     2.45 + (row % 3) * 0.28),
+                    seed)
+                seed += 1
+    # Bottom outcrops produce depth layers without blocking the main window.
+    for center, size in (
+        ((10.4,0.95,-5.2),(2.7,1.35,2.2)),
+        ((12.9,0.82, 4.5),(2.3,1.15,2.7)),
+        ((15.7,0.88,-2.4),(2.8,1.30,2.1)),
+        ((18.1,0.78, 2.8),(2.1,1.05,1.8)),
+        ((19.6,0.70,-1.6),(1.8,0.90,1.6))):
+        faceted_rock(center, size, seed)
+        seed += 1
+
+
+def add_bubble_columns():
+    """72 tiny bubbles in one batch, arranged as three aeration columns."""
+    columns = ((11.2,-8.4),(14.9,0.7),(12.0,8.1))
+    for column_index, (base_x, base_z) in enumerate(columns):
+        for index in range(24):
+            phase = column_index * 2.17 + index * 1.91
+            height = 0.75 + (index % 23) / 22.0 * 10.75
+            drift = 0.16 + height * 0.018
+            center = (
+                base_x + math.sin(phase) * drift,
+                height,
+                base_z + math.cos(phase * 1.13) * drift)
+            radius = 0.022 + (index % 5) * 0.006
+            bubble_octahedron(center, radius)
+
+
 def arch_portal_collar(center_z, floor_y, x=6.40, width=RAMP_WIDTH,
                        wall_height=RAMP_WALL_HEIGHT,
                        arch_rise=RAMP_ARCH_RISE,
@@ -320,8 +455,13 @@ def build():
     for side in (-1.0, 1.0):
         box("WatatsumiArchitecture", (6.80,facade_top*0.5,side*14.675),
             (0.70,facade_top,0.05))
-    curved_tank_wall("WatatsumiWater")
+    # A real exhibit hides its service shell behind reef scenery. Making the
+    # rear semi-ellipse opaque rock also removes a large transparent layer that
+    # previously exposed rectangular hall structures and wasted fill rate.
+    curved_tank_wall("WatatsumiRock")
     half_ellipse_cap("WatatsumiRock", 0.20, 1.0)
+    add_ogasawara_reef()
+    add_bubble_columns()
     # Front water interface then acrylic; both are separate transparent batches.
     quad("WatatsumiWater", ((7.12,TANK_WATER_BOTTOM,-TANK_HALF_WIDTH),
                              (7.12,TANK_WATER_SURFACE,-TANK_HALF_WIDTH),
@@ -329,10 +469,7 @@ def build():
                              (7.12,TANK_WATER_BOTTOM,TANK_HALF_WIDTH)), (-1,0,0))
     quad("WatatsumiGlass", ((6.94,0.30,-14.62),(6.94,12.58,-14.62),
                              (6.94,12.58,14.62),(6.94,0.30,14.62)), (-1,0,0))
-    half_ellipse_cap("WatatsumiWaterSurface", TANK_WATER_SURFACE, 1.0)
-    # Keep the tank intentionally empty for later exhibit authoring. The old
-    # five ellipsoid placeholder rocks read as unrelated round props and also
-    # obscured the water-transmission comparison through the full depth.
+    tank_surface_grid()
 
     # The 1F entrance and 2F exit are cut from the same facade grid. The lower
     # header begins above the complete arch crown; the upper opening remains
@@ -434,7 +571,8 @@ def pad4(data, value=0):
 def write_glb():
     binary=bytearray(); views=[]; accessors=[]; meshes=[]; nodes=[]; materials=[]
     material_indices={}
-    transparent={"WatatsumiWater","WatatsumiGlass","WatatsumiWaterSurface"}
+    transparent={"WatatsumiWater","WatatsumiGlass","WatatsumiWaterSurface",
+                 "WatatsumiBubble"}
     for name, rgba in MATERIALS.items():
         material_indices[name]=len(materials)
         materials.append({"name":name,"pbrMetallicRoughness":{"baseColorFactor":list(rgba),
@@ -470,6 +608,9 @@ def write_glb():
                    "rampWidth":RAMP_WIDTH,"rampRise":RAMP_RISE,
                    "tunnelWallHeight":RAMP_WALL_HEIGHT,
                    "tunnelArchRise":RAMP_ARCH_RISE,
+                   "reefBoulderCount":35,
+                   "bubbleCount":72,
+                   "waterSurfaceGrid":[24,32],
                    "rampSequence":["lower-right entry","concealed wall run",
                                    "rear half-helix tunnel","upper-left re-entry",
                                    "deep side platforms"],

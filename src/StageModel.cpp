@@ -506,6 +506,10 @@ void StageModel::Initialize(
                 {
                     primitiveSurfaceType = 23.0f;
                 }
+                else if (std::strcmp(materialName, "WatatsumiBubble") == 0)
+                {
+                    primitiveSurfaceType = 24.0f;
+                }
                 primitiveTransparent =
                     primitive.material->alpha_mode ==
                     cgltf_alpha_mode_blend;
