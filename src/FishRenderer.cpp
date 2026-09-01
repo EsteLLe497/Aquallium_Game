@@ -820,7 +820,8 @@ void FishRenderer::Render(
     const XMFLOAT3& cameraPosition,
     float totalTime,
     float deltaTime,
-    Habitat habitat)
+    Habitat habitat,
+    const lighting::HeroTankLightingRig* heroTankLighting)
 {
     if (habitat != habitat_)
     {
@@ -931,6 +932,37 @@ void FishRenderer::Render(
     constants->waterParameters = habitat == Habitat::UnderwaterArch
         ? DirectX::XMFLOAT4{3.55f, 0.080f, 0.038f, 0.020f}
         : DirectX::XMFLOAT4{10.20f, 0.060f, 0.027f, 0.014f};
+    if (habitat == Habitat::WatatsumiTank && heroTankLighting != nullptr)
+    {
+        const DirectX::XMFLOAT3 selectedColor =
+            heroTankLighting->alternateEnabled
+                ? heroTankLighting->alternateColor
+                : heroTankLighting->defaultColor;
+        constants->keyLightDirectionIntensity = {
+            -0.305f,
+            0.952f,
+            0.0f,
+            heroTankLighting->frontKeyIntensity *
+                heroTankLighting->intensity};
+        constants->keyLightColor = {
+            heroTankLighting->frontKeyColor.x,
+            heroTankLighting->frontKeyColor.y,
+            heroTankLighting->frontKeyColor.z,
+            1.0f};
+        constants->sideLightColorIntensity = {
+            selectedColor.x,
+            selectedColor.y,
+            selectedColor.z,
+            heroTankLighting->sideLightIntensity *
+                heroTankLighting->intensity};
+    }
+    else
+    {
+        constants->keyLightDirectionIntensity = {
+            -0.249f, 0.955f, -0.187f, 1.0f};
+        constants->keyLightColor = {1.0f, 1.0f, 1.0f, 1.0f};
+        constants->sideLightColorIntensity = {};
+    }
     context->Unmap(constantBuffer_.Get(), 0);
 
     context->IASetInputLayout(inputLayout_.Get());

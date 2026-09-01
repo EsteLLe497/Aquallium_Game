@@ -63,6 +63,14 @@ def main() -> None:
     assert "alternateEnabled" in light_rig
     assert "Activate alternate colour" in editor
     assert "defaultColor" in renderer and "alternateColor" in renderer
+    assert "frontKeyIntensity" in renderer
+    assert "sideLightIntensity" in renderer
+    assert "{7.8f, 15.0f, 0.0f}" in renderer
+    assert "{7.6f, 12.9f, -12.0f}" in renderer
+    assert "{7.6f, 12.9f, 12.0f}" in renderer
+    assert "Front key intensity" in editor
+    assert "Side lights intensity" in editor
+    assert "heroTankLighting" in fish_source
     assert "Ogasawara composition" in fish_source
     assert "boninYellowSchool" in fish_source
 
@@ -88,6 +96,9 @@ def main() -> None:
         "second_hero_tank_scene_copy": False,
         "rendered_water_surface_y_m": 10.20,
         "water_light_banks": 3,
+        "broad_front_white_key": True,
+        "inward_front_side_lights": 2,
+        "fish_depth_lighting": True,
         "runtime_editable_light_palettes": 2,
         "reef_boulders_single_batch": extras["reefBoulderCount"],
         "bubbles_single_batch": extras["bubbleCount"],

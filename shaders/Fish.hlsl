@@ -4,6 +4,11 @@ cbuffer FishConstants : register(b4)
     float4 gCameraTime;
     // x: surface height, yzw: RGB absorption per metre.
     float4 gWaterParameters;
+    // xyz: direction from receiver toward the broad front key, w: intensity.
+    float4 gKeyLightDirectionIntensity;
+    float4 gKeyLightColor;
+    // rgb: puzzle palette, w: paired front-corner light intensity.
+    float4 gSideLightColorIntensity;
 };
 
 struct VertexInput
@@ -104,23 +109,66 @@ float4 PSFish(VertexOutput input, bool frontFace : SV_IsFrontFace) : SV_TARGET0
         gCameraTime.xyz - input.worldPosition,
         float3(-1.0, 0.0, 0.0));
     const float3 lightDirection = SafeNormalize(
-        float3(-0.24, 0.92, -0.18),
+        gKeyLightDirectionIntensity.xyz,
         float3(0.0, 1.0, 0.0));
-    const float diffuse = saturate(dot(normal, lightDirection));
+    const bool heroTankLighting = gSideLightColorIntensity.w > 0.0001;
+    // The neutral front key falls off toward the rear wall. This deliberate
+    // value separation makes overlapping schools readable as depth layers.
+    const float frontDepth = saturate(
+        1.0 - (input.worldPosition.x - 7.5) / 14.0);
+    const float keyCoverage = heroTankLighting
+        ? lerp(0.34, 1.0, frontDepth)
+        : 1.0;
+    const float diffuse = saturate(dot(normal, lightDirection)) *
+        gKeyLightDirectionIntensity.w * keyCoverage;
     const float rim = pow(1.0 - saturate(dot(normal, viewDirection)), 2.1);
     const float flankFlash = pow(
         saturate(dot(reflect(-lightDirection, normal), viewDirection)),
         28.0);
     const bool raySpecies = input.species > 1.5;
-    const float3 baseColor = input.tint *
+    const float3 keyTint = lerp(
+        float3(1.0, 1.0, 1.0),
+        gKeyLightColor.rgb,
+        heroTankLighting ? 0.72 : 0.0);
+    const float3 baseColor = input.tint * keyTint *
         (raySpecies ? (0.15 + diffuse * 0.34) : (0.22 + diffuse * 0.52));
-    const float3 silver = float3(0.24, 0.48, 0.72) * flankFlash *
+    const float3 silver = lerp(
+        float3(0.24, 0.48, 0.72),
+        gKeyLightColor.rgb,
+        heroTankLighting ? 0.46 : 0.0) * flankFlash *
         (raySpecies ? 0.20 : 0.42);
     const float3 rimColor = float3(0.04, 0.22, 0.46) * rim * 0.42;
+    // Two tiny sources at the front corners point toward the centre. Squared
+    // footprints avoid sqrt and add no draw call or shadow map.
+    const float2 leftDelta =
+        (input.worldPosition.xz - float2(8.8, -10.5)) /
+        float2(14.0, 11.0);
+    const float2 rightDelta =
+        (input.worldPosition.xz - float2(8.8, 10.5)) /
+        float2(14.0, 11.0);
+    float leftPool = saturate(1.0 - dot(leftDelta, leftDelta));
+    float rightPool = saturate(1.0 - dot(rightDelta, rightDelta));
+    leftPool *= leftPool;
+    rightPool *= rightPool;
+    // Fixed inward directions closely approximate the corner sources across
+    // the distant fish silhouettes and avoid two normalizations per pixel.
+    const float3 leftDirection = float3(-0.405, 0.505, -0.762);
+    const float3 rightDirection = float3(-0.405, 0.505, 0.762);
+    const float sideDiffuse =
+        (saturate(dot(normal, leftDirection)) * leftPool +
+         saturate(dot(normal, rightDirection)) * rightPool) *
+        gSideLightColorIntensity.w;
+    const float3 sideFill = input.tint *
+        gSideLightColorIntensity.rgb * sideDiffuse * 0.36;
     const float3 transmission = exp(
         -gWaterParameters.yzw * input.depthBelowSurface);
     const float tailDarkening = lerp(1.0, 0.82, input.tailMask);
-    float3 color = (baseColor + silver + rimColor) * transmission * tailDarkening;
+    const float rearDepthCue = heroTankLighting
+        ? lerp(0.62, 1.0, frontDepth)
+        : 1.0;
+    float3 color =
+        (baseColor + silver + rimColor + sideFill) *
+        transmission * tailDarkening * rearDepthCue;
     // Fish above the acrylic are intentionally read from below as silhouettes,
     // providing a cheap fish-shadow cue without a second shadow-map pass.
     const float viewedFromBelow =

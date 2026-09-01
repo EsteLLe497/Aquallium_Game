@@ -506,11 +506,11 @@ float StageHeroTankLightData(
         lightDirection2.xz * (waterDepth2 / max(-lightDirection2.y, 0.001));
 
     const float2 delta0 = (surfacePosition0 -
-        gStageLightSurfaceOrigin[0].xz) / float2(7.2, 3.25);
+        gStageLightSurfaceOrigin[0].xz) / float2(12.0, 8.5);
     const float2 delta1 = (surfacePosition1 -
-        gStageLightSurfaceOrigin[1].xz) / float2(7.8, 3.55);
+        gStageLightSurfaceOrigin[1].xz) / float2(6.0, 5.0);
     const float2 delta2 = (surfacePosition2 -
-        gStageLightSurfaceOrigin[2].xz) / float2(7.2, 3.25);
+        gStageLightSurfaceOrigin[2].xz) / float2(6.0, 5.0);
     float pool0 = saturate(1.0 - dot(delta0, delta0));
     float pool1 = saturate(1.0 - dot(delta1, delta1));
     float pool2 = saturate(1.0 - dot(delta2, delta2));
@@ -1338,12 +1338,15 @@ StagePixelOutput PSStage(StageVertexOutput input)
             saturate(1.0 - waterDepth / 8.2));
         const float upperFade = saturate(
             (input.worldPosition.y - 0.25) / 6.2);
-        float shaftA = saturate(1.0 - abs(
-            (input.worldPosition.z + 3.4) / 3.40));
-        float shaftB = saturate(1.0 - abs(
-            (input.worldPosition.z - 3.1) / 3.95));
-        shaftA *= shaftA * upperFade;
-        shaftB *= shaftB * upperFade;
+        float shaftCenter = saturate(1.0 - abs(
+            input.worldPosition.z / 7.2));
+        float shaftLeft = saturate(1.0 - abs(
+            (input.worldPosition.z + 8.6) / 3.2));
+        float shaftRight = saturate(1.0 - abs(
+            (input.worldPosition.z - 8.6) / 3.2));
+        shaftCenter *= shaftCenter * upperFade;
+        shaftLeft *= shaftLeft * upperFade;
+        shaftRight *= shaftRight * upperFade;
         const float slowShaftRipple = 0.84 + 0.16 * sin(
             input.worldPosition.y * 0.46 +
             input.worldPosition.z * 0.31 +
@@ -1355,7 +1358,9 @@ StagePixelOutput PSStage(StageVertexOutput input)
                 exp(-waterDepth * 0.16) * 0.24 +
             float3(0.010, 0.105, 0.245) * fresnel +
             tankLightColor *
-                (shaftA * 0.62 + shaftB * 0.48) * slowShaftRipple;
+                (shaftCenter * 0.52 +
+                 shaftLeft * 0.24 +
+                 shaftRight * 0.24) * slowShaftRipple;
         finalColor = backgroundColor * transmittance + inScattering;
         // The shader already sampled the scene through the water, so this is
         // a near-replacement blend rather than an opaque blue overlay.

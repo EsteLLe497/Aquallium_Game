@@ -515,6 +515,22 @@ References:
   10.2 ms while the development title diagnostics and screen capture were
   active. The generated hall contains eight material batches, 8,467 triangles,
   35 reef boulders and 72 bubbles.
+- Re-composed the hero lighting as one broad 62-degree cool-white key entering
+  from above the front centre plus two smaller 34-degree corner sources aimed
+  inward. All three reuse the existing shadow/light slots, so the change adds
+  no shadow map, light loop or draw call.
+- Extended the fish constant buffer with the shared hero-light palette. A
+  front-to-rear key-light falloff, paired polynomial side footprints and blue
+  rear-depth attenuation separate overlapping schools without sorting them or
+  rendering a second lighting pass. Fixed side-light directions avoid two
+  per-pixel normalizations on the small silhouettes.
+- Added F2 controls for the neutral key colour, key intensity and paired side
+  intensity. The side sources follow the default/alternate puzzle palette,
+  while the cool-white key preserves navigation and fish readability during a
+  colour-switch event.
+- Two visual iterations rejected an overexposed warm-white cone, then retained
+  a cooler 0.62/0.84/1.00 key at lower intensity. The final Debug 1280 x 720,
+  15-second warm capture reported 98 FPS at 90% render scale and 10.3 ms.
 
 References:
 

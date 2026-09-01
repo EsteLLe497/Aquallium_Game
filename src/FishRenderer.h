@@ -8,6 +8,8 @@
 #include <vector>
 #include <wrl/client.h>
 
+#include "lighting/HeroTankLighting.h"
+
 // Ambient fish are simulated as compact data, not individual GameObjects.
 // Only scripted/chasing hero animals should pay the per-object framework cost.
 class FishRenderer
@@ -30,7 +32,8 @@ public:
         const DirectX::XMFLOAT3& cameraPosition,
         float totalTime,
         float deltaTime,
-        Habitat habitat);
+        Habitat habitat,
+        const lighting::HeroTankLightingRig* heroTankLighting = nullptr);
 
     [[nodiscard]] std::uint32_t FishCount() const noexcept
     {
@@ -70,6 +73,9 @@ private:
         DirectX::XMFLOAT4X4 viewProjection;
         DirectX::XMFLOAT4 cameraTime;
         DirectX::XMFLOAT4 waterParameters;
+        DirectX::XMFLOAT4 keyLightDirectionIntensity;
+        DirectX::XMFLOAT4 keyLightColor;
+        DirectX::XMFLOAT4 sideLightColorIntensity;
     };
 
     void CreateGeometry(ID3D11Device* device);

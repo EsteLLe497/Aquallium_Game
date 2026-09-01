@@ -163,11 +163,27 @@ void LightingEditor::Draw(
             "Switch tank colour",
             &heroTankRig.alternateColor.x,
             ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+        ImGui::ColorEdit3(
+            "Front key colour",
+            &heroTankRig.frontKeyColor.x,
+            ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
         ImGui::SliderFloat(
             "Tank light intensity",
             &heroTankRig.intensity,
             0.0f,
             2.5f,
+            "%.2f");
+        ImGui::SliderFloat(
+            "Front key intensity",
+            &heroTankRig.frontKeyIntensity,
+            0.0f,
+            2.5f,
+            "%.2f");
+        ImGui::SliderFloat(
+            "Side lights intensity",
+            &heroTankRig.sideLightIntensity,
+            0.0f,
+            2.0f,
             "%.2f");
     }
     ImGui::End();

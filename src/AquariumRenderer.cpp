@@ -469,30 +469,31 @@ void AquariumRenderer::Render(
         const float paletteIntensity = std::max(
             settings.heroTankLighting.intensity,
             0.0f);
-        // Three unequal banks sit above the actual rendered water surface
-        // (12.45 m authored height plus the -2.25 m stage offset). Their
-        // refracted axes drive surface highlights, water shafts and caustics
-        // from one definition, matching the underwater-arch lighting path.
+        // One broad, nearly white key enters from above the front centre. Two
+        // smaller blue/puzzle-colour sources sit at the front corners and aim
+        // inward. The converging arrangement separates foreground fish from
+        // the reef while keeping the dry visitor floor dark.
         lights[0] = {
-            {12.0f, 14.4f, -8.0f}, 0.94f * paletteIntensity,
-            {0.08f, -1.0f, 0.06f}, 46.0f,
-            {selectedColor.x * 1.05f,
-             selectedColor.y * 1.05f,
-             selectedColor.z * 1.05f}, 10.20f
+            {7.8f, 15.0f, 0.0f},
+            settings.heroTankLighting.frontKeyIntensity * paletteIntensity,
+            {0.32f, -1.0f, 0.0f}, 62.0f,
+            settings.heroTankLighting.frontKeyColor, 10.20f
         };
         lights[1] = {
-            {15.0f, 14.7f, 0.0f}, 0.82f * paletteIntensity,
-            {-0.04f, -1.0f, -0.02f}, 48.0f,
+            {7.6f, 12.9f, -12.0f},
+            settings.heroTankLighting.sideLightIntensity * paletteIntensity,
+            {0.52f, -0.82f, 0.38f}, 34.0f,
             {selectedColor.x * 0.88f,
              selectedColor.y * 0.88f,
              selectedColor.z * 0.88f}, 10.20f
         };
         lights[2] = {
-            {11.2f, 14.2f, 8.0f}, 0.70f * paletteIntensity,
-            {-0.09f, -1.0f, -0.05f}, 46.0f,
-            {selectedColor.x * 0.72f,
-             selectedColor.y * 0.72f,
-             selectedColor.z * 0.72f}, 10.20f
+            {7.6f, 12.9f, 12.0f},
+            settings.heroTankLighting.sideLightIntensity * paletteIntensity,
+            {0.52f, -0.82f, -0.38f}, 34.0f,
+            {selectedColor.x * 0.88f,
+             selectedColor.y * 0.88f,
+             selectedColor.z * 0.88f}, 10.20f
         };
     }
     else
@@ -857,7 +858,10 @@ void AquariumRenderer::Render(
                 currentCameraPosition,
                 time,
                 deltaTime,
-                fishHabitat);
+                fishHabitat,
+                settings.watatsumiTankMode
+                    ? &settings.heroTankLighting
+                    : nullptr);
         }
 
         // Glass cannot sample the HDR target while that same texture is bound
