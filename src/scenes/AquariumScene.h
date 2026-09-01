@@ -11,6 +11,7 @@
 #include "../AquariumRenderer.h"
 #include "../framework/scene.h"
 #include "../physics/CollisionWorld.h"
+#include "../player/PlayerManager.h"
 
 #include <filesystem>
 
@@ -48,13 +49,13 @@ private:
     void SelectUnderwaterArchView();
     void SelectJellyfishReverseValidationView();
     void SelectWatatsumiTankView();
-    void UpdateCamera(float deltaTime, const framework::InputSystem& input);
+    void UpdatePlayer(float deltaTime, const framework::InputSystem& input);
     void UpdateLightingTuning(float deltaTime, const framework::InputSystem& input);
     void BuildStageGlassCollision();
     void BuildRouteCollision();
     void BuildUnderwaterArchCollision();
     void BuildWatatsumiCollision();
-    void ResetPlayerCharacter();
+    void ResetPlayer();
 
     AquariumRenderer renderer_;
     AquariumSettings settings_;
@@ -63,6 +64,5 @@ private:
     physics::CollisionWorld routeCollision_;
     physics::CollisionWorld underwaterArchCollision_;
     physics::CollisionWorld watatsumiCollision_;
-    physics::CharacterCapsule playerCapsule_;
-    physics::CharacterState playerCharacter_;
+    player::PlayerManager playerManager_;
 };

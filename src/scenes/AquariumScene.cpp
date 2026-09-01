@@ -172,6 +172,7 @@ AquariumScene::AquariumScene(
         default: break;
         }
     }
+    ResetPlayer();
 }
 
 void AquariumScene::BuildStageGlassCollision()
@@ -552,8 +553,8 @@ void AquariumScene::Update(
         SelectWatatsumiTankView();
     }
 
-    // 押下中に連続して反映するカメラ移動とライティング調整
-    UpdateCamera(frame.deltaTime, input);
+    // プレイヤー入力とライティング調整を各専用クラスへ委譲する。
+    UpdatePlayer(frame.deltaTime, input);
     UpdateLightingTuning(frame.deltaTime, input);
 
     if (!settings_.paused)
@@ -607,18 +608,19 @@ void AquariumScene::ResetSettings()
     settings_ = {};
     settings_.localLighting = localLighting;
     settings_.heroTankLighting = heroTankLighting;
-    playerCharacter_.activePath = -1;
-    playerCharacter_.activeSegment = 0;
+    ResetPlayer();
 }
 
-void AquariumScene::ResetPlayerCharacter()
+void AquariumScene::ResetPlayer()
 {
-    playerCharacter_.eyePosition = {
-        settings_.cameraPositionX,
-        settings_.cameraPositionY,
-        settings_.cameraPositionZ};
-    playerCharacter_.activePath = -1;
-    playerCharacter_.activeSegment = 0;
+    playerManager_.Reset(
+        {
+            settings_.cameraPositionX,
+            settings_.cameraPositionY,
+            settings_.cameraPositionZ
+        },
+        settings_.cameraYaw,
+        settings_.cameraPitch);
 }
 
 void AquariumScene::SelectUnderwaterView()
@@ -638,11 +640,11 @@ void AquariumScene::SelectStageGlassView()
     settings_.underwaterArchMode = false;
     settings_.watatsumiTankMode = false;
     settings_.cameraPositionX = 0.0f;
-    settings_.cameraPositionY = -2.25f + playerCapsule_.eyeHeight;
+    settings_.cameraPositionY = -2.25f + playerManager_.Capsule().eyeHeight;
     settings_.cameraPositionZ = -6.65f;
     settings_.cameraYaw = 0.0f;
     settings_.cameraPitch = -0.03f;
-    ResetPlayerCharacter();
+    ResetPlayer();
 }
 
 void AquariumScene::SelectAquariumGreyboxView()
@@ -655,11 +657,11 @@ void AquariumScene::SelectAquariumGreyboxView()
     // Enter from the public doors and look through the lobby toward the
     // Jellyfish Theater. The generated route runs along +X.
     settings_.cameraPositionX = -16.2f;
-    settings_.cameraPositionY = kStageFloorOffset + playerCapsule_.eyeHeight;
+    settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
     settings_.cameraPositionZ = 0.0f;
     settings_.cameraYaw = 1.57079633f;
     settings_.cameraPitch = -0.04f;
-    ResetPlayerCharacter();
+    ResetPlayer();
 }
 
 void AquariumScene::SelectUnderwaterArchView()
@@ -670,12 +672,11 @@ void AquariumScene::SelectUnderwaterArchView()
     settings_.underwaterArchMode = true;
     settings_.watatsumiTankMode = false;
     settings_.cameraPositionX = 0.85f;
-    settings_.cameraPositionY = kStageFloorOffset + playerCapsule_.eyeHeight;
+    settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
     settings_.cameraPositionZ = 0.0f;
     settings_.cameraYaw = 1.57079633f;
     settings_.cameraPitch = -0.055f;
-    ResetPlayerCharacter();
-    playerCharacter_.activePath = 0;
+    ResetPlayer();
 }
 
 void AquariumScene::SelectJellyfishReverseValidationView()
@@ -686,11 +687,11 @@ void AquariumScene::SelectJellyfishReverseValidationView()
     settings_.underwaterArchMode = false;
     settings_.watatsumiTankMode = false;
     settings_.cameraPositionX = 6.0f;
-    settings_.cameraPositionY = kStageFloorOffset + playerCapsule_.eyeHeight;
+    settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
     settings_.cameraPositionZ = -6.15f;
     settings_.cameraYaw = 0.0f;
     settings_.cameraPitch = -0.03f;
-    ResetPlayerCharacter();
+    ResetPlayer();
 }
 
 void AquariumScene::SelectWatatsumiTankView()
@@ -703,168 +704,51 @@ void AquariumScene::SelectWatatsumiTankView()
     // Offset toward the ramp side so the tank remains the hero while the
     // lower-right wall portal is readable in the establishing shot.
     settings_.cameraPositionX = -9.5f;
-    settings_.cameraPositionY = kStageFloorOffset + playerCapsule_.eyeHeight;
+    settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
     settings_.cameraPositionZ = -3.0f;
     settings_.cameraYaw = 1.505f;
     settings_.cameraPitch = -0.065f;
-    ResetPlayerCharacter();
+    ResetPlayer();
 }
 
-void AquariumScene::UpdateCamera(
+void AquariumScene::UpdatePlayer(
     float deltaTime,
     const framework::InputSystem& input)
 {
-    constexpr float cameraSpeed = 0.75f;
-    constexpr float movementSpeed = 2.35f;
-
-    if (settings_.viewMode > 0.5f)
+    const physics::CollisionWorld* collisionWorld = nullptr;
+    if (settings_.underwaterArchMode)
     {
-        const float forwardX = std::sin(settings_.cameraYaw);
-        const float forwardZ = std::cos(settings_.cameraYaw);
-        const float rightX = std::cos(settings_.cameraYaw);
-        const float rightZ = -std::sin(settings_.cameraYaw);
-        float moveForward = 0.0f;
-        float moveRight = 0.0f;
-        if (input.IsDown('W'))
-        {
-            moveForward += 1.0f;
-        }
-        if (input.IsDown('S'))
-        {
-            moveForward -= 1.0f;
-        }
-        if (input.IsDown('D'))
-        {
-            moveRight += 1.0f;
-        }
-        if (input.IsDown('A'))
-        {
-            moveRight -= 1.0f;
-        }
-
-        const float moveLength = std::sqrt(
-            moveForward * moveForward + moveRight * moveRight);
-        float requestedMoveX = 0.0f;
-        float requestedMoveZ = 0.0f;
-        if (moveLength > 0.0f)
-        {
-            moveForward /= moveLength;
-            moveRight /= moveLength;
-            requestedMoveX =
-                (forwardX * moveForward + rightX * moveRight) *
-                movementSpeed * deltaTime;
-            requestedMoveZ =
-                (forwardZ * moveForward + rightZ * moveRight) *
-                movementSpeed * deltaTime;
-            if (!settings_.stageMode)
-            {
-                settings_.cameraPositionX += requestedMoveX;
-                settings_.cameraPositionZ += requestedMoveZ;
-            }
-        }
-        if (!settings_.stageMode && input.IsDown('E'))
-        {
-            settings_.cameraPositionY += movementSpeed * 0.65f * deltaTime;
-        }
-        if (!settings_.stageMode && input.IsDown('Q'))
-        {
-            settings_.cameraPositionY -= movementSpeed * 0.65f * deltaTime;
-        }
-
-        if (settings_.underwaterArchMode)
-        {
-            underwaterArchCollision_.MoveCharacter(
-                playerCharacter_,
-                {requestedMoveX, 0.0f, requestedMoveZ},
-                playerCapsule_);
-            settings_.cameraPositionX = playerCharacter_.eyePosition.x;
-            settings_.cameraPositionY = playerCharacter_.eyePosition.y;
-            settings_.cameraPositionZ = playerCharacter_.eyePosition.z;
-        }
-        else if (settings_.watatsumiTankMode)
-        {
-            watatsumiCollision_.MoveCharacter(
-                playerCharacter_,
-                {requestedMoveX, 0.0f, requestedMoveZ},
-                playerCapsule_);
-            settings_.cameraPositionX =
-                playerCharacter_.eyePosition.x;
-            settings_.cameraPositionY =
-                playerCharacter_.eyePosition.y;
-            settings_.cameraPositionZ =
-                playerCharacter_.eyePosition.z;
-        }
-        else if (settings_.greyboxMode)
-        {
-            routeCollision_.MoveCharacter(
-                playerCharacter_,
-                {requestedMoveX, 0.0f, requestedMoveZ},
-                playerCapsule_);
-            settings_.cameraPositionX = playerCharacter_.eyePosition.x;
-            settings_.cameraPositionY = playerCharacter_.eyePosition.y;
-            settings_.cameraPositionZ = playerCharacter_.eyePosition.z;
-        }
-        else if (settings_.stageMode)
-        {
-            stageGlassCollision_.MoveCharacter(
-                playerCharacter_,
-                {requestedMoveX, 0.0f, requestedMoveZ},
-                playerCapsule_);
-            settings_.cameraPositionX = playerCharacter_.eyePosition.x;
-            settings_.cameraPositionY = playerCharacter_.eyePosition.y;
-            settings_.cameraPositionZ = playerCharacter_.eyePosition.z;
-        }
-        else
-        {
-            settings_.cameraPositionX =
-                std::clamp(settings_.cameraPositionX, -4.75f, 4.75f);
-            settings_.cameraPositionY =
-                std::clamp(settings_.cameraPositionY, -1.75f, 2.25f);
-            settings_.cameraPositionZ =
-                std::clamp(settings_.cameraPositionZ, -10.0f, -5.35f);
-        }
-
-        if (input.IsDown(VK_LEFT))
-        {
-            settings_.cameraYaw -= cameraSpeed * deltaTime;
-        }
-        if (input.IsDown(VK_RIGHT))
-        {
-            settings_.cameraYaw += cameraSpeed * deltaTime;
-        }
-        if (input.IsDown(VK_UP))
-        {
-            settings_.cameraPitch += cameraSpeed * deltaTime;
-        }
-        if (input.IsDown(VK_DOWN))
-        {
-            settings_.cameraPitch -= cameraSpeed * deltaTime;
-        }
+        collisionWorld = &underwaterArchCollision_;
     }
-    else
+    else if (settings_.watatsumiTankMode)
     {
-        if (input.IsDown('A'))
-        {
-            settings_.cameraYaw -= cameraSpeed * deltaTime;
-        }
-        if (input.IsDown('D'))
-        {
-            settings_.cameraYaw += cameraSpeed * deltaTime;
-        }
-        if (input.IsDown('W'))
-        {
-            settings_.cameraPitch += cameraSpeed * deltaTime;
-        }
-        if (input.IsDown('S'))
-        {
-            settings_.cameraPitch -= cameraSpeed * deltaTime;
-        }
+        collisionWorld = &watatsumiCollision_;
+    }
+    else if (settings_.greyboxMode)
+    {
+        collisionWorld = &routeCollision_;
+    }
+    else if (settings_.stageMode)
+    {
+        collisionWorld = &stageGlassCollision_;
     }
 
-    settings_.cameraPitch = std::clamp(settings_.cameraPitch, -0.45f, 0.45f);
-    settings_.cameraYaw = settings_.stageMode
-        ? std::remainder(settings_.cameraYaw, 6.28318531f)
-        : std::clamp(settings_.cameraYaw, -0.7f, 0.7f);
+    playerManager_.Update(
+        deltaTime, input, collisionWorld, collisionWorld == nullptr);
+    const DirectX::XMFLOAT3& eye = playerManager_.EyePosition();
+    settings_.cameraPositionX = eye.x;
+    settings_.cameraPositionY = eye.y;
+    settings_.cameraPositionZ = eye.z;
+    settings_.cameraYaw = playerManager_.Yaw();
+    settings_.cameraPitch = playerManager_.Pitch();
+
+    // The manager already emits a world-space ray on left click. A later
+    // interaction registry can raycast here without changing input code.
+    if (playerManager_.SelectionRequested())
+    {
+        [[maybe_unused]] const player::SelectionRay selectionRay =
+            playerManager_.GetSelectionRay();
+    }
 }
 
 void AquariumScene::UpdateLightingTuning(

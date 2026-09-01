@@ -285,6 +285,9 @@ void D3D11App::Resize(UINT width, UINT height)
 
 void D3D11App::Update(float deltaTime)
 {
+    // F2 opens the lighting editor. Gameplay owns the cursor only while that
+    // editor is hidden, so mouse-look and ImGui never fight over input.
+    input_.SetRelativeMouseMode(!lightingEditor_.IsVisible());
     input_.Update();
     lightingEditor_.BeginFrame();
     if (auto* aquariumScene = dynamic_cast<AquariumScene*>(

@@ -90,6 +90,7 @@
     <ClCompile Include="src\framework\input.cpp" />
     <ClCompile Include="src\framework\ObjectWorld.cpp" />
     <ClCompile Include="src\physics\CollisionWorld.cpp" />
+    <ClCompile Include="src\player\PlayerManager.cpp" />
     <ClCompile Include="src\framework\manager.cpp" />
     <ClCompile Include="src\framework\renderer.cpp" />
     <ClCompile Include="src\main.cpp" />
@@ -117,6 +118,7 @@
     <ClInclude Include="src\framework\input.h" />
     <ClInclude Include="src\framework\ObjectWorld.h" />
     <ClInclude Include="src\physics\CollisionWorld.h" />
+    <ClInclude Include="src\player\PlayerManager.h" />
     <ClInclude Include="src\framework\RenderContext.h" />
     <ClInclude Include="src\framework\scene.h" />
     <ClInclude Include="src\framework\manager.h" />

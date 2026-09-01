@@ -17,6 +17,7 @@ D3D11App
   `- SceneManager
        `- AquariumScene
             |- AquariumRenderer
+            |- PlayerManager
             `- AquariumSettings
 ```
 
@@ -53,13 +54,24 @@ should receive this context instead of reading a global timer.
 
 ### InputSystem
 
-Tracks current and previous keyboard states and exposes:
+Tracks current and previous keyboard states plus relative mouse movement and exposes:
 
 - `IsDown`: continuous movement and tuning.
 - `WasPressed`: one-shot view, pause, reset, and VSync actions.
 - `WasReleased`: future interaction or UI actions.
+- `MouseDeltaX/Y`: frame-relative first-person camera input.
 
 Input is cleared when the game window loses focus, preventing stuck movement.
+Relative mouse capture is released while the F2 lighting editor is visible.
+
+### PlayerManager
+
+Owns the physical player capsule, eye position, yaw/pitch and gameplay controls.
+It converts WASD into camera-relative movement, applies a Shift sprint multiplier,
+uses mouse delta for first-person look, and emits a world-space selection ray on
+the left-click edge. `AquariumScene` only chooses the active collision world and
+copies the resolved player pose into the render settings. This leaves interaction
+raycasts extensible without returning input code to the scene.
 
 ### Scene and SceneManager
 
@@ -92,7 +104,12 @@ self-deletion patterns.
 - `2`: imported stage plus visitor-side glass view.
 - `3`: generated aquarium greybox entrance view.
 - `4`: original stage authoring view.
-- `WASD`, `QE`, arrow keys: existing camera behavior.
+- `WASD`: camera-relative movement.
+- `Shift`: sprint while moving.
+- `Mouse`: first-person view rotation.
+- `Left click`: request selection along the current view ray.
+- `QE`: vertical movement in free underwater preview mode.
+- Arrow keys: keyboard look fallback.
 - `J/L`, `I/K`, `U/O`, `N/M`: existing lighting tuning.
 - `Space`: pause.
 - `R`: reset aquarium settings.

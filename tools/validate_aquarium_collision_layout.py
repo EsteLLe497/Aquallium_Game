@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENE_SOURCE = ROOT / "src" / "scenes" / "AquariumScene.cpp"
+PLAYER_SOURCE = ROOT / "src" / "player" / "PlayerManager.cpp"
 STAGE_MODEL_SOURCE = ROOT / "src" / "StageModel.cpp"
 WATATSUMI_GENERATOR = ROOT / "tools" / "generate_watatsumi_hall.py"
 PLAYER_RADIUS = 0.32
@@ -118,6 +119,7 @@ def upper_h_reaches(
 
 def main() -> None:
     scene = SCENE_SOURCE.read_text(encoding="utf-8")
+    player = PLAYER_SOURCE.read_text(encoding="utf-8")
     stage_model = STAGE_MODEL_SOURCE.read_text(encoding="utf-8")
     generator = WATATSUMI_GENERATOR.read_text(encoding="utf-8")
 
@@ -138,7 +140,11 @@ def main() -> None:
     assert 'route.halfWidth = 3.06f;' in scene
     assert 'ramp.halfWidth = 2.70f;' in scene
     assert 'constexpr float kStageFloorOffset = -2.25f;' in scene
-    assert 'playerCharacter_.activePath = 0;' in scene
+    assert 'playerManager_.Update(' in scene
+    assert 'collisionWorld->MoveCharacter(character_, movement, capsule_);' in player
+    assert 'input.IsDown(VK_SHIFT)' in player
+    assert 'input.WasPressed(VK_LBUTTON)' in player
+    assert 'input.MouseDeltaX()' in player
 
     # Required tagged worlds and authored boundaries must be present at runtime.
     for required in (
