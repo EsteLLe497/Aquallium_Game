@@ -1,15 +1,27 @@
+# IDE state
 .vs/
-build/
 *.user
 imgui.ini
 
-# Generated shader diagnostics and runtime probes
+# Compilers and runtime output
+build/
+*.obj
+*.pdb
+*.ilk
 *.cso
 *.pre
+
+# Generated review captures
+artifacts/
+
+# Local prototype and capture sandboxes
 .froxel-baseline/
 .greybox-runtime-probe/
 .runtime-baseline/
 
-# Python generator cache
-tools/__pycache__/
+# Python cache
+__pycache__/
 *.py[cod]
+
+# Generated diagnostics
+*.log

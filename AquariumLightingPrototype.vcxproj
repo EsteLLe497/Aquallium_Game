@@ -58,7 +58,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;windowscodecs.lib;ole32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -77,22 +77,39 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;windowscodecs.lib;ole32.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\AquariumRenderer.cpp" />
-    <ClCompile Include="src\JellyfishRenderer.cpp" />
+    <ClCompile Include="src\rendering\AquariumRenderer.cpp" />
+    <ClCompile Include="src\rendering\JellyfishRenderer.cpp" />
+    <ClCompile Include="src\rendering\FishRenderer.cpp" />
     <ClCompile Include="src\imgui\LightingEditor.cpp" />
     <ClCompile Include="src\D3D11App.cpp" />
     <ClCompile Include="src\framework\gameObject.cpp" />
     <ClCompile Include="src\framework\input.cpp" />
     <ClCompile Include="src\framework\ObjectWorld.cpp" />
+    <ClCompile Include="src\physics\CollisionWorld.cpp" />
+    <ClCompile Include="src\player\PlayerManager.cpp" />
     <ClCompile Include="src\framework\manager.cpp" />
     <ClCompile Include="src\framework\renderer.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\scenes\AquariumScene.cpp" />
-    <ClCompile Include="src\StageModel.cpp" />
+    <ClCompile Include="src\rendering\BeachPreviewRenderer.cpp" />
+    <ClCompile Include="src\rendering\ExitPortalRenderer.cpp" />
+    <ClCompile Include="src\story\StoryTexture.cpp" />
+    <ClCompile Include="src\story\StoryFlowEditor.cpp" />
+    <ClCompile Include="src\story\HeroineEncounter.cpp" />
+    <ClCompile Include="src\story\DialoguePlayer.cpp" />
+    <ClCompile Include="src\story\PasswordLock.cpp" />
+    <ClCompile Include="src\story\TerraceConversation.cpp" />
+    <ClCompile Include="src\story\ArchChase.cpp" />
+    <ClCompile Include="src\story\PowerOutage.cpp" />
+    <ClCompile Include="src\story\TankLightingConsole.cpp" />
+    <ClCompile Include="src\player\GameMenu.cpp" />
+    <ClCompile Include="src\player\SaveSystem.cpp" />
+    <ClCompile Include="src\audio\SoundEffects.cpp" />
+    <ClCompile Include="src\rendering\StageModel.cpp" />
     <ClCompile Include="third_party\imgui\imgui.cpp" />
     <ClCompile Include="third_party\imgui\imgui_draw.cpp" />
     <ClCompile Include="third_party\imgui\imgui_tables.cpp" />
@@ -101,23 +118,38 @@
     <ClCompile Include="third_party\imgui\imgui_impl_win32.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\AquariumRenderer.h" />
-    <ClInclude Include="src\JellyfishRenderer.h" />
+    <ClInclude Include="src\rendering\AquariumRenderer.h" />
+    <ClInclude Include="src\rendering\BeachPreviewRenderer.h" />
+    <ClInclude Include="src\rendering\ExitPortalRenderer.h" />
+    <ClInclude Include="src\rendering\JellyfishRenderer.h" />
+    <ClInclude Include="src\rendering\FishRenderer.h" />
+    <ClInclude Include="src\generated\GameLayoutV3Generated.h" />
+    <ClInclude Include="src\generated\ReceptionLobbyGenerated.h" />
+    <ClInclude Include="src\generated\JellyBasementGenerated.h" />
     <ClInclude Include="src\imgui\LightingEditor.h" />
+    <ClInclude Include="src\lighting\HeroTankLighting.h" />
     <ClInclude Include="src\lighting\LocalLight.h" />
+    <ClInclude Include="src\rendering\AdaptiveResolution.h" />
     <ClInclude Include="src\D3D11App.h" />
     <ClInclude Include="src\framework\component.h" />
     <ClInclude Include="src\framework\FrameContext.h" />
     <ClInclude Include="src\framework\gameObject.h" />
     <ClInclude Include="src\framework\input.h" />
     <ClInclude Include="src\framework\ObjectWorld.h" />
+    <ClInclude Include="src\physics\CollisionWorld.h" />
+    <ClInclude Include="src\player\PlayerManager.h" />
+    <ClInclude Include="src\player\TerraceDoor.h" />
+    <ClInclude Include="src\story\OpeningFlow.h" />
     <ClInclude Include="src\framework\RenderContext.h" />
     <ClInclude Include="src\framework\scene.h" />
     <ClInclude Include="src\framework\manager.h" />
     <ClInclude Include="src\framework\renderer.h" />
     <ClInclude Include="src\main.h" />
     <ClInclude Include="src\scenes\AquariumScene.h" />
-    <ClInclude Include="src\StageModel.h" />
+    <ClInclude Include="src\rendering\StageModel.h" />
+    <ClInclude Include="src\rendering\TextureUpload.h" />
+    <ClInclude Include="src\rendering\ScreenFade.h" />
+    <ClInclude Include="src\audio\BackgroundMusic.h" />
     <ClInclude Include="third_party\cgltf\cgltf.h" />
     <ClInclude Include="third_party\imgui\imgui.h" />
     <ClInclude Include="third_party\imgui\imgui_internal.h" />
@@ -125,80 +157,130 @@
     <ClInclude Include="third_party\imgui\imgui_impl_win32.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="asset\story\inwater_intro.dialogue" />
+    <None Include="asset\story\story_flow.cfg" />
     <None Include="shaders\AquariumFroxel.hlsl" />
     <None Include="shaders\AquariumPrototype.hlsl" />
+    <None Include="shaders\BeachPreview.hlsl" />
+    <None Include="shaders\ExitPortal.hlsl" />
     <None Include="shaders\Stage.hlsl" />
     <None Include="shaders\Jellyfish.hlsl" />
+    <None Include="shaders\Fish.hlsl" />
     <None Include="shaders\lighting\LocalLighting.hlsli" />
-    <None Include="model\map.glb" />
-    <None Include="model\aquarium_greybox.glb" />
-    <None Include="model\aquarium_route_01_02.glb" />
-    <None Include="model\aquarium_underwater_arch.glb" />
-    <None Include="model\aquarium_watatsumi_hall.glb" />
-    <None Include="concepts\aquarium-floorplan-concept.png" />
-    <None Include="concepts\aquarium-floorplan-v2.png" />
-    <None Include="concepts\aquarium-floorplan-v3.png" />
-    <None Include="concepts\aquarium-floorplan-v4.png" />
-    <None Include="concepts\aquarium-floorplan-v5.png" />
-    <None Include="concepts\aquarium-area-detail-v1.png" />
-    <None Include="concepts\aquarium-greybox-plan.png" />
-    <None Include="concepts\aquarium-greybox-isometric.png" />
-    <None Include="concepts\aquarium-route-01-02-plan.png" />
-    <None Include="concepts\aquarium-route-01-02-isometric.png" />
-    <None Include="concepts\aquarium-route-01-02-runtime.png" />
-    <None Include="concepts\aquarium-route-01-02-tank-lighting.png" />
-    <None Include="concepts\aquarium-route-01-02-simple-water.png" />
-    <None Include="concepts\aquarium-route-01-02-box-water.png" />
-    <None Include="concepts\aquarium-route-01-02-jelly-columns.png" />
-    <None Include="concepts\aquarium-route-01-02-cylinder-volume.png" />
-    <None Include="concepts\aquarium-route-01-02-cylinder-volume-smooth.png" />
-    <None Include="concepts\aquarium-route-01-02-jellyfish-final.png" />
-    <None Include="concepts\aquarium-route-01-02-jellyfish-49.png" />
-    <None Include="concepts\jellyfish-reverse-mrt-fixed.png" />
-    <None Include="concepts\underwater-arch-layout.png" />
-    <None Include="concepts\underwater-arch-runtime.png" />
-    <None Include="concepts\underwater-arch-runtime-deep.png" />
+    <None Include="shaders\lighting\Flashlight.hlsli" />
+    <None Include="asset\model\map.glb" />
+    <None Include="asset\model\aquarium_greybox.glb" />
+    <None Include="asset\model\aquarium_route_01_02.glb" />
+    <None Include="asset\model\aquarium_underwater_arch.glb" />
+    <None Include="asset\model\aquarium_watatsumi_hall.glb" />
+    <None Include="asset\model\aquarium_continuous_shell.glb" />
+    <None Include="asset\model\aquarium_game_layout_v3.glb" />
+    <None Include="asset\model\aquarium_reception_lobby.glb" />
+    <None Include="asset\model\aquarium_jelly_basement.glb" />
+    <None Include="asset\model\anglerfish.glb" />
+    <None Include="asset\model\tree.glb" />
     <None Include="third_party\cgltf\LICENSE" />
     <None Include="third_party\imgui\LICENSE.txt" />
-    <None Include="FRAMEWORK_ARCHITECTURE.md" />
-    <None Include="GLASS_VIEW_IMPLEMENTATION.md" />
-    <None Include="PORTFOLIO_TECHNICAL_NOTES.md" />
-    <None Include="REAL_AQUARIUM_REFERENCE_NOTES.md" />
-    <None Include="REAL_AQUARIUM_REFERENCE_NOTES_V2.md" />
-    <None Include="README.md" />
-    <None Include="STAGE_IMPORT.md" />
-    <None Include="GREYBOX_MODELING.md" />
-    <None Include="JELLYFISH_VOLUME_IMPLEMENTATION.md" />
-    <None Include="JELLYFISH_RENDERING_IMPLEMENTATION.md" />
-    <None Include="AQUARIUM_LAYOUT_V2.md" />
-    <None Include="AQUARIUM_LAYOUT_V3.md" />
-    <None Include="AQUARIUM_LAYOUT_V4.md" />
-    <None Include="AQUARIUM_LAYOUT_V5.md" />
-    <None Include="AREA_FLOW_DETAIL_V1.md" />
-    <None Include="AREA_FLOW_DETAIL_V2.md" />
-    <None Include="EVENT_FLOW_V3.md" />
-    <None Include="EVENT_FLOW_V4.md" />
-    <None Include="EVENT_FLOW_V5.md" />
-    <None Include="EVENT_FLOW_V6.md" />
-    <None Include="GAMEPLAY_GIMMICK_PLAN_V1.md" />
-    <None Include="GAMEPLAY_GIMMICK_PLAN_V2.md" />
     <None Include="tools\generate_aquarium_greybox.py" />
     <None Include="tools\generate_route_01_02.py" />
     <None Include="tools\generate_underwater_arch.py" />
     <None Include="tools\generate_watatsumi_hall.py" />
+    <None Include="tools\generate_continuous_aquarium.py" />
+    <None Include="tools\validate_continuous_aquarium.py" />
+    <None Include="tools\validate_aquarium_collision_layout.py" />
+    <None Include="tools\validate_fish_schooling.py" />
+    <None Include="tools\generate_game_layout_v3.py" />
+    <None Include="tools\validate_game_layout_v3.py" />
+    <None Include="tools\generate_reception_lobby.py" />
+    <None Include="tools\upper_doors.py" />
+    <None Include="tools\generate_jelly_basement.py" />
+    <None Include="tools\validate_jelly_basement.py" />
+    <None Include="tools\validate_reception_lobby.py" />
+    <None Include="tools\capture_runtime_view.ps1" />
     <None Include="tools\generate_aquarium_floorplan_v2.py" />
     <None Include="tools\generate_aquarium_floorplan_v3.py" />
     <None Include="tools\generate_aquarium_floorplan_v4.py" />
     <None Include="tools\generate_aquarium_floorplan_v5.py" />
     <None Include="tools\generate_aquarium_area_detail_v1.py" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="TECHNICAL_NOTES.md" />
+    <None Include="asset\story\opening.camera" />
+    <None Include="asset\story\opening.dialogue" />
+    <None Include="asset\story\exit.dialogue" />
+    <ClInclude Include="src\player\InteractionUI.h" />
+    <ClInclude Include="src\player\MiniMap.h" />
+    <ClInclude Include="src\story\StoryTexture.h" />
+    <ClInclude Include="src\story\StoryFlowEditor.h" />
+    <ClInclude Include="src\story\HeroineEncounter.h" />
+    <ClInclude Include="src\story\DialoguePlayer.h" />
+    <ClInclude Include="src\story\PasswordLock.h" />
+    <ClInclude Include="src\story\TerraceConversation.h" />
+    <ClInclude Include="src\story\ArchChase.h" />
+    <ClInclude Include="src\story\ArchGeometry.h" />
+    <ClInclude Include="src\story\PowerOutage.h" />
+    <ClInclude Include="src\story\TankLightingConsole.h" />
+    <ClInclude Include="src\player\GameMenu.h" />
+    <ClInclude Include="src\player\SaveSystem.h" />
+    <ClInclude Include="src\audio\SoundEffects.h" />
+    <None Include="asset\story\minimap.goals" />
+    <None Include="asset\story\heroine_encounter.dialogue" />
+    <None Include="asset\story\clue.dialogue" />
+    <None Include="asset\story\password_wrong.dialogue" />
+    <None Include="asset\story\terrace_hint_before.dialogue" />
+    <None Include="asset\story\terrace_hint_after.dialogue" />
+    <None Include="asset\story\terrace_gossip.dialogue" />
+    <None Include="asset\story\terrace_rest.dialogue" />
+    <None Include="asset\story\terrace_hint_none.dialogue" />
+    <None Include="asset\story\arch_stagnation.dialogue" />
+    <None Include="asset\story\arch_creak.dialogue" />
+    <None Include="asset\story\arch_escape.dialogue" />
+    <None Include="asset\story\blackout.dialogue" />
+    <None Include="asset\story\power_restored.dialogue" />
+    <None Include="asset\story\facility_started.dialogue" />
+    <None Include="asset\story\beach_arrival.dialogue" />
+    <None Include="asset\story\beach_seated.dialogue" />
+    <None Include="asset\story\beach_stay.dialogue" />
+    <None Include="asset\story\beach_leave.dialogue" />
+    <None Include="asset\story\beach_morning_wake.dialogue" />
+    <None Include="asset\font\onryou.TTF" />
+    <None Include="asset\sound\se\glass.mp3" />
+    <None Include="asset\sound\BGM\title.wav" />
+    <None Include="asset\sound\BGM\stage.wav" />
+    <None Include="asset\sound\BGM\Beach.mp3" />
+    <None Include="asset\sound\se\select.mp3" />
+    <None Include="asset\sound\se\open.mp3" />
+    <None Include="asset\sound\se\miss.mp3" />
+    <None Include="asset\texture\stile\HeroineEncounter_placeholder.png" />
+    <None Include="asset\texture\other\nozo1.png" />
+    <None Include="asset\font\cinecaption226.ttf" />
+    <None Include="asset\font\license-original.txt" />
+    <None Include="tools\test_opening_flow.cpp" />
+    <None Include="tools\test_power_outage.cpp" />
+    <None Include="tools\render_blackout_probe.cpp" />
+    <None Include="tools\render_beach_probe.cpp" />
+    <None Include="tools\test_minimap.cpp" />
+    <None Include="tools\organize_project.ps1" />
+  </ItemGroup>
   <Target Name="CopyShaders" AfterTargets="Build">
+    <ItemGroup>
+      <StoryAssets Include="$(ProjectDir)asset\story\*" />
+      <FontAssets Include="$(ProjectDir)asset\font\*" />
+      <TextureAssets Include="$(ProjectDir)asset\texture\**\*" />
+      <SoundAssets Include="$(ProjectDir)asset\sound\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(OutDir)asset\story;$(OutDir)asset\font;$(OutDir)asset\texture;@(TextureAssets->'$(OutDir)asset\texture\%(RecursiveDir)');@(SoundAssets->'$(OutDir)asset\sound\%(RecursiveDir)')" />
+    <Copy SourceFiles="@(StoryAssets)" DestinationFolder="$(OutDir)asset\story" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FontAssets)" DestinationFolder="$(OutDir)asset\font" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(TextureAssets)" DestinationFiles="@(TextureAssets->'$(OutDir)asset\texture\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(SoundAssets)" DestinationFiles="@(SoundAssets->'$(OutDir)asset\sound\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)shaders" />
-    <Copy SourceFiles="$(ProjectDir)shaders\AquariumPrototype.hlsl;$(ProjectDir)shaders\AquariumFroxel.hlsl;$(ProjectDir)shaders\Stage.hlsl;$(ProjectDir)shaders\Jellyfish.hlsl" DestinationFolder="$(OutDir)shaders" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)shaders\AquariumPrototype.hlsl;$(ProjectDir)shaders\AquariumFroxel.hlsl;$(ProjectDir)shaders\Stage.hlsl;$(ProjectDir)shaders\Jellyfish.hlsl;$(ProjectDir)shaders\Fish.hlsl;$(ProjectDir)shaders\BeachPreview.hlsl;$(ProjectDir)shaders\ExitPortal.hlsl" DestinationFolder="$(OutDir)shaders" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)shaders\lighting" />
     <Copy SourceFiles="$(ProjectDir)shaders\lighting\LocalLighting.hlsli" DestinationFolder="$(OutDir)shaders\lighting" SkipUnchangedFiles="true" />
-    <MakeDir Directories="$(OutDir)model" />
-    <Copy SourceFiles="$(ProjectDir)model\map.glb;$(ProjectDir)model\aquarium_greybox.glb;$(ProjectDir)model\aquarium_route_01_02.glb;$(ProjectDir)model\aquarium_underwater_arch.glb;$(ProjectDir)model\aquarium_watatsumi_hall.glb" DestinationFolder="$(OutDir)model" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)shaders\lighting\Flashlight.hlsli" DestinationFolder="$(OutDir)shaders\lighting" SkipUnchangedFiles="true" />
+    <MakeDir Directories="$(OutDir)asset\model" />
+    <Copy SourceFiles="$(ProjectDir)asset\model\map.glb;$(ProjectDir)asset\model\aquarium_greybox.glb;$(ProjectDir)asset\model\aquarium_route_01_02.glb;$(ProjectDir)asset\model\aquarium_underwater_arch.glb;$(ProjectDir)asset\model\aquarium_watatsumi_hall.glb;$(ProjectDir)asset\model\aquarium_continuous_shell.glb;$(ProjectDir)asset\model\aquarium_game_layout_v3.glb;$(ProjectDir)asset\model\aquarium_reception_lobby.glb;$(ProjectDir)asset\model\aquarium_jelly_basement.glb;$(ProjectDir)asset\model\anglerfish.glb;$(ProjectDir)asset\model\tree.glb" DestinationFolder="$(OutDir)asset\model" SkipUnchangedFiles="true" />
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

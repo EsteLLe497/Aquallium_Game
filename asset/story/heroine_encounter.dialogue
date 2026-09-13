@@ -1,0 +1,27 @@
+# layer|speaker|expression|event|text
+# layer: still=イベントスチル / portrait=右側の立ち絵
+# speaker: 空なら主人公または地の文。「少女」なら名前をウィンドウ左上へ表示。
+# expression: normal,ase,yan,hiki,nihi。none は現在の画像を維持。
+# event: fail_emergency は非常口ミッションに×、none は変更なし。
+still||none|none|少女が水槽をぼーっと眺めている。
+still||none|none|彼女もここに取り残されてしまったのだろうか
+portrait|少女|normal|none|・・・
+portrait||normal|none|あの・・・
+portrait||ase|none|少女は目が合うなり警戒するような目でこちらを見つめる
+portrait|少女|ase|none|・・・
+portrait||ase|none|怪しい者じゃないんだ
+portrait|少女|ase|none|それ、怪しい者が言うセリフですよ
+portrait||yan|none|とにかく、エントランスが施錠されてて非常口を探してるんだけど
+portrait|少女|ase|fail_emergency|そうですか・・・。残念ですけどそこ閉まってましたよ
+portrait||ase|none|マジか・・・
+portrait|少女|ase|none|それにここには危険が潜んでます。得体のしれない何かがそこら中に
+portrait||ase|none|ここまで何とも遭遇してないが
+portrait|少女|yan|none|すぐに分かりますよ。下手に動かずここにいるのが賢明です
+portrait||yan|none|そう言われても、早く帰りたいし
+portrait||ase|none|せっかくだから協力しないか？
+portrait|少女|hiki|none|えー
+portrait||hiki|none|二人の方が何かと便利だろ？
+portrait|少女|hiki|none|そうですけど・・・
+portrait|少女|normal|none|まぁ、いいですよ
+portrait|少女|nihi|none|何かあったら守ってくださいね
+portrait||nihi|none|とりあえず館内の電力を復旧してみよう。そうしたらゲートも開くかもしれん

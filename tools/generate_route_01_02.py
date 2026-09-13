@@ -13,12 +13,22 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy as np
-from PIL import Image, ImageDraw
+try:
+    import numpy as np
+except ModuleNotFoundError:
+    np = None  # Only the optional software preview renderer needs NumPy.
+try:
+    from PIL import Image, ImageDraw
+except ModuleNotFoundError:
+    # Geometry-only generators reuse this module's mesh helpers on build
+    # machines where Pillow is intentionally not installed. The concept-art
+    # entry points still fail clearly if called without their optional tool.
+    Image = None
+    ImageDraw = None
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_GLB = ROOT / "model" / "aquarium_route_01_02.glb"
+OUTPUT_GLB = ROOT / "asset" / "model" / "aquarium_route_01_02.glb"
 OUTPUT_PLAN = ROOT / "concepts" / "aquarium-route-01-02-plan.png"
 OUTPUT_ISOMETRIC = ROOT / "concepts" / "aquarium-route-01-02-isometric.png"
 
@@ -387,6 +397,10 @@ def write_glb() -> dict[str, int]:
 
     for name, rgba in MATERIALS.items():
         material_indices[name] = len(materials)
+        transparent = (
+            name.startswith(("TankWater", "TankGlass", "WatatsumiWater"))
+            or name in {"WatatsumiGlass", "ArchWaterSurface", "TerraceDoorGlass"}
+        )
         emissive = (
             [rgba[0] * 2.0, rgba[1] * 2.0, rgba[2] * 2.0]
             if name.startswith("Emissive")
@@ -404,11 +418,9 @@ def write_glb() -> dict[str, int]:
                 },
                 "emissiveFactor": emissive,
                 "alphaMode": (
-                    "BLEND"
-                    if name.startswith(("TankWater", "TankGlass"))
-                    else "OPAQUE"
+                    "BLEND" if transparent else "OPAQUE"
                 ),
-                "doubleSided": name.startswith("TankWater"),
+                "doubleSided": transparent,
             }
         )
 

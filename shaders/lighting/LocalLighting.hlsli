@@ -21,10 +21,37 @@ cbuffer LocalLightingConstants : register(b3)
 
 float3 EvaluateLocalLighting(float3 worldPosition, float3 normal)
 {
-    float3 result = 0.0;
     const uint lightCount = min((uint)gLocalLightControl.x, 8u);
+    if (gLocalLightControl.y < 0.5 || lightCount == 0u)
+    {
+        return 0.0;
+    }
+
+    uint firstLight = 0u;
+    uint endLight = lightCount;
+    if (gLocalLightControl.z > 0.5)
+    {
+        // Route 09 lights are ordered by physical sector. Bounds use each
+        // source's exact centre +/- range, so omitted lights already have
+        // zero attenuation and cannot create a transition or pop.
+        if (worldPosition.z > 34.0)
+        {
+            firstLight = min(7u, lightCount);
+        }
+        else if (worldPosition.z > 27.0)
+        {
+            firstLight = min(6u, lightCount);
+            endLight = min(7u, lightCount);
+        }
+        else
+        {
+            endLight = min(7u, lightCount);
+        }
+    }
+
+    float3 result = 0.0;
     [loop]
-    for (uint index = 0; index < lightCount; ++index)
+    for (uint index = firstLight; index < endLight; ++index)
     {
         const float3 toLight =
             gLocalLightPositionRange[index].xyz - worldPosition;

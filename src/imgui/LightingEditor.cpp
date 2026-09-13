@@ -5,6 +5,7 @@
 #include "../../third_party/imgui/imgui_impl_win32.h"
 
 #include <algorithm>
+#include <filesystem>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
     HWND window, UINT message, WPARAM wParam, LPARAM lParam);
@@ -16,6 +17,13 @@ void LightingEditor::Initialize(
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    wchar_t executable[MAX_PATH]{};
+    GetModuleFileNameW(nullptr,executable,MAX_PATH);
+    const auto font=std::filesystem::path(executable).parent_path()/"asset"/"font"/"cinecaption226.ttf";
+    auto& io=ImGui::GetIO();
+    io.IniFilename=nullptr;
+    if(std::filesystem::exists(font))
+        io.Fonts->AddFontFromFileTTF(font.string().c_str(),24.f,nullptr,io.Fonts->GetGlyphRangesJapanese());
     ImGui::StyleColorsDark();
     ImGui::GetStyle().WindowRounding = 6.0f;
     ImGui_ImplWin32_Init(window);
@@ -43,13 +51,16 @@ bool LightingEditor::HandleMessage(
         visible_ = !visible_;
         return true;
     }
-    return initialized_ && visible_ &&
-        ImGui_ImplWin32_WndProcHandler(window, message, wParam, lParam);
+    // インゲームのメニューとテンキーも同じImGuiコンテキストを使う。
+    // バックエンドへは常時通知し、OS入力を専有するのはエディタ表示中だけ。
+    const bool handled=initialized_ &&
+        ImGui_ImplWin32_WndProcHandler(window,message,wParam,lParam)!=0;
+    return visible_&&handled;
 }
 
 void LightingEditor::BeginFrame()
 {
-    if (!initialized_ || !visible_)
+    if (!initialized_)
     {
         return;
     }
@@ -58,7 +69,9 @@ void LightingEditor::BeginFrame()
     ImGui::NewFrame();
 }
 
-void LightingEditor::Draw(lighting::LocalLightingRig& rig)
+void LightingEditor::Draw(
+    lighting::LocalLightingRig& rig,
+    lighting::HeroTankLightingRig& heroTankRig)
 {
     if (!initialized_ || !visible_)
     {
@@ -68,6 +81,8 @@ void LightingEditor::Draw(lighting::LocalLightingRig& rig)
     ImGui::SetNextWindowSize(ImVec2(390.0f, 520.0f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Aquarium Local Lighting", &visible_))
     {
+        // The story uses a larger caption font; keep editing controls compact.
+        ImGui::SetWindowFontScale(0.72f);
         ImGui::TextUnformatted("F2: show / hide editor");
         ImGui::Checkbox("Enable local lighting", &rig.enabled);
         ImGui::SeparatorText("Ambient visibility");
@@ -138,13 +153,84 @@ void LightingEditor::Draw(lighting::LocalLightingRig& rig)
         ImGui::SeparatorText("Accent lights");
         ImGui::Text("GPU cap: %u local lights", lighting::kMaximumLocalLights);
         ImGui::TextUnformatted("Water lighting remains a separate shader path.");
+
+        ImGui::SeparatorText("Hero tank puzzle lighting");
+        ImGui::TextUnformatted(
+            "Game switches can toggle the same alternateEnabled flag.");
+        if (ImGui::Button(
+            heroTankRig.alternateEnabled
+                ? "Restore default blue"
+                : "Activate alternate colour"))
+        {
+            heroTankRig.alternateEnabled =
+                !heroTankRig.alternateEnabled;
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted(
+            heroTankRig.alternateEnabled ? "ALT" : "DEFAULT");
+        ImGui::ColorEdit3(
+            "Default tank colour",
+            &heroTankRig.defaultColor.x,
+            ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+        ImGui::ColorEdit3(
+            "Switch tank colour",
+            &heroTankRig.alternateColor.x,
+            ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+        ImGui::ColorEdit3(
+            "Overhead key colour",
+            &heroTankRig.overheadKeyColor.x,
+            ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+        ImGui::SliderFloat(
+            "Tank light intensity",
+            &heroTankRig.intensity,
+            0.0f,
+            2.5f,
+            "%.2f");
+        ImGui::SliderFloat(
+            "Overhead key intensity",
+            &heroTankRig.overheadKeyIntensity,
+            0.0f,
+            2.5f,
+            "%.2f");
+        ImGui::SliderFloat(
+            "Side lights intensity",
+            &heroTankRig.sideLightIntensity,
+            0.0f,
+            2.0f,
+            "%.2f");
+        ImGui::SeparatorText("Reception tank internal lamps");
+        ImGui::TextWrapped("Offsets: tank centre X/Z, water surface Y. Positive Z aims at the rear wall.");
+        ImGui::DragFloat3("Key position offset",&heroTankRig.keyOffset.x,.05f);
+        ImGui::DragFloat3("Key direction",&heroTankRig.keyDirection.x,.01f,-1.f,1.f);
+        ImGui::SliderFloat("Key cone",&heroTankRig.keyConeDegrees,10.f,85.f);
+        ImGui::DragFloat3("Side position offset",&heroTankRig.sideOffset.x,.05f);
+        ImGui::DragFloat3("Side direction",&heroTankRig.sideDirection.x,.01f,-1.f,1.f);
+        ImGui::SliderFloat("Side cone",&heroTankRig.sideConeDegrees,10.f,85.f);
+        ImGui::ColorEdit3("White preset",&heroTankRig.whiteColor.x);
+        if(ImGui::Button("Preview blue"))heroTankRig.alternateEnabled=false;
+        ImGui::SameLine();
+        if(ImGui::Button("Preview white")){heroTankRig.alternateEnabled=true;heroTankRig.alternateColor=heroTankRig.whiteColor;}
+        heroTankRig.keyDirection.y=std::min(-.1f,heroTankRig.keyDirection.y);
+        heroTankRig.sideDirection.y=std::min(-.1f,heroTankRig.sideDirection.y);
+        heroTankRig.keyOffset.x=std::clamp(heroTankRig.keyOffset.x,-7.5f,7.5f);
+        heroTankRig.keyOffset.z=std::clamp(heroTankRig.keyOffset.z,-3.5f,3.5f);
+        heroTankRig.keyOffset.y=std::clamp(heroTankRig.keyOffset.y,.1f,2.f);
+        heroTankRig.sideOffset.x=std::clamp(heroTankRig.sideOffset.x,0.f,7.5f);
+        heroTankRig.sideOffset.z=std::clamp(heroTankRig.sideOffset.z,-3.5f,3.5f);
+        heroTankRig.sideOffset.y=std::clamp(heroTankRig.sideOffset.y,.1f,2.f);
+        const auto config=std::filesystem::current_path()/"asset"/"story"/"tank_lighting.cfg";
+        static const char* saveStatus="";
+        if(ImGui::Button("Save tank lighting"))saveStatus=heroTankRig.Save(config)?"Saved":"Save failed";
+        ImGui::SameLine();
+        if(ImGui::Button("Load tank lighting"))saveStatus=heroTankRig.Load(config)?"Loaded":"Load failed";
+        ImGui::TextUnformatted(saveStatus);
     }
     ImGui::End();
 }
 
 void LightingEditor::Render(ID3D11DeviceContext*)
 {
-    if (!initialized_ || !visible_)
+    if (!initialized_)
     {
         return;
     }

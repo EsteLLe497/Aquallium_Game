@@ -30,6 +30,9 @@ public:
     }
 
     [[nodiscard]] GameObject* FindByName(const std::wstring& name) const;
+    [[nodiscard]] GameObject* FindFirstByTag(const std::wstring& tag) const;
+    [[nodiscard]] std::vector<GameObject*> FindAllByTag(
+        const std::wstring& tag) const;
     void Update(const FrameContext& frame);
     void Render(const RenderContext& context);
     void Clear();
