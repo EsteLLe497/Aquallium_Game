@@ -11,19 +11,25 @@
 
 #include <exception>
 #include <string>
+#include <stdexcept>
 #include <windows.h>
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
 {
+    // MCI's mpegvideo driver needs STA on the calling (game/UI) thread.
+    const HRESULT comResult=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
+    int result=1;
     try
     {
+        if(FAILED(comResult))throw std::runtime_error("COM STA initialization failed: "+std::to_string(comResult));
         D3D11App app(instance);
-        return app.Run();
+        result=app.Run();
     }
     catch (const std::exception& exception)
     {
         const std::string message = exception.what();
         MessageBoxA(nullptr, message.c_str(), "Aquarium Lighting Prototype Error", MB_OK | MB_ICONERROR);
-        return 1;
     }
+    if(SUCCEEDED(comResult))CoUninitialize();
+    return result;
 }

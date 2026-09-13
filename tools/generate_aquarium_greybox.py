@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_GLB = ROOT / "model" / "aquarium_greybox.glb"
+OUTPUT_GLB = ROOT / "asset" / "model" / "aquarium_greybox.glb"
 OUTPUT_PREVIEW = ROOT / "concepts" / "aquarium-greybox-plan.png"
 OUTPUT_ISOMETRIC = ROOT / "concepts" / "aquarium-greybox-isometric.png"
 

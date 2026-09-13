@@ -37,6 +37,9 @@ cbuffer FrameConstants : register(b0)
 
     float3 gPreviousCameraPosition;
     float gPreviousCameraPositionPadding;
+
+    // x: horror intensity, y: grain, z: vignette, w: power outage.
+    float4 gHorrorParameters;
 };
 
 cbuffer ShadowConstants : register(b1)
@@ -542,14 +545,14 @@ float3 EvaluateRefractedAreaLight(
         rcp(1.0 + lightDepth * lightDepth * 0.010);
     const float phase = min(
         PhaseHenyeyGreenstein(
-            dot(rayDirection, centralAxis),
+            // Incoming radiance travels along centralAxis, while the
+            // scattering direction toward the eye is -rayDirection.
+            dot(-rayDirection, centralAxis),
             gAnisotropy) * (4.0 * PI),
         6.0);
-    // The current prototype has no authored tank inhabitants. The shadow map
-    // still contains diagnostic ellipsoids used while validating the pass;
-    // applying them here creates unexplained mottling in an otherwise empty
-    // exhibit. Keep the shadow infrastructure for real meshes, but do not
-    // present debug casters as final volumetric shadows.
+    // Instanced fish and rays do not yet write the legacy prototype shadow
+    // buffer. Its diagnostic ellipsoids would create ghost occluders, so keep
+    // this path unshadowed until biology is submitted to the shadow atlas.
     const float shadow = 1.0;
     const float3 lightColor =
         gLightColorStrength[lightIndex].rgb;
@@ -563,102 +566,6 @@ float3 EvaluateRefractedAreaLight(
         distanceAttenuation *
         phase *
         intensity;
-}
-
-float3 IntegrateArchSpotCurtains(
-    float3 rayOrigin,
-    float3 rayDirection,
-    float maxDistance)
-{
-    // Integrate the dominant part of each refracted spotlight analytically.
-    // The closest approach between the view ray and light axis gives a smooth
-    // volumetric curtain through the acrylic without another ray-march pass.
-    float3 accumulated = 0.0;
-    [unroll]
-    for (uint lightIndex = 0;
-         lightIndex < (uint)gActiveLightCount;
-         ++lightIndex)
-    {
-        const float3 surfaceOrigin =
-            gLightSurfaceOrigin[lightIndex].xyz;
-        const float3 lightAxis = normalize(
-            gLightRefractedAxis[lightIndex].xyz);
-        const float3 originOffset = rayOrigin - surfaceOrigin;
-        const float axisAlignment = dot(rayDirection, lightAxis);
-        const float denominator = max(
-            1.0 - axisAlignment * axisAlignment,
-            0.035);
-        const float viewProjection = dot(rayDirection, originOffset);
-        const float lightProjection = dot(lightAxis, originOffset);
-        float rayDistance =
-            (axisAlignment * lightProjection - viewProjection) /
-            denominator;
-        rayDistance = clamp(rayDistance, 0.0, maxDistance);
-
-        const float3 samplePosition =
-            rayOrigin + rayDirection * rayDistance;
-        const float lightDepth = dot(
-            samplePosition - surfaceOrigin,
-            lightAxis);
-        if (lightDepth <= 0.0)
-        {
-            continue;
-        }
-
-        const float3 axisPosition =
-            surfaceOrigin + lightAxis * lightDepth;
-        const float radialDistance = length(
-            samplePosition - axisPosition);
-        // A real spotlight has a bright core and a softer penumbra. Both grow
-        // after refraction, so the beam visibly originates at the moving water
-        // surface rather than appearing as an unrelated fog patch below it.
-        const float coneRadius = 0.68 + lightDepth * 0.140;
-        const float normalizedRadius =
-            radialDistance / max(coneRadius, 0.001);
-        const float core = exp(
-            -normalizedRadius * normalizedRadius * 6.0);
-        const float penumbra = exp(
-            -normalizedRadius * normalizedRadius * 1.50);
-        const float cone = core * 0.68 + penumbra * 0.32;
-
-        // Longer intersections read as a light curtain at grazing views. The
-        // cap avoids the singularity when looking exactly along the beam.
-        const float opticalPath = min(
-            coneRadius / sqrt(denominator),
-            3.6);
-        const float phase = min(
-            PhaseHenyeyGreenstein(
-                dot(lightAxis, -rayDirection),
-                0.56) * (4.0 * PI),
-            5.4);
-        const float depthTransmission = exp(-lightDepth * 0.075);
-        const float surfaceFocus = lerp(
-            0.92,
-            1.24,
-            gLightRefractedAxis[lightIndex].w);
-        const float rayBoundaryFade =
-            smoothstep(0.0, 1.15, rayDistance) *
-            smoothstep(0.0, 1.15, maxDistance - rayDistance);
-        const float surfaceEntryFade = smoothstep(
-            0.04,
-            0.72,
-            lightDepth);
-        const float slowWaterPulse = 0.93 + 0.07 * sin(
-            surfaceOrigin.x * 0.37 +
-            surfaceOrigin.z * 0.53 +
-            gTime * 0.34);
-        const float3 lightColor =
-            gLightColorStrength[lightIndex].rgb;
-        const float lightStrength =
-            gLightColorStrength[lightIndex].w;
-
-        accumulated += lightColor *
-            cone * opticalPath * phase *
-            depthTransmission * surfaceFocus * slowWaterPulse *
-            rayBoundaryFade * surfaceEntryFade *
-            lightStrength * gVolumeStrength * 0.320;
-    }
-    return accumulated;
 }
 
 float3 IntegrateVolume(
@@ -744,11 +651,12 @@ float3 IntegrateArchVolume(
     float3 rayDirection,
     float maxDistance)
 {
-    // The arch uses a deliberately small, water-only integration budget.
-    // Two centered samples at the existing low-resolution volume buffer are
-    // enough once temporal reprojection and bilateral upsampling are applied.
-    const int stepCount = 2;
-    const float travelDistance = min(maxDistance, 12.0);
+    // This is the production shaft path: no transparent light-card geometry.
+    // Three centered samples at one-third resolution retain enough depth
+    // variation for a moving viewpoint; temporal reprojection and bilateral
+    // upsampling recover continuity at a fraction of a full-resolution march.
+    const int stepCount = 3;
+    const float travelDistance = min(maxDistance, 14.0);
     const float stepLength = travelDistance / stepCount;
     float3 accumulated = 0.0;
     float3 transmittance = 1.0;
@@ -769,22 +677,16 @@ float3 IntegrateArchVolume(
                 position.y * 0.31 +
                 gTime * 0.16);
         float3 incidentLight = 0.0;
-        // Keep the costly sampled scattering on two banks. All three still
-        // contribute their analytic curtain, surface highlight and caustics.
-        const uint marchedLightCount = min(
-            (uint)gActiveLightCount,
-            2u);
-        [unroll]
-        for (uint lightIndex = 0;
-             lightIndex < marchedLightCount;
-             ++lightIndex)
-        {
-            incidentLight += EvaluateRefractedAreaLight(
-                position,
-                rayDirection,
-                lightIndex);
-        }
-        incidentLight *= slowDensity * gVolumeStrength * 0.92;
+        // The three authored banks are ordered along +X. A single coherent
+        // route split selects the relevant adjacent pair without per-pixel
+        // ranking or divergent dynamic loops.
+        const uint nearestLight = position.x < 32.0 ? 0u : 1u;
+        const uint secondLight = nearestLight + 1u;
+        incidentLight += EvaluateRefractedAreaLight(
+            position, rayDirection, nearestLight);
+        incidentLight += EvaluateRefractedAreaLight(
+            position, rayDirection, secondLight);
+        incidentLight *= slowDensity * gVolumeStrength * 1.08;
 
         const float mediumDensity = 0.62 * gWaterClarity;
         const float3 sigmaS =
@@ -799,9 +701,6 @@ float3 IntegrateArchVolume(
         accumulated += transmittance * integratedSource;
         transmittance *= segmentTransmittance;
     }
-    // The analytic ray/axis curtain remains available for experiments, but is
-    // not composited in the production preview. At oblique tunnel views its
-    // finite integration interval read as a pair of transparent rectangles.
     return accumulated;
 }
 
@@ -976,6 +875,26 @@ float3 HighlightBloom(float2 uv)
         bloom += sampleColor * smoothstep(0.32, 1.1, brightness);
     }
     return bloom * 0.105;
+}
+
+float3 StageHighlightBloom(float2 uv, float3 centerColor)
+{
+    // Route views contain compact practical emitters rather than the full
+    // analytic tank. Reuse the mandatory centre sample and add one displaced
+    // bilinear tap. This keeps a directional soft halo while reducing the
+    // full-output composite from three scene reads to two.
+    const float2 texel = 1.0 / gResolution;
+    const float3 haloSample = gSceneColorTexture.SampleLevel(
+        gLinearClampSampler,
+        uv + float2(3.25, 2.75) * texel,
+        0).rgb;
+    const float centerBrightness = max(
+        centerColor.r, max(centerColor.g, centerColor.b));
+    const float haloBrightness = max(
+        haloSample.r, max(haloSample.g, haloSample.b));
+    return (
+        centerColor * smoothstep(0.32, 1.1, centerBrightness) +
+        haloSample * smoothstep(0.32, 1.1, haloBrightness)) * 0.185;
 }
 
 void BuildCameraBasis(
@@ -1527,28 +1446,81 @@ float3 UpsampleVolume(float2 uv, float fullResolutionDepth)
     return accumulated / totalWeight;
 }
 
+float3 ApplyHorrorGrade(float3 color,float2 uv)
+{
+    // The middle reads deep and enclosed, but retains enough blue information
+    // for navigation; both authored exits recover their illumination.
+    // Depth grading now lives on the arch materials. Adjacent rooms retain
+    // their own exposure even while viewed through the tunnel entrance.
+    const float intensity=saturate(gHorrorParameters.x);
+    if(intensity<=.001)return color;
+    const float2 p=uv*2-1;
+    const float edge=smoothstep(.22,1.16,dot(p,p));
+    const float grain=frac(52.9829189*frac(dot(uv*gResolution+gFrameIndex,float2(.06711056,.00583715))))-.5;
+    color*=1-saturate(gHorrorParameters.z)*edge*.72;
+    color+=grain*gHorrorParameters.y*.032*(1-gHorrorParameters.w);
+    const float pulse=.94+.06*sin(gTime*7.1)+.025*sin(gTime*19.3);
+    color*=lerp(1,pulse,intensity);
+    const float scan=pow(saturate(sin((uv.y+gTime*.035)*420)),28)*intensity;
+    color+=float3(.008,.020,.029)*scan*.28*(1-gHorrorParameters.w);
+    return saturate(color);
+}
+
 float4 PSComposite(VSOutput input) : SV_TARGET
 {
+    float2 sampleUv=input.uv;
+    if(gHorrorParameters.x>.001)
+    {
+        const float tear=sin(input.uv.y*93+gTime*7.7)*sin(input.uv.y*17-gTime*2.1);
+        sampleUv.x+=tear*gHorrorParameters.x*.0018;
+    }
     float3 sceneColor = gSceneColorTexture.SampleLevel(
         gLinearClampSampler,
-        input.uv,
+        sampleUv,
         0).rgb;
+    if(gHorrorParameters.x>.08)
+    {
+        const float2 chroma=float2(.00075*gHorrorParameters.x,0);
+        sceneColor.r=gSceneColorTexture.SampleLevel(gLinearClampSampler,sampleUv+chroma,0).r;
+        sceneColor.b=gSceneColorTexture.SampleLevel(gLinearClampSampler,sampleUv-chroma,0).b;
+    }
+
+    // Wake-up defocus is confined to the opening; zero incurs no extra taps.
+    if (gPreviousCameraPositionPadding > .001)
+    {
+        float2 radius=gPreviousCameraPositionPadding*float2(.006,.009);
+        float3 blurred=sceneColor;
+        [unroll] for(int i=0;i<8;++i) {
+            float a=i*PI*.25;
+            blurred+=gSceneColorTexture.SampleLevel(gLinearClampSampler,
+                input.uv+float2(cos(a),sin(a))*radius,0).rgb;
+        }
+        sceneColor=lerp(sceneColor,blurred/9,saturate(gPreviousCameraPositionPadding));
+    }
+
+    if (gStagePreviewMode > 0.5)
+    {
+        // Fast authored-route path: volume is disabled for these rooms, so a
+        // depth fetch and the generic four-tap bloom would be pure bandwidth.
+        if(gHorrorParameters.w < .999)
+            sceneColor += StageHighlightBloom(input.uv, sceneColor) * (1-gHorrorParameters.w);
+        sceneColor = ACESFilm(sceneColor * gExposure);
+        sceneColor = pow(sceneColor, 1.0 / 2.2);
+        sceneColor=ApplyHorrorGrade(sceneColor,input.uv);
+        return float4(sceneColor, 1.0);
+    }
+
     const float sceneDepth = gSceneDepthTexture.SampleLevel(
         gLinearClampSampler,
         input.uv,
         0);
-    const float3 volume = UpsampleVolume(input.uv, sceneDepth);
+    // Watatsumi and plain greybox modes intentionally set volume strength to
+    // zero. Keep that a true fast path instead of issuing five null SRV taps.
+    const float3 volume = gVolumeStrength > 0.0001
+        ? UpsampleVolume(input.uv, sceneDepth)
+        : 0.0;
     sceneColor += volume;
     sceneColor += HighlightBloom(input.uv);
-
-    if (gStagePreviewMode > 0.5)
-    {
-        // The modeled route is an air-side interior. Do not wrap it in the old
-        // full-screen aquarium aperture or apply water-column color grading.
-        sceneColor = ACESFilm(sceneColor * gExposure);
-        sceneColor = pow(sceneColor, 1.0 / 2.2);
-        return float4(sceneColor, 1.0);
-    }
 
     // VRC-aquarium grade: lifted blue-green shadows, restrained contrast and
     // a slightly stylized cyan separation without flattening HDR highlights.
@@ -1572,6 +1544,7 @@ float4 PSComposite(VSOutput input) : SV_TARGET
 
     sceneColor = ACESFilm(sceneColor * gExposure);
     sceneColor = pow(sceneColor, 1.0 / 2.2);
+    sceneColor=ApplyHorrorGrade(sceneColor,input.uv);
 
     // A dark rounded viewing aperture makes the tank read as an exhibit rather
     // than an evenly lit underwater room. The interior remains independent.

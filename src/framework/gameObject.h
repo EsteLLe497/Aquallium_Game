@@ -11,6 +11,7 @@
 #include "component.h"
 
 #include <DirectXMath.h>
+#include <cstdint>
 #include <concepts>
 #include <memory>
 #include <string>
@@ -72,6 +73,20 @@ public:
     void Destroy();
     [[nodiscard]] bool IsDestroyRequested() const;
     [[nodiscard]] const std::wstring& Name() const;
+    void SetTag(std::wstring tag) { tag_ = std::move(tag); }
+    [[nodiscard]] const std::wstring& Tag() const noexcept { return tag_; }
+    [[nodiscard]] bool HasTag(const std::wstring& tag) const noexcept
+    {
+        return tag_ == tag;
+    }
+    void SetCollisionLayer(std::uint32_t layer) noexcept
+    {
+        collisionLayer_ = layer;
+    }
+    [[nodiscard]] std::uint32_t CollisionLayer() const noexcept
+    {
+        return collisionLayer_;
+    }
     [[nodiscard]] Transform& GetTransform();
     [[nodiscard]] const Transform& GetTransform() const;
 
@@ -93,6 +108,8 @@ private:
     void Render(const RenderContext& context);
 
     std::wstring name_;
+    std::wstring tag_ = L"Untagged";
+    std::uint32_t collisionLayer_ = 1u;
     Transform transform_;
     std::vector<std::unique_ptr<Component>> components_;
     bool initialized_ = false;

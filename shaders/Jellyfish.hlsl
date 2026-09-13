@@ -141,6 +141,7 @@ float2 ClipToUv(float4 clipPosition)
     return float2(ndc.x * 0.5 + 0.5, -ndc.y * 0.5 + 0.5);
 }
 
+#include "lighting/Flashlight.hlsli"
 PixelOutput PSJellyfish(VertexOutput input)
 {
     const float3 viewDirection = SafeDirection(
@@ -183,7 +184,9 @@ PixelOutput PSJellyfish(VertexOutput input)
     }
 
     PixelOutput output;
-    output.color = float4(color, alpha);
+    output.color = float4(lerp(color,
+        FlashlightColor(input.worldPosition, surfaceNormal, input.tint),
+        gFlashlightDirection.w), alpha);
     output.depth = length(input.worldPosition - gCameraTime.xyz);
     const float2 currentUv = ClipToUv(input.currentClip);
     const float2 previousUv = ClipToUv(input.previousClip);
