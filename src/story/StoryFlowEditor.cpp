@@ -1,4 +1,6 @@
 #include "StoryFlowEditor.h"
+#include "DialogueTextCodec.h"
+#include "PortraitPresentation.h"
 
 #include "../../third_party/imgui/imgui.h"
 
@@ -19,8 +21,47 @@ std::vector<std::string> Split(const std::string& value,char separator='|') {
 template<size_t N> void Copy(std::array<char,N>& target,const std::string& value) {
     std::snprintf(target.data(),target.size(),"%s",value.c_str());
 }
+
+struct DialogueTextEditContext {
+    ImFont* gameFont=nullptr;
+    float gameFontSize=0.f;
+    float gameTextWidth=0.f;
+    bool* insertLineBreak=nullptr;
+};
+
+// インゲームの会話ウィンドウと同じ横幅で、保存対象の改行を挿入する。
+void WrapDialogueTextForGame(ImGuiInputTextCallbackData* data,const DialogueTextEditContext& context) {
+    if(!data||!context.gameFont||context.gameFontSize<=0.f||context.gameTextWidth<=0.f)return;
+    int lineStart=0;
+    while(lineStart<data->BufTextLen){
+        int lineEnd=lineStart;
+        while(lineEnd<data->BufTextLen&&data->Buf[lineEnd]!='\n')++lineEnd;
+        const char* begin=data->Buf+lineStart;
+        const char* end=data->Buf+lineEnd;
+        const char* wrap=context.gameFont->CalcWordWrapPosition(
+            context.gameFontSize,begin,end,context.gameTextWidth);
+        if(wrap<end){
+            if(data->BufTextLen+1>=data->BufSize)return;
+            const int wrapPosition=int(wrap-data->Buf);
+            data->InsertChars(wrapPosition,"\n");
+            lineStart=wrapPosition+1;
+        }else lineStart=lineEnd+1;
+    }
+}
+
+// 自動改行と「改行」ボタンを入力欄のカーソル状態へ反映する。
+int EditDialogueText(ImGuiInputTextCallbackData* data) {
+    auto* context=static_cast<DialogueTextEditContext*>(data->UserData);
+    if(context->insertLineBreak&&*context->insertLineBreak){
+        if(data->BufTextLen+1<data->BufSize)data->InsertChars(data->CursorPos,"\n");
+        *context->insertLineBreak=false;
+    }
+    if(data->EventFlag==ImGuiInputTextFlags_CallbackEdit)
+        WrapDialogueTextForGame(data,*context);
+    return 0;
+}
+
 const char* Kinds="Dialogue\0Event\0Flag\0Condition\0Transition\0";
-const char* Expressions="normal\0ase\0yan\0hiki\0nihi\0close\0smile\0hide\0none\0";
 }
 
 void StoryFlowEditor::Initialize(ID3D11Device* device,const std::filesystem::path& storyFolder,
@@ -35,9 +76,7 @@ void StoryFlowEditor::Initialize(ID3D11Device* device,const std::filesystem::pat
         }
     }
     storyFolder_=storyFolder;flowPath_=storyFolder_/"story_flow.cfg";
-    const char* names[]={"normal","ase","yan","hiki","nihi","close","smile"};
-    for(size_t i=0;i<portraits_.size();++i)
-        portraits_[i].Load(device,textureFolder/"girl"/(std::string("Heroin_")+names[i]+".PNG"));
+    portraits_=PortraitLibrary::load(device,textureFolder/"girl");
     previewDialogue_.Initialize(device,textureFolder);
     LoadFlow();
 }
@@ -123,6 +162,8 @@ void StoryFlowEditor::LoadDialogue() {
             line.speaker=f[0];line.expression=f[1];line.text=f[2];
             for(size_t i=3;i<f.size();++i)line.text+='|'+f[i];
         }else continue;
+        line.text=dialogueTextCodec::quoteHeroineSpeech(
+            line.speaker,dialogueTextCodec::decode(line.text));
         const auto tag=line.expression.find('@');
         if(tag!=std::string::npos){
             const auto tags=line.expression.substr(tag+1);line.expression.resize(tag);
@@ -148,9 +189,10 @@ bool StoryFlowEditor::SaveDialogue() {
         if(line.fast)expression+="@fast";
         if(line.automatic)expression+="@auto";
         if(line.smallText)expression+="@small";
-        if(line.plain)out<<line.text<<'\n';
-        else if(!line.layer.empty())out<<line.layer<<'|'<<line.speaker<<'|'<<expression<<'|'<<line.event<<'|'<<line.text<<'\n';
-        else out<<line.speaker<<'|'<<expression<<'|'<<line.text<<'\n';
+        const std::string text=dialogueTextCodec::encode(line.text);
+        if(line.plain)out<<text<<'\n';
+        else if(!line.layer.empty())out<<line.layer<<'|'<<line.speaker<<'|'<<expression<<'|'<<line.event<<'|'<<text<<'\n';
+        else out<<line.speaker<<'|'<<expression<<'|'<<text<<'\n';
     }
     dialogueDirty_=!out;status_=out?"Dialogue saved":"Dialogue save failed";
     if(out)RefreshDialoguePreview();return bool(out);
@@ -295,9 +337,7 @@ void StoryFlowEditor::DrawCanvas(float width,float height) {
 
 const StoryTexture* StoryFlowEditor::SelectedPortrait() const {
     if(selectedLine_<0||selectedLine_>=int(lines_.size()))return nullptr;
-    const char* names[]={"normal","ase","yan","hiki","nihi","close","smile"};
-    for(size_t i=0;i<portraits_.size();++i)if(lines_[selectedLine_].expression==names[i])return &portraits_[i];
-    return nullptr;
+    return portraits_?portraits_->find(lines_[selectedLine_].expression):nullptr;
 }
 
 void StoryFlowEditor::DrawLineProperties() {
@@ -306,12 +346,35 @@ void StoryFlowEditor::DrawLineProperties() {
     }
     auto& line=lines_[selectedLine_];
     if(const StoryTexture* portrait=SelectedPortrait();portrait&&portrait->view){
-        const float h=92.f;
-        const float aspect=float(portrait->width)/std::max(1u,portrait->height);
-        ImGui::Image(ImTextureRef(portrait->view.Get()),{h*aspect,h});ImGui::SameLine();
+        const float h=168.f;
+        const ImVec2 portraitPosition=ImGui::GetCursorScreenPos();
+        const auto layout=portraitPresentation::upperBodyLayout(
+            *portrait,{0.f,h},h,220.f);
+        const ImVec2 portraitSize{layout.maximum.x-layout.minimum.x,h};
+        if(const StoryTexture* underlay=portraits_->underlay(line.expression);underlay&&underlay->view)
+            ImGui::GetWindowDrawList()->AddImage(ImTextureRef(underlay->view.Get()),portraitPosition,
+                {portraitPosition.x+portraitSize.x,portraitPosition.y+h},layout.uvMinimum,layout.uvMaximum);
+        ImGui::Image(ImTextureRef(portrait->view.Get()),portraitSize,
+            layout.uvMinimum,layout.uvMaximum);ImGui::SameLine();
+        const bool portraitHovered=ImGui::IsItemHovered();
         ImGui::BeginGroup();ImGui::TextDisabled("Portrait preview");
         ImGui::Text("%s",line.expression.c_str());ImGui::TextDisabled("Line %d / %d",selectedLine_+1,int(lines_.size()));
         ImGui::EndGroup();
+        if(portraitHovered){
+            ImGui::BeginTooltip();
+            const float previewHeight=420.f;
+            const ImVec2 tooltipPosition=ImGui::GetCursorScreenPos();
+            const auto tooltipLayout=portraitPresentation::upperBodyLayout(
+                *portrait,{0.f,previewHeight},previewHeight,420.f);
+            const ImVec2 tooltipSize{tooltipLayout.maximum.x-tooltipLayout.minimum.x,previewHeight};
+            if(const StoryTexture* underlay=portraits_->underlay(line.expression);underlay&&underlay->view)
+                ImGui::GetWindowDrawList()->AddImage(ImTextureRef(underlay->view.Get()),tooltipPosition,
+                    {tooltipPosition.x+tooltipSize.x,tooltipPosition.y+previewHeight},
+                    tooltipLayout.uvMinimum,tooltipLayout.uvMaximum);
+            ImGui::Image(ImTextureRef(portrait->view.Get()),tooltipSize,
+                tooltipLayout.uvMinimum,tooltipLayout.uvMaximum);
+            ImGui::EndTooltip();
+        }
     }else ImGui::TextDisabled("Portrait: hidden / keep previous");
     if(line.plain)ImGui::TextDisabled("Plain opening line: text only");
     if(!line.layer.empty()){
@@ -320,13 +383,38 @@ void StoryFlowEditor::DrawLineProperties() {
     }
     ImGui::BeginDisabled(line.plain);
     if(ImGui::InputText("Speaker",speakerBuffer_.data(),speakerBuffer_.size())){line.speaker=speakerBuffer_.data();dialogueDirty_=true;}
-    int expression=0;const char* names[]={"normal","ase","yan","hiki","nihi","close","smile","hide","none"};
-    for(int i=0;i<9;++i)if(line.expression==names[i])expression=i;
-    if(ImGui::Combo("Portrait / expression",&expression,Expressions)){line.expression=names[expression];Copy(expressionBuffer_,line.expression);dialogueDirty_=true;}
+    if(ImGui::BeginCombo("Portrait / expression",line.expression.c_str())){
+        if(portraits_)for(const auto& expression:portraits_->expressions()){
+            const bool selected=line.expression==expression;
+            if(ImGui::Selectable(expression.c_str(),selected)){
+                line.expression=expression;Copy(expressionBuffer_,line.expression);dialogueDirty_=true;
+            }
+            if(selected)ImGui::SetItemDefaultFocus();
+        }
+        for(const char* expression:{"hide","none"}){
+            const bool selected=line.expression==expression;
+            if(ImGui::Selectable(expression,selected)){
+                line.expression=expression;Copy(expressionBuffer_,line.expression);dialogueDirty_=true;
+            }
+            if(selected)ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
     ImGui::EndDisabled();
-    if(ImGui::InputTextMultiline("Text",textBuffer_.data(),textBuffer_.size(),{0,92})){
+    if(insertTextLineBreak_)ImGui::SetKeyboardFocusHere();
+    const ImGuiIO& io=ImGui::GetIO();
+    ImFont* gameFont=io.FontDefault?io.FontDefault:(io.Fonts->Fonts.empty()?ImGui::GetFont():io.Fonts->Fonts[0]);
+    const float gameTextScale=line.smallText?.72f:1.f;
+    DialogueTextEditContext textContext{
+        gameFont,DialoguePlayer::textFontSize(io.DisplaySize.y,gameTextScale),
+        DialoguePlayer::textWrapWidth(io.DisplaySize.x),&insertTextLineBreak_};
+    constexpr ImGuiInputTextFlags textFlags=ImGuiInputTextFlags_WordWrap|
+        ImGuiInputTextFlags_CallbackEdit|ImGuiInputTextFlags_CallbackAlways;
+    if(ImGui::InputTextMultiline("Text",textBuffer_.data(),textBuffer_.size(),{0,92},textFlags,EditDialogueText,&textContext)){
         line.text=textBuffer_.data();dialogueDirty_=true;
     }
+    if(ImGui::Button("改行"))insertTextLineBreak_=true;
+    ImGui::SameLine();ImGui::TextDisabled("インゲームの会話幅で自動改行");
     ImGui::BeginDisabled(line.plain);
     dialogueDirty_|=ImGui::Checkbox("Fast",&line.fast);ImGui::SameLine();
     dialogueDirty_|=ImGui::Checkbox("Auto",&line.automatic);ImGui::SameLine();

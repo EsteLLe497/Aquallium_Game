@@ -22,6 +22,7 @@
 #include "../story/TankLightingConsole.h"
 #include "../story/StoryTexture.h"
 #include "../story/StoryFlowEditor.h"
+#include "../story/EndingSequence.h"
 #include "../audio/SoundEffects.h"
 #include "../rendering/ScreenFade.h"
 
@@ -45,7 +46,7 @@ public:
     void SetEditorOpen(bool open) { editorOpen_=open; }
     bool WantsCursor() const {return storyFlowEditor_.Visible()||transitionFade_.Active()||gameMenu_.IsOpen()||passwordLock_.Active()||facilityPasswordLock_.Active()||
         terraceConversation_.WantsCursor()||powerOutage_.WantsCursor()||
-        tankLightingConsole_.WantsCursor()||beachChoiceActive_;}
+        tankLightingConsole_.WantsCursor()||beachChoiceActive_||endingSequence_.active();}
     AquariumScene(
         ID3D11Device* device,
         const std::filesystem::path& shaderPath);
@@ -112,6 +113,9 @@ private:
     void BuildBeachCollision();
     void DrawBeachChoice();
     void ApplyHeroTankLightColor(story::TankLightingConsole::Color color);
+    void updateAudioSettings();
+    void updateBackgroundMusic();
+    void playBeachAmbience(bool morning);
 
     AquariumRenderer renderer_;
     BeachPreviewRenderer beachRenderer_;
@@ -146,9 +150,11 @@ private:
     rendering::ScreenFade transitionFade_;
     story::StoryTexture inWaterStill_;
     story::StoryFlowEditor storyFlowEditor_;
+    story::EndingSequence endingSequence_;
     player::GameMenu::Request pendingTransition_{};
     std::filesystem::path storyFolder_;
     std::filesystem::path beachSoundPath_;
+    std::filesystem::path beachMorningSoundPath_;
     bool clueCollected_=false,managementCollisionOpened_=false,heroineJoined_=false;
     bool managementDoorTargetOpen_=false;
     float managementDoorAngle_=0.f;
@@ -168,7 +174,11 @@ private:
     bool beachSeatedDialoguePendingChoice_=false;
     bool beachChoiceActive_=false;
     BeachBranch beachBranch_=BeachBranch::Undecided;
+    bool beachStayDialoguePendingAftermath_=false;
+    bool beachStayAftermathPendingEnding_=false;
     bool beachLeaveDialoguePendingTransition_=false;
+    bool actuallyMusicStarted_=false;
+    bool normalEndingMusic_=false;
     bool morningBeachTransition_=false;
     bool morningBeachEntered_=false;
     float morningBeachTransitionTime_=0.f;

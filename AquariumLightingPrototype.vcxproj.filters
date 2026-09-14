@@ -433,7 +433,13 @@
     <ClCompile Include="src\story\StoryTexture.cpp">
       <Filter>11 Story</Filter>
     </ClCompile>
+    <ClCompile Include="src\story\PortraitLibrary.cpp">
+      <Filter>11 Story</Filter>
+    </ClCompile>
     <ClCompile Include="src\story\StoryFlowEditor.cpp">
+      <Filter>11 Story</Filter>
+    </ClCompile>
+    <ClCompile Include="src\story\EndingSequence.cpp">
       <Filter>11 Story</Filter>
     </ClCompile>
     <ClCompile Include="src\story\HeroineEncounter.cpp">
@@ -451,10 +457,25 @@
     <ClCompile Include="src\audio\SoundEffects.cpp">
       <Filter>02 Framework</Filter>
     </ClCompile>
+    <ClCompile Include="src\audio\BackgroundMusic.cpp">
+      <Filter>02 Framework</Filter>
+    </ClCompile>
     <ClInclude Include="src\story\StoryTexture.h">
       <Filter>11 Story</Filter>
     </ClInclude>
+    <ClInclude Include="src\story\PortraitLibrary.h">
+      <Filter>11 Story</Filter>
+    </ClInclude>
+    <ClInclude Include="src\story\PortraitPresentation.h">
+      <Filter>11 Story</Filter>
+    </ClInclude>
+    <ClInclude Include="src\story\DialogueTextCodec.h">
+      <Filter>11 Story</Filter>
+    </ClInclude>
     <ClInclude Include="src\story\StoryFlowEditor.h">
+      <Filter>11 Story</Filter>
+    </ClInclude>
+    <ClInclude Include="src\story\EndingSequence.h">
       <Filter>11 Story</Filter>
     </ClInclude>
     <ClInclude Include="src\story\HeroineEncounter.h">
@@ -497,6 +518,9 @@
       <Filter>11 Story</Filter>
     </None>
     <None Include="asset\story\beach_stay.dialogue">
+      <Filter>11 Story</Filter>
+    </None>
+    <None Include="asset\story\beach_stay_aftermath.dialogue">
       <Filter>11 Story</Filter>
     </None>
     <None Include="asset\story\beach_leave.dialogue">

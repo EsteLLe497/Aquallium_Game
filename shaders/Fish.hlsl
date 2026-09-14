@@ -18,6 +18,7 @@ struct VertexInput
     float3 normal : NORMAL;
     float2 uv : TEXCOORD0;
     float bendWeight : TEXCOORD1;
+    float meshPart : TEXCOORD2;
     float4 instancePositionScale : INSTANCE_POSITION_SCALE;
     float4 instanceForwardPhase : INSTANCE_FORWARD_PHASE;
     float4 instanceTintSwim : INSTANCE_TINT_SWIM;
@@ -35,6 +36,8 @@ struct VertexOutput
     float tailMask : TEXCOORD4;
     float overheadSchool : TEXCOORD5;
     float species : TEXCOORD6;
+    float2 uv : TEXCOORD7;
+    float meshPart : TEXCOORD8;
 };
 
 float3 SafeNormalize(float3 value, float3 fallback)
@@ -48,6 +51,7 @@ float3 SafeNormalize(float3 value, float3 fallback)
 VertexOutput VSFish(VertexInput input)
 {
     VertexOutput output;
+    const bool isFloorShadow = input.instanceSpeciesShape.w < -0.5;
     const float scale = input.instancePositionScale.w;
     const float phase = input.instanceForwardPhase.w;
     const float swimSpeed = abs(input.instanceTintSwim.w);
@@ -55,6 +59,7 @@ VertexOutput VSFish(VertexInput input)
         gCameraTime.w * swimSpeed + phase - input.position.x * 5.2);
     float3 localPosition = input.position;
     const bool raySpecies = input.instanceSpeciesShape.x > 1.5;
+    const float mediumSpecies = saturate(input.instanceSpeciesShape.x);
     if (raySpecies)
     {
         const float wingMask = saturate(-input.bendWeight);
@@ -65,9 +70,27 @@ VertexOutput VSFish(VertexInput input)
     else
     {
         localPosition.z += wave * 0.105 * saturate(input.bendWeight);
+        // 小型魚は細長く、中型魚は胴高で頭部に厚みを持たせる。
+        const float bodyPart = 1.0 - step(0.5, input.meshPart);
+        const float frontProfile = saturate(input.uv.x * 1.45 - 0.35);
+        localPosition.x *= lerp(1.08, 0.96, mediumSpecies);
+        localPosition.y *= lerp(0.72, 1.28, mediumSpecies);
+        localPosition.z *= lerp(0.76, 1.18, mediumSpecies);
+        localPosition.x += bodyPart * mediumSpecies * frontProfile * 0.055;
+
+        // 中型魚は背びれと胸びれを大きく、小型魚は群れ向けの小さなひれにする。
+        const float dorsalPart = 1.0 - step(0.5, abs(input.meshPart - 2.0));
+        const float pectoralPart = 1.0 - step(0.5, abs(input.meshPart - 3.0));
+        localPosition.y *= lerp(1.0, lerp(0.58, 1.16, mediumSpecies), dorsalPart);
+        localPosition.z *= lerp(1.0, lerp(0.48, 1.22, mediumSpecies), pectoralPart);
     }
     localPosition.x *= input.instanceSpeciesShape.y;
     localPosition.yz *= input.instanceSpeciesShape.z;
+    if (isFloorShadow)
+    {
+        // 実際の魚メッシュを底面へ押し潰し、軽量な動的シルエットにする。
+        localPosition.y *= 0.018;
+    }
 
     const float3 forward = SafeNormalize(
         input.instanceForwardPhase.xyz,
@@ -94,13 +117,21 @@ VertexOutput VSFish(VertexInput input)
     output.depthBelowSurface = max(gWaterParameters.x - worldPosition.y, 0.0);
     output.tailMask = saturate(input.bendWeight);
     output.overheadSchool = input.instanceTintSwim.w < 0.0 ? 1.0 : 0.0;
-    output.species = input.instanceSpeciesShape.x;
+    output.species = isFloorShadow ? -1.0 : input.instanceSpeciesShape.x;
+    output.uv = input.uv;
+    output.meshPart = input.meshPart;
     output.position = mul(float4(worldPosition, 1.0), gViewProjection);
     return output;
 }
 
 float4 PSFish(VertexOutput input, bool frontFace : SV_IsFrontFace) : SV_TARGET0
 {
+    if (input.species < -0.5)
+    {
+        // tint.r は魚の高さとライト円錐端から求めた影の濃度。
+        return float4(0.002, 0.010, 0.016, saturate(input.tint.r));
+    }
+
     float3 normal = SafeNormalize(input.worldNormal, float3(0.0, 1.0, 0.0));
     if (!frontFace)
     {
@@ -142,8 +173,25 @@ float4 PSFish(VertexOutput input, bool frontFace : SV_IsFrontFace) : SV_TARGET0
         float3(1.0, 1.0, 1.0),
         gKeyLightColor.rgb,
         heroTankLighting ? 0.72 : 0.0);
-    const float3 baseColor = input.tint * keyTint *
+    float3 baseColor = input.tint * keyTint *
         (raySpecies ? (0.15 + diffuse * 0.34) : (0.22 + diffuse * 0.52));
+    if (!raySpecies && input.meshPart > 3.5)
+    {
+        baseColor = float3(0.004, 0.008, 0.012);
+    }
+    // 近距離では目と鰓の濃淡を加え、単色の模型らしさを抑える。
+    if (!raySpecies && input.meshPart < 0.5)
+    {
+        const float eyeSide = min(abs(input.uv.y - 0.18), abs(input.uv.y - 0.82));
+        const float eye = (1.0 - smoothstep(0.025, 0.075, eyeSide)) *
+            smoothstep(0.72, 0.87, input.uv.x) *
+            (1.0 - smoothstep(0.92, 0.99, input.uv.x));
+        const float gill = (1.0 - smoothstep(
+            0.012, 0.040, abs(input.uv.x - 0.69))) *
+            (1.0 - smoothstep(0.32, 0.50, abs(input.uv.y - 0.5)));
+        baseColor = lerp(baseColor, float3(0.006, 0.012, 0.016), eye * 0.94);
+        baseColor *= 1.0 - gill * 0.10;
+    }
     const float3 silver = lerp(
         float3(0.24, 0.48, 0.72),
         gKeyLightColor.rgb,

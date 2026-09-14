@@ -626,7 +626,7 @@ def add_wall_z(name: str, x: float, z0: float, z1: float) -> None:
             (0.26, ROOM_HEIGHT, z1 - z0), "Solid")
 
 
-def add_faceted_rock(center, size, seed: float, segments: int = 12) -> None:
+def add_faceted_rock(center, size, seed: float, segments: int = 8) -> None:
     """Low-poly reef mass: irregular enough to read naturally, one draw batch."""
     cx, cy, cz = center
     rx, ry, rz = size
@@ -665,6 +665,76 @@ def add_faceted_rock(center, size, seed: float, segments: int = 12) -> None:
         triangle((lower[index], lower[nxt], upper[nxt]))
         triangle((lower[index], upper[nxt], upper[index]))
         triangle((upper[index], upper[nxt], top))
+
+
+def add_sand_mound(center, radii, height: float, seed: float,
+                   segments: int = 16) -> None:
+    """底面から滑らかに立ち上がる低い砂丘。全て一つの砂バッチへ入る。"""
+    group = route.groups["WatatsumiRock"]
+    cx, cy, cz = center
+    rings = ((1.0, 0.0), (.74, .34), (.48, .67), (.23, .91))
+    ring_bases = []
+    for ring, (radius_scale, height_scale) in enumerate(rings):
+        ring_bases.append(len(group.positions) // 3)
+        for index in range(segments):
+            angle = math.tau * index / segments
+            variation = 1.0 + .08 * math.sin(seed + index * 1.73 + ring)
+            nx, nz = math.cos(angle), math.sin(angle)
+            group.positions.extend((cx + nx * radii[0] * radius_scale * variation,
+                                    cy + height * height_scale,
+                                    cz + nz * radii[1] * radius_scale * variation))
+            normal = (nx * height * 1.65 / max(radii[0], .01), 1.0,
+                      nz * height * 1.65 / max(radii[1], .01))
+            inverse = 1.0 / math.sqrt(sum(value * value for value in normal))
+            group.normals.extend(tuple(value * inverse for value in normal))
+            # UV.x=2..3 は同一バッチ内の砂識別帯。
+            group.texcoords.extend((2.0 + (nx + 1) * .5, (nz + 1) * .5))
+    for ring in range(len(rings) - 1):
+        for index in range(segments):
+            nxt = (index + 1) % segments
+            a, b = ring_bases[ring] + index, ring_bases[ring] + nxt
+            c, d = ring_bases[ring + 1] + index, ring_bases[ring + 1] + nxt
+            group.indices.extend((a, c, d, a, d, b))
+    top = len(group.positions) // 3
+    group.positions.extend((cx, cy + height, cz))
+    group.normals.extend((0.0, 1.0, 0.0))
+    group.texcoords.extend((2.5, .5))
+    for index in range(segments):
+        group.indices.extend((ring_bases[-1] + index, top,
+                              ring_bases[-1] + (index + 1) % segments))
+
+
+def add_sand_bed() -> None:
+    """水槽底を覆う一枚の砂面。岩・サンゴと同じ描画バッチを共有する。"""
+    group = route.groups["WatatsumiRock"]
+    base = len(group.positions) // 3
+    group.positions.extend((-8.38,.025,-8.15, 8.38,.025,-8.15,
+                            8.38,.025,-15.88, -8.38,.025,-15.88))
+    for _ in range(4):
+        group.normals.extend((0.0,1.0,0.0))
+    group.texcoords.extend((2.02,.02, 2.98,.02, 2.98,.98, 2.02,.98))
+    group.indices.extend((base,base+2,base+1,base,base+3,base+2))
+
+
+def add_water_surface_grid(columns: int = 24, rows: int = 10) -> None:
+    """頂点波が三角面に見えないよう、水面を均等な格子へ細分化する。"""
+    group = route.groups["WatatsumiWaterSurface"]
+    base = len(group.positions) // 3
+    for row in range(rows + 1):
+        v = row / rows
+        z = -8.05 + (-15.95 + 8.05) * v
+        for column in range(columns + 1):
+            u = column / columns
+            x = -8.45 + 16.90 * u
+            group.positions.extend((x, HERO_TANK_SURFACE_Y, z))
+            group.normals.extend((0.0, 1.0, 0.0))
+            group.texcoords.extend((u, v))
+    width = columns + 1
+    for row in range(rows):
+        for column in range(columns):
+            a = base + row * width + column
+            b = a + width
+            group.indices.extend((a,b,a+1,a+1,b,b+1))
 
 
 def add_bubble_ellipsoid(center, radii, seed: float,
@@ -857,11 +927,21 @@ def build_integrated_hero_tank() -> None:
             (17.0, HERO_TANK_HEIGHT, 0.28), None)
     add_box("WatatsumiArchitecture", "HeroTank_Bed", (0.0, -0.08, -12.0),
             (17.0, 0.18, 8.0), None)
+    # 薄い砂層と重なる砂丘で、清掃された平板ではなく堆積した海底にする。
+    add_sand_bed()
+    sand_specs = (
+        ((-6.3, .10, -11.1), (2.6, 1.7), .30, 1.1),
+        ((-2.3, .09, -13.5), (2.9, 1.5), .24, 2.7),
+        ((2.0, .10, -10.5), (3.2, 1.6), .28, 4.2),
+        ((6.1, .09, -13.2), (2.5, 1.8), .32, 5.9),
+    )
+    for center, radii, height, seed in sand_specs:
+        add_sand_mound(center, radii, height, seed)
+    features.append({"type": "hero_tank_sand", "mounds": len(sand_specs),
+                     "draw_batches": 1})
     # A subtly animated surface exists above the visible window but is sealed
     # from the 2F route by architecture, as approved.
-    add_box("WatatsumiWaterSurface", "HeroTank_Surface",
-            (0.0, HERO_TANK_SURFACE_Y, -12.0),
-            (17.0, 0.04, 8.0), None)
+    add_water_surface_grid()
     add_hero_tank_bubbles()
     add_box("WatatsumiArchitecture", "HeroTank_SealedCrown",
             (0.0, 10.90, -12.0), (18.4, 1.10, 8.4), None)
@@ -869,26 +949,31 @@ def build_integrated_hero_tank() -> None:
     # luminous proxy cards below it: they were visible as three white ceiling
     # rectangles from the upper gallery and added no actual light.
 
-    # Asymmetric side reefs frame a clean central swimming corridor.
+    # 両翼を高く、中央を低くしたU字型。前後にもずらして岩の積層を見せる。
     rock_specs = (
-        ((-7.10, 0.72, -14.35), (1.45, 1.25, 1.20), 1.0),
-        ((-6.15, 1.20, -14.75), (1.55, 1.45, 1.05), 2.3),
-        ((-7.15, 1.95, -15.10), (1.25, 1.45, 0.78), 3.7),
-        ((-6.20, 2.70, -15.20), (1.28, 1.35, 0.65), 4.4),
-        ((-7.35, 3.45, -15.35), (0.95, 1.20, 0.48), 5.1),
-        ((-5.05, 0.55, -14.65), (1.30, 0.85, 0.92), 6.0),
-        ((6.95, 0.72, -14.25), (1.48, 1.20, 1.18), 7.2),
-        ((5.95, 1.18, -14.80), (1.60, 1.42, 1.02), 8.1),
-        ((7.10, 1.90, -15.05), (1.22, 1.38, 0.75), 9.0),
-        ((6.15, 2.58, -15.28), (1.22, 1.28, 0.60), 10.1),
-        ((7.30, 3.25, -15.38), (0.88, 1.12, 0.45), 11.2),
-        ((4.55, 0.52, -14.55), (1.25, 0.82, 0.90), 12.3),
-        ((-3.15, 0.42, -15.05), (1.15, 0.70, 0.66), 13.4),
-        ((3.05, 0.40, -14.92), (1.12, 0.66, 0.68), 14.5),
+        ((-7.15,.78,-13.55),(1.60,1.55,1.32),1.0),
+        ((-5.95,1.32,-14.35),(1.72,1.85,1.18),2.3),
+        ((-7.10,2.35,-14.72),(1.38,2.15,.94),3.7),
+        ((-6.20,3.65,-15.05),(1.42,2.65,.78),4.4),
+        ((-7.35,4.55,-15.28),(1.05,2.30,.60),5.1),
+        ((-4.65,.70,-13.75),(1.48,1.18,1.12),6.0),
+        ((7.10,.80,-13.40),(1.62,1.58,1.34),7.2),
+        ((5.90,1.38,-14.25),(1.74,1.90,1.16),8.1),
+        ((7.05,2.42,-14.75),(1.36,2.22,.92),9.0),
+        ((6.18,3.72,-15.08),(1.40,2.62,.76),10.1),
+        ((7.35,4.48,-15.30),(1.02,2.20,.58),11.2),
+        ((4.55,.68,-13.65),(1.45,1.16,1.08),12.3),
+        ((-3.05,.55,-14.55),(1.28,1.45,.92),13.4),
+        ((3.00,.52,-14.42),(1.25,1.38,.90),14.5),
+        ((-.85,.46,-14.82),(1.18,1.12,.78),15.7),
+        ((1.05,.42,-14.68),(1.12,1.05,.76),16.8),
+        ((-5.70,.62,-11.85),(1.12,.95,.96),17.9),
+        ((5.55,.60,-11.72),(1.10,.92,.94),19.1),
     )
     for index, (center, size, seed) in enumerate(rock_specs, 1):
         add_faceted_rock(center, size, seed)
     features.append({"type": "hero_tank_rocks", "count": len(rock_specs)})
+
 
     # Keep the four viewing benches, but pull them out of the continuous side
     # circulation lanes.  Their long axis now faces the tank; both wall-side

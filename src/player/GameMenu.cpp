@@ -43,6 +43,23 @@ void GameMenu::DrawSlots(bool saving) {
     ImGui::Dummy({0, 5});
   }
 }
+
+// =========================================================
+// BGM・SE音量設定
+// =========================================================
+void GameMenu::drawVolumeSettings() {
+  ImGui::TextUnformatted("音量設定");
+  ImGui::Separator();
+  ImGui::Dummy({0, 18});
+  ImGui::TextUnformatted("BGM音量");
+  ImGui::SetNextItemWidth(-1);
+  ImGui::SliderInt("##bgm_volume", &bgmVolumePercent_, 0, 100, "%d%%");
+  ImGui::Dummy({0, 14});
+  ImGui::TextUnformatted("SE音量");
+  ImGui::SetNextItemWidth(-1);
+  ImGui::SliderInt("##se_volume", &seVolumePercent_, 0, 100, "%d%%");
+}
+
 void GameMenu::Draw() {
   if (!open_)
     return;
@@ -52,7 +69,7 @@ void GameMenu::Draw() {
   if (title_ && page_ == Page::Title) {
     ImGui::SetNextWindowPos({screen.x * .5f, screen.y * .48f}, ImGuiCond_Always,
                             {.5f, .5f});
-    ImGui::SetNextWindowSize({520, 440});
+    ImGui::SetNextWindowSize({520, 500});
     ImGui::PushStyleColor(ImGuiCol_WindowBg, {.004f, .015f, .032f, .95f});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {58, 48});
     ImGui::Begin("##title", nullptr,
@@ -70,11 +87,30 @@ void GameMenu::Draw() {
     if (ImGui::Button("ロード", b))
       page_ = Page::Load;
     ImGui::Dummy({0, 8});
+    if (ImGui::Button("設定", b))
+      page_ = Page::Settings;
+    ImGui::Dummy({0, 8});
     if (ImGui::Button("終了", b))
       request_ = {RequestType::Quit, -1};
     ImGui::End();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
+    return;
+  }
+  if (title_ && page_ == Page::Settings) {
+    ImGui::SetNextWindowPos({screen.x * .5f, screen.y * .48f}, ImGuiCond_Always,
+                            {.5f, .5f});
+    ImGui::SetNextWindowSize({520, 330});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {48, 38});
+    ImGui::Begin("##title_settings", nullptr,
+                 ImGuiWindowFlags_NoDecoration |
+                     ImGuiWindowFlags_NoSavedSettings);
+    if (ImGui::Button("← タイトル", {160, 36}))
+      page_ = Page::Title;
+    ImGui::Dummy({0, 18});
+    drawVolumeSettings();
+    ImGui::End();
+    ImGui::PopStyleVar();
     return;
   }
   ImGui::SetNextWindowPos({screen.x * .10f, screen.y * .07f});
@@ -100,6 +136,8 @@ void GameMenu::Draw() {
     page_ = Page::Save;
   if (ImGui::Selectable("ロード", page_ == Page::Load))
     page_ = Page::Load;
+  if (ImGui::Selectable("設定", page_ == Page::Settings))
+    page_ = Page::Settings;
   if (ImGui::Selectable("タイトルへ", false))
     confirmTitle_ = true;
   ImGui::EndChild();
@@ -109,6 +147,8 @@ void GameMenu::Draw() {
     DrawSlots(true);
   else if (page_ == Page::Load)
     DrawSlots(false);
+  else if (page_ == Page::Settings)
+    drawVolumeSettings();
   else {
     ImGui::TextUnformatted("アイテム");
     ImGui::Separator();

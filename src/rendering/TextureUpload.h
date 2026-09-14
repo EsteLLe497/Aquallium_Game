@@ -3,6 +3,7 @@
 #include <wincodec.h>
 #include <wrl/client.h>
 #include <filesystem>
+#include <fstream>
 #include <vector>
 #include <stdexcept>
 
@@ -45,6 +46,23 @@ inline Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> DecodeTexture(
     std::vector<unsigned char> pixels(size_t(width)*height*4);
     check(converter->CopyPixels(nullptr,width*4,UINT(pixels.size()),pixels.data()));
     return UploadRgba(device,pixels.data(),width,height);
+}
+
+// =========================================================
+// 外部画像を一度だけ読み込み、GPUテクスチャへ変換
+// =========================================================
+inline Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> DecodeTextureFile(
+    ID3D11Device* device,const std::filesystem::path& path) {
+    std::ifstream input(path,std::ios::binary|std::ios::ate);
+    if(!input)throw std::runtime_error("Texture file could not be opened");
+    const auto size=input.tellg();
+    if(size<=0||size>std::streamoff(64*1024*1024))
+        throw std::runtime_error("Invalid texture file size");
+    std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
+    input.seekg(0,std::ios::beg);
+    if(!input.read(reinterpret_cast<char*>(bytes.data()),size))
+        throw std::runtime_error("Texture file could not be read");
+    return DecodeTexture(device,bytes.data(),static_cast<UINT>(bytes.size()));
 }
 
 // Rasterize the supplied private font once. Never install it system-wide.

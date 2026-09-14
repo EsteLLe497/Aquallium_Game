@@ -4,7 +4,8 @@ cbuffer FlashlightConstants : register(b5)
 {
     float4 gFlashlightPosition; // xyz origin, w switched on
     float4 gFlashlightDirection; // xyz unit direction, w power outage blend
-    float4 gBlackoutWriting; // x: ramp tank inscription opacity
+    // x: inscription, y: fixed handprints
+    float4 gBlackoutWriting;
 };
 
 float3 FlashlightColor(float3 position, float3 normal, float3 albedo)

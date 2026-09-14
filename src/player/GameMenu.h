@@ -34,6 +34,8 @@ public:
   void OpenLoadPage() { title_ = false; open_ = true; page_ = Page::Load; }
   bool IsOpen() const { return open_; }
   bool IsTitle() const { return title_; }
+  float bgmVolume() const { return bgmVolumePercent_ / 100.f; }
+  float seVolume() const { return seVolumePercent_ / 100.f; }
   void SetClueOwned(bool value) { clueOwned_ = value; }
   void SetSlots(const std::array<SaveSlotInfo, SaveSystem::kSlotCount> &value) {
     slots_ = value;
@@ -46,13 +48,16 @@ public:
   void Draw();
 
 private:
-  enum class Page { Title, Items, Save, Load };
+  enum class Page { Title, Items, Save, Load, Settings };
   void DrawSlots(bool saving);
+  void drawVolumeSettings();
   story::StoryTexture clue_;
   std::array<SaveSlotInfo, SaveSystem::kSlotCount> slots_{};
   Request request_{};
   Page page_ = Page::Items;
   bool open_ = false, title_ = false, clueOwned_ = false, inspect_ = false,
        confirmTitle_ = false;
+  int bgmVolumePercent_ = 50;
+  int seVolumePercent_ = 50;
 };
 } // namespace player

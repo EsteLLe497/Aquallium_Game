@@ -386,6 +386,8 @@ void AquariumRenderer::Initialize(ID3D11Device* device, const std::filesystem::p
         aquariumGreyboxImport);
     tankWritingTexture_=rendering::CreateHorrorWriting(device,
         shaderPath.parent_path().parent_path()/L"asset"/L"font"/L"onryou.TTF");
+    wallHandprintTexture_=rendering::DecodeTextureFile(device,
+        shaderPath.parent_path().parent_path()/L"asset"/L"texture"/L"other"/L"hand.png");
     jellyfishRenderer_.Initialize(
         device,
         shaderPath.parent_path() / L"Jellyfish.hlsl");
@@ -511,7 +513,7 @@ void AquariumRenderer::Render(
         {std::sin(settings.cameraYaw)*std::cos(settings.cameraPitch),
          std::sin(settings.cameraPitch), std::cos(settings.cameraYaw)*std::cos(settings.cameraPitch),
          std::clamp(settings.powerOutage,0.f,1.f)},
-        {settings.blackoutWriting,0,0,0}};
+        {settings.blackoutWriting,settings.blackoutHands,0,0}};
     ThrowIfFailed(context->Map(flashlightConstantBuffer_.Get(), 0,
         D3D11_MAP_WRITE_DISCARD, 0, &mapped), "Map (flashlight)");
     memcpy(mapped.pData, flashlight, sizeof(flashlight));
@@ -520,6 +522,8 @@ void AquariumRenderer::Render(
     context->PSSetConstantBuffers(5, 1, &flashlightBuffer);
     ID3D11ShaderResourceView* writing=tankWritingTexture_.Get();
     context->PSSetShaderResources(10,1,&writing);
+    ID3D11ShaderResourceView* handprint=wallHandprintTexture_.Get();
+    context->PSSetShaderResources(12,1,&handprint);
 
     using namespace DirectX;
     std::array<AquariumLight, kMaxAquariumLights> lights{};

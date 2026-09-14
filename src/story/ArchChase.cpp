@@ -126,6 +126,7 @@ void ArchChase::Update(float dt, bool eligible, bool movingTowardEntrance,
     if (dialogueObserved_ && !dialogueActive) {
       phase_ = Phase::Reveal;
       clock_ = 0;
+      request_ = Request::PredatorAppear;
     }
   } else if (phase_ == Phase::Reveal) {
     const float look = Smooth(clock_ / 2.0f);
@@ -136,7 +137,7 @@ void ArchChase::Update(float dt, bool eligible, bool movingTowardEntrance,
     s.cameraPitch = Mix(anchorPitch_, -.035f, look);
     s.horrorIntensity = .55f + look * .28f;
     s.horrorNoise = .35f + look * .25f;
-    s.horrorVignette = .52f;
+    s.horrorVignette = .62f + look*.08f;
     s.archFishFlee = 1.f;
     s.archPredatorVisibility = Smooth((clock_ - .55f) / 3.0f);
     ApplyCamera(s, .85f);
@@ -150,7 +151,7 @@ void ArchChase::Update(float dt, bool eligible, bool movingTowardEntrance,
     s.cameraPitch = -.035f;
     s.horrorIntensity = .88f;
     s.horrorNoise = .62f;
-    s.horrorVignette = .58f;
+    s.horrorVignette = .70f;
     s.archFishFlee = 1.f;
     s.archPredatorVisibility = 1.f;
     ApplyCamera(s, 1.f);
@@ -169,7 +170,8 @@ void ArchChase::Update(float dt, bool eligible, bool movingTowardEntrance,
     const float beat=std::pow(std::max(0.f,std::sin(clock_*7.f+clock_*clock_*.5f)),8.f);
     s.horrorIntensity = .42f + pressure * .34f;
     s.horrorNoise = .22f + pressure * .28f;
-    s.horrorVignette = .42f + pressure * .22f + beat*.12f;
+    // 追跡が迫るほど視界を狭め、脈打つ周辺減光で逃走の圧を出す。
+    s.horrorVignette = std::min(.94f,.56f + pressure * .25f + beat*.13f);
     s.archFishFlee = 1.f;
     s.archPredatorVisibility = 1.f;
     s.archPredatorApproach = pressure;

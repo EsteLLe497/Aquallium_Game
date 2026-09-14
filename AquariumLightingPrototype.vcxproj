@@ -98,7 +98,9 @@
     <ClCompile Include="src\rendering\BeachPreviewRenderer.cpp" />
     <ClCompile Include="src\rendering\ExitPortalRenderer.cpp" />
     <ClCompile Include="src\story\StoryTexture.cpp" />
+    <ClCompile Include="src\story\PortraitLibrary.cpp" />
     <ClCompile Include="src\story\StoryFlowEditor.cpp" />
+    <ClCompile Include="src\story\EndingSequence.cpp" />
     <ClCompile Include="src\story\HeroineEncounter.cpp" />
     <ClCompile Include="src\story\DialoguePlayer.cpp" />
     <ClCompile Include="src\story\PasswordLock.cpp" />
@@ -109,6 +111,7 @@
     <ClCompile Include="src\player\GameMenu.cpp" />
     <ClCompile Include="src\player\SaveSystem.cpp" />
     <ClCompile Include="src\audio\SoundEffects.cpp" />
+    <ClCompile Include="src\audio\BackgroundMusic.cpp" />
     <ClCompile Include="src\rendering\StageModel.cpp" />
     <ClCompile Include="third_party\imgui\imgui.cpp" />
     <ClCompile Include="third_party\imgui\imgui_draw.cpp" />
@@ -211,7 +214,11 @@
     <ClInclude Include="src\player\InteractionUI.h" />
     <ClInclude Include="src\player\MiniMap.h" />
     <ClInclude Include="src\story\StoryTexture.h" />
+    <ClInclude Include="src\story\PortraitLibrary.h" />
+    <ClInclude Include="src\story\PortraitPresentation.h" />
+    <ClInclude Include="src\story\DialogueTextCodec.h" />
     <ClInclude Include="src\story\StoryFlowEditor.h" />
+    <ClInclude Include="src\story\EndingSequence.h" />
     <ClInclude Include="src\story\HeroineEncounter.h" />
     <ClInclude Include="src\story\DialoguePlayer.h" />
     <ClInclude Include="src\story\PasswordLock.h" />
@@ -241,13 +248,17 @@
     <None Include="asset\story\beach_arrival.dialogue" />
     <None Include="asset\story\beach_seated.dialogue" />
     <None Include="asset\story\beach_stay.dialogue" />
+    <None Include="asset\story\beach_stay_aftermath.dialogue" />
     <None Include="asset\story\beach_leave.dialogue" />
     <None Include="asset\story\beach_morning_wake.dialogue" />
     <None Include="asset\font\onryou.TTF" />
     <None Include="asset\sound\se\glass.mp3" />
-    <None Include="asset\sound\BGM\title.wav" />
+    <None Include="asset\sound\BGM\title.mp3" />
     <None Include="asset\sound\BGM\stage.wav" />
-    <None Include="asset\sound\BGM\Beach.mp3" />
+    <None Include="asset\sound\BGM\actually.mp3" />
+    <None Include="asset\sound\BGM\end.mp3" />
+    <None Include="asset\sound\se\Beach.mp3" />
+    <None Include="asset\sound\se\beachMorning.mp3" />
     <None Include="asset\sound\se\select.mp3" />
     <None Include="asset\sound\se\open.mp3" />
     <None Include="asset\sound\se\miss.mp3" />
@@ -268,12 +279,14 @@
       <FontAssets Include="$(ProjectDir)asset\font\*" />
       <TextureAssets Include="$(ProjectDir)asset\texture\**\*" />
       <SoundAssets Include="$(ProjectDir)asset\sound\**\*" />
+      <VideoAssets Include="$(ProjectDir)asset\video\*" />
     </ItemGroup>
-    <MakeDir Directories="$(OutDir)asset\story;$(OutDir)asset\font;$(OutDir)asset\texture;@(TextureAssets->'$(OutDir)asset\texture\%(RecursiveDir)');@(SoundAssets->'$(OutDir)asset\sound\%(RecursiveDir)')" />
+    <MakeDir Directories="$(OutDir)asset\story;$(OutDir)asset\font;$(OutDir)asset\texture;$(OutDir)asset\video;@(TextureAssets->'$(OutDir)asset\texture\%(RecursiveDir)');@(SoundAssets->'$(OutDir)asset\sound\%(RecursiveDir)')" />
     <Copy SourceFiles="@(StoryAssets)" DestinationFolder="$(OutDir)asset\story" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(FontAssets)" DestinationFolder="$(OutDir)asset\font" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(TextureAssets)" DestinationFiles="@(TextureAssets->'$(OutDir)asset\texture\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SoundAssets)" DestinationFiles="@(SoundAssets->'$(OutDir)asset\sound\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(VideoAssets)" DestinationFolder="$(OutDir)asset\video" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)shaders" />
     <Copy SourceFiles="$(ProjectDir)shaders\AquariumPrototype.hlsl;$(ProjectDir)shaders\AquariumFroxel.hlsl;$(ProjectDir)shaders\Stage.hlsl;$(ProjectDir)shaders\Jellyfish.hlsl;$(ProjectDir)shaders\Fish.hlsl;$(ProjectDir)shaders\BeachPreview.hlsl;$(ProjectDir)shaders\ExitPortal.hlsl" DestinationFolder="$(OutDir)shaders" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)shaders\lighting" />

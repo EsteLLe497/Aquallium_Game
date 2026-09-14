@@ -59,6 +59,7 @@ Texture2D<float4> gStageRefractionScene : register(t8);
 Texture2D<float4> gStageNormalMap : register(t9);
 Texture2D<float4> gTankWriting : register(t10);
 Texture2D<float4> gStageBaseColorMap : register(t11);
+Texture2D<float4> gWallHandprint : register(t12);
 SamplerState gStageRefractionSampler : register(s3);
 
 void ApplyTankWriting(float3 worldPosition, float surfaceType, inout float3 color, inout float opacity)
@@ -71,6 +72,76 @@ void ApplyTankWriting(float3 worldPosition, float surfaceType, inout float3 colo
     if(any(uv<0)||any(uv>1))return;
     float ink=gTankWriting.SampleLevel(gStageRefractionSampler,uv,0).r*gBlackoutWriting.x;
     color=lerp(color,float3(.85,.007,.012),ink);
+    opacity=max(opacity,ink);
+}
+
+// =========================================================
+// 停電中のスロープ壁面に残る手形
+// =========================================================
+float SampleWallHandprint(float2 uv, bool mirror, float angle)
+{
+    // 同じ素材でも傾きを変え、壁へ機械的に貼った印象を避ける。
+    const float2 local=uv-.5;
+    const float cosine=cos(angle),sine=sin(angle);
+    uv=float2(
+        local.x*cosine-local.y*sine,
+        local.x*sine+local.y*cosine)+.5;
+    if(any(uv<0)||any(uv>1))return 0;
+    if(mirror)uv.x=1-uv.x;
+    const float4 hand=gWallHandprint.SampleLevel(gStageRefractionSampler,uv,0);
+    return hand.a*saturate(hand.r*1.35);
+}
+
+float RampWallHandprintInk(float3 worldPosition,float surfaceType)
+{
+    // 26 is the authored arched-ramp wall material. Projecting here keeps
+    // every print fixed to the wall as the player turns or walks past it.
+    if(gBlackoutWriting.y<=0||abs(surfaceType-26)>.4)return 0;
+    float ink=0;
+    // 水槽横には置かず、曲がり角の先にある長い上り坂の左右壁だけを使う。
+    // 座標は固定値なので、カメラを動かしても手形はその場から移動しない。
+    const float wallDistance=abs(abs(worldPosition.z)-20.30);
+    if(wallDistance>1.75&&wallDistance<2.55&&
+       worldPosition.x>.9&&worldPosition.x<10.8)
+    {
+        const bool outerWall=abs(worldPosition.z)>20.30;
+        const float4 xPositions=outerWall
+            ? float4(9.52,7.12,4.88,1.55)
+            : float4(10.05,8.62,5.75,2.35);
+        const float4 heightVariation=outerWall
+            ? float4(.05,-.27,.24,-.16)
+            : float4(-.24,.18,-.30,.08);
+        const float4 handSizes=outerWall
+            ? float4(.68,.91,.74,.86)
+            : float4(.93,.66,.88,.77);
+        const float4 handAngles=outerWall
+            ? float4(-.27,.13,-.10,.24)
+            : float4(.19,-.29,.08,-.17);
+        [unroll] for(int handIndex=0;handIndex<4;++handIndex)
+        {
+            const float centerX=xPositions[handIndex];
+            // 目線より少し下を基準に、左右別々の高さへ散らす。
+            const float centerY=3.90-centerX*.153+heightVariation[handIndex];
+            const float size=handSizes[handIndex];
+            const float2 uv=float2(
+                (worldPosition.x-centerX)/size+.5,
+                (centerY-worldPosition.y)/size+.5);
+            // 進行方向は-X。後方側（大きいX）から前へ、左右を少しずらして出す。
+            const float revealDelay=.04+handIndex*.23+(outerWall?.11:0);
+            const float reveal=smoothstep(
+                revealDelay,revealDelay+.18,gBlackoutWriting.y);
+            ink=max(ink,SampleWallHandprint(
+                uv,(handIndex&1)!=(outerWall?1:0),handAngles[handIndex])*reveal);
+        }
+    }
+    return ink;
+}
+
+void ApplyRampWallHandprints(
+    float3 worldPosition,float surfaceType,inout float3 color,inout float opacity)
+{
+    const float ink=RampWallHandprintInk(worldPosition,surfaceType);
+    color=lerp(color,float3(.74,.002,.006),ink*.94);
     opacity=max(opacity,ink);
 }
 
@@ -813,16 +884,16 @@ float StageHeroTankBroadCaustics(float2 position, float time)
 
 float StageHeroTankSparkle(float2 position, float time)
 {
-    // Sparse cells pulse independently, then the caustic gate binds them to
-    // the moving surface light instead of drawing a star field on the glass.
-    const float2 cell = floor(position * 1.65);
-    const float random = StageHash21(cell);
-    const float pulse = pow(saturate(
-        0.5 + 0.5 * sin(time * lerp(1.4, 2.6, random) + random * 31.0)),
-        18.0);
-    const float sparse = smoothstep(0.935, 0.995, random);
+    // 連続する干渉波から細いハイライトを作り、セル境界の角張りを出さない。
+    const float waveA=.5+.5*sin(position.x*2.37+position.y*1.31+time*.73+
+        sin(position.y*.62-time*.19)*1.15);
+    const float waveB=.5+.5*sin(position.x*-1.73+position.y*2.61-time*.57+
+        sin(position.x*.81+time*.16)*.92);
+    const float movingHighlight=pow(saturate(waveA*waveB),12.0);
+    const float softBreakup=.35+.65*pow(.5+.5*sin(
+        position.x*.43-position.y*.37+time*.21),4.0);
     const float ridge = StageHeroTankBroadCaustics(position * 0.72, time);
-    return sparse * pulse * saturate(ridge * 1.45);
+    return movingHighlight*softBreakup*saturate(ridge*1.35);
 }
 
 float StageWaterSchlickPhase(float cosTheta, float anisotropy)
@@ -1108,6 +1179,7 @@ StagePixelOutput ShadeStage(StageVertexOutput input, bool importedMaterial)
         if(gStageRuntimeControl.x>.5) clip(gStageRuntimeControl.y-.018);
         StagePixelOutput darkOutput;
         ApplyTankWriting(input.worldPosition,surfaceType,flashlight,flashlightOpacity);
+        ApplyRampWallHandprints(input.worldPosition,surfaceType,flashlight,flashlightOpacity);
         darkOutput.color = float4(flashlight, flashlightOpacity);
         darkOutput.depth = length(cameraToStage);
         darkOutput.motion = input.previousClip.w > .0001
@@ -2017,6 +2089,25 @@ StagePixelOutput ShadeStage(StageVertexOutput input, bool importedMaterial)
                     rockLightColor * caustics * rockLight *
                     exp(-waterDepth * 0.17) * 0.44;
             }
+            // 岩と砂は一つの描画バッチ。UVの未使用帯だけで質感を識別する。
+            const bool sandDetail=input.uv.x>1.5;
+            if(sandDetail)
+            {
+                // セル状乱数を避け、連続波で砂粒と緩い堆積むらを作る。
+                const float broad=.5+.25*sin(input.worldPosition.x*.71+
+                    input.worldPosition.z*.43)+.25*sin(input.worldPosition.x*1.13-
+                    input.worldPosition.z*.82);
+                const float grain=.5+.5*sin(input.worldPosition.x*17.0+
+                    sin(input.worldPosition.z*11.0)*1.7);
+                const float ripple=.5+.5*sin(input.worldPosition.x*2.2+
+                    input.worldPosition.z*.72+sin(input.worldPosition.z*1.45)*.8);
+                const float caustics=StageHeroTankBroadCaustics(
+                    rockSurfacePosition,gStageSurfaceParameters.y);
+                const float3 sand=ReceptionTankTint(lerp(
+                    float3(.19,.20,.16),float3(.31,.29,.20),broad));
+                finalColor=sand*(.33+diffuse*.22+ripple*.045+grain*.035)+
+                    rockLightColor*rockLight*caustics*.16;
+            }
         }
         else
         {
@@ -2034,6 +2125,7 @@ StagePixelOutput ShadeStage(StageVertexOutput input, bool importedMaterial)
     else if (!preserveAnalyticAquarium &&
         surfaceType > 21.5 && surfaceType < 22.5)
     {
+        const bool receptionTankSurface = ReceptionTankLighting();
         const float3 interfaceNormal =
             dot(normal, -viewDirection) >= 0.0 ? normal : -normal;
         const float facing = saturate(dot(-viewDirection, interfaceNormal));
@@ -2062,15 +2154,23 @@ StagePixelOutput ShadeStage(StageVertexOutput input, bool importedMaterial)
             surfaceLightDirection,
             surfaceLightColor,
             surfaceLightPosition);
-        finalColor = lerp(
-            background * float3(0.92, 0.985, 1.02),
-            float3(0.025, 0.28, 0.68),
-            saturate(0.12 + fresnel * 0.58)) +
+        // 大水槽では暗いシーン色を水面へ戻さず、黒いもや状の濁りを除く。
+        finalColor = (receptionTankSurface
+            ? lerp(
+                float3(0.018, 0.18, 0.27),
+                float3(0.10, 0.39, 0.50),
+                fresnel)
+            : lerp(
+                background * float3(0.92, 0.985, 1.02),
+                float3(0.025, 0.28, 0.68),
+                saturate(0.12 + fresnel * 0.58))) +
             float3(0.28, 0.72, 1.10) * sparkle * 0.40 +
             float3(0.16, 0.62, 1.16) * scatteredSparkle * 0.34 +
             surfaceLightColor * surfaceLightBank *
                 (0.13 + fresnel * 0.17);
-        finalOpacity = saturate(0.24 + fresnel * 0.26);
+        finalOpacity = receptionTankSurface
+            ? saturate(0.055 + fresnel * 0.13 + scatteredSparkle * 0.035)
+            : saturate(0.24 + fresnel * 0.26);
     }
     else if (!preserveAnalyticAquarium &&
         surfaceType > 22.5 && surfaceType < 24.5)
@@ -2349,6 +2449,7 @@ StagePixelOutput ShadeStage(StageVertexOutput input, bool importedMaterial)
     finalColor=lerp(finalColor,flashlight,gFlashlightDirection.w);
     finalOpacity=lerp(finalOpacity,flashlightOpacity,gFlashlightDirection.w);
     ApplyTankWriting(input.worldPosition,surfaceType,finalColor,finalOpacity);
+    ApplyRampWallHandprints(input.worldPosition,surfaceType,finalColor,finalOpacity);
     output.color = float4(finalColor,finalOpacity);
     output.depth =
         length(input.worldPosition - gStageCameraPosition.xyz);
