@@ -16,9 +16,13 @@ std::wstring Alias(std::string_view name) {
 }
 SoundEffects::~SoundEffects() {
     PlaySoundW(nullptr,nullptr,0);
-    for(const auto name:{"select","open","miss","glass","footsound","beach",
+    for(const auto name:{"select","open","miss","glass","hand","kaigyo","footsound","beach",
                          "gaya","siren","transition","inwater"})
         mciSendStringW((L"close "+Alias(name)).c_str(),nullptr,0,nullptr);
+    for(const auto& [name,voiceCount]:polyphonicVoiceCounts_)
+        for(unsigned voice=0;voice<voiceCount;++voice)
+            mciSendStringW((L"close "+Alias(
+                name+"_voice_"+std::to_string(voice))).c_str(),nullptr,0,nullptr);
 }
 void SoundEffects::Initialize(const std::filesystem::path& folder){
     folder_=folder;BuildCreakWave();BuildBurstWave();BuildBangWave();BuildBootWave();
@@ -34,18 +38,52 @@ void SoundEffects::PlayFile(std::string_view name,const std::filesystem::path& p
     mciSendStringW((L"close "+alias).c_str(),nullptr,0,nullptr);
     const std::wstring open=L"open \""+path.wstring()+L"\" type mpegvideo alias "+alias;
     if(mciSendStringW(open.c_str(),nullptr,0,nullptr)==0) {
+        logicalVolumes_[std::string(name)]=std::clamp(initialVolume,0.f,1.f);
         SetVolume(name,initialVolume);
         mciSendStringW((L"play "+alias+L" from 0"+(loop?L" repeat":L"")).c_str(),nullptr,0,nullptr);
     }
 }
 bool SoundEffects::SetVolume(std::string_view name,float normalizedVolume){
+    logicalVolumes_[std::string(name)]=std::clamp(normalizedVolume,0.f,1.f);
+    return applyVolume(name,normalizedVolume);
+}
+// =========================================================
+// 同一SEのポリフォニック再生
+// =========================================================
+void SoundEffects::PlayPolyphonic(
+    std::string_view name,unsigned voiceCount,float initialVolume) {
+    const std::string key(name);
+    voiceCount=std::clamp(voiceCount,1u,16u);
+    polyphonicVoiceCounts_[key]=std::max(polyphonicVoiceCounts_[key],voiceCount);
+    unsigned& cursor=polyphonicVoiceCursors_[key];
+    const std::string voiceName=key+"_voice_"+std::to_string(cursor%voiceCount);
+    ++cursor;
+    PlayFile(voiceName,folder_/(key+".mp3"),false,initialVolume);
+}
+bool SoundEffects::applyVolume(std::string_view name,float normalizedVolume){
     const int volume=static_cast<int>(std::lround(
-        std::clamp(normalizedVolume,0.f,1.f)*1000.f));
+        std::clamp(normalizedVolume,0.f,1.f)*masterVolume_*1000.f));
     return mciSendStringW((L"setaudio "+Alias(name)+L" volume to "+
         std::to_wstring(volume)).c_str(),nullptr,0,nullptr)==0;
 }
+// =========================================================
+// 全SEの基準音量変更
+// =========================================================
+void SoundEffects::setMasterVolume(float normalizedVolume){
+    const float next=std::clamp(normalizedVolume,0.f,1.f);
+    if(std::abs(next-masterVolume_)<.001f)return;
+    masterVolume_=next;
+    for(const auto& [name,volume]:logicalVolumes_)applyVolume(name,volume);
+    // メモリ生成SEは次回再生から新音量を使う。再構築前に非同期再生を止める。
+    PlaySoundW(nullptr,nullptr,0);
+    BuildCreakWave();BuildBurstWave();BuildBangWave();BuildBootWave();
+}
 void SoundEffects::Stop(std::string_view name){
     mciSendStringW((L"close "+Alias(name)).c_str(),nullptr,0,nullptr);
+    logicalVolumes_.erase(std::string(name));
+}
+bool SoundEffects::Has(std::string_view name) const {
+    return std::filesystem::exists(folder_/(std::string(name)+".mp3"));
 }
 void SoundEffects::BuildCreakWave(){
     constexpr std::uint32_t rate=22050,seconds=4,samples=rate*seconds,dataBytes=samples*2;
@@ -68,7 +106,7 @@ void SoundEffects::BuildCreakWave(){
         const float cracks=std::pow(std::max(0.f,std::sin(t*17.3f+std::sin(t*2.1f)*3.f)),18.f);
         const float envelope=(.10f+.72f*progress)*std::min(t*2.f,1.f)*std::min((seconds-t)*3.f,1.f);
         const float sample=std::clamp((groan*.48f+filteredNoise*1.7f+cracks*.22f)*envelope,-.92f,.92f);
-        pcm[i]=static_cast<std::int16_t>(sample*32767.f);
+        pcm[i]=static_cast<std::int16_t>(sample*masterVolume_*32767.f);
     }
 }
 void SoundEffects::PlayCreak(){
@@ -92,7 +130,7 @@ void SoundEffects::BuildBurstWave(){
         const float noise=float((random>>9)&0x7fffff)/float(0x3fffff)-1.f;
         low=low*.92f+noise*.08f;
         const float crack=noise*std::exp(-t*31.f);
-        pcm[i]=static_cast<std::int16_t>(std::clamp((low*1.8f+crack*1.2f)*env,-.96f,.96f)*32767.f);
+        pcm[i]=static_cast<std::int16_t>(std::clamp((low*1.8f+crack*1.2f)*env,-.96f,.96f)*masterVolume_*32767.f);
     }
 }
 void SoundEffects::PlayBurst(){
@@ -116,7 +154,7 @@ void SoundEffects::BuildBangWave(){
         const float noise=float((random>>9)&0x7fffff)/float(0x3fffff)-1.f;
         low=low*.965f+noise*.035f;
         const float body=std::sin(t*2.f*3.14159265f*48.f)*std::exp(-t*7.f);
-        pcm[i]=static_cast<std::int16_t>(std::clamp((body*.78f+low*2.1f)*env,-.95f,.95f)*32767.f);
+        pcm[i]=static_cast<std::int16_t>(std::clamp((body*.78f+low*2.1f)*env,-.95f,.95f)*masterVolume_*32767.f);
     }
 }
 void SoundEffects::PlayBang(){
@@ -144,7 +182,7 @@ void SoundEffects::BuildBootWave(){
         const float attack=std::min(t*9.f,1.f),release=std::min((1.6f-t)*4.f,1.f);
         const float envelope=attack*std::max(release,0.f);
         const float whirr=std::sin(phase)*.58f+std::sin(phase*2.01f)*.17f+motorNoise*.12f;
-        pcm[i]=static_cast<std::int16_t>(std::clamp(whirr*envelope,-.9f,.9f)*32767.f);
+        pcm[i]=static_cast<std::int16_t>(std::clamp(whirr*envelope,-.9f,.9f)*masterVolume_*32767.f);
     }
 }
 bool SoundEffects::PlayBoot(){
@@ -153,8 +191,10 @@ bool SoundEffects::PlayBoot(){
 }
 void SoundEffects::PlayFootsteps(float listenerX,float listenerZ,float listenerYaw){
     const float forwardX=std::sin(listenerYaw),forwardZ=std::cos(listenerYaw);
-    footstepX_=listenerX-forwardX*9.f;
-    footstepZ_=listenerZ-forwardZ*9.f;
+    // 遠すぎる初期値ではマスター音量50%時にほぼ無音になるため、
+    // 姿は見えないが確実に気付ける距離から追従を開始する。
+    footstepX_=listenerX-forwardX*5.5f;
+    footstepZ_=listenerZ-forwardZ*5.5f;
     footstepUpdateClock_=0;
     Play("footsound",true);
     footstepsActive_=mciGetDeviceIDW(L"aquarium_se_footsound")!=0;
@@ -181,9 +221,9 @@ void SoundEffects::ApplyFootstepSpatial(float listenerX,float listenerZ,float li
     const float rightX=std::cos(listenerYaw),rightZ=-std::sin(listenerYaw);
     const float pan=std::clamp((dx*rightX+dz*rightZ)*inverseDistance,-1.f,1.f);
     // Audible but distant at spawn; approaches full level as the pursuer closes.
-    const float gain=std::clamp((11.f-footstepDistance_)/10.f,.08f,1.f);
-    const int left=int(1000*gain*(1-.72f*std::max(pan,0.f)));
-    const int right=int(1000*gain*(1+.72f*std::min(pan,0.f)));
+    const float gain=std::clamp((8.f-footstepDistance_)/7.f,.18f,1.f);
+    const int left=int(1000*masterVolume_*gain*(1-.72f*std::max(pan,0.f)));
+    const int right=int(1000*masterVolume_*gain*(1+.72f*std::min(pan,0.f)));
     const auto alias=Alias("footsound");
     footstepSpatialError_=mciSendStringW(
         (L"setaudio "+alias+L" left volume to "+std::to_wstring(left)).c_str(),nullptr,0,nullptr);
@@ -194,6 +234,7 @@ void SoundEffects::ApplyFootstepSpatial(float listenerX,float listenerZ,float li
 void SoundEffects::StopGenerated(){
     PlaySoundW(nullptr,nullptr,0);
     mciSendStringW(L"close aquarium_se_footsound",nullptr,0,nullptr);
+    logicalVolumes_.erase("footsound");
     footstepsActive_=false;footstepDistance_=footstepUpdateClock_=0;
 }
 }

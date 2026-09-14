@@ -51,11 +51,10 @@ bool LightingEditor::HandleMessage(
         visible_ = !visible_;
         return true;
     }
-    // インゲームのメニューとテンキーも同じImGuiコンテキストを使う。
-    // バックエンドへは常時通知し、OS入力を専有するのはエディタ表示中だけ。
-    const bool handled=initialized_ &&
+    // F3のストーリー編集画面なども同じImGuiコンテキストを使う。
+    // 処理済みメッセージをOSへ再送すると、IMEの確定文字が二重入力されるため必ず消費する。
+    return initialized_ &&
         ImGui_ImplWin32_WndProcHandler(window,message,wParam,lParam)!=0;
-    return visible_&&handled;
 }
 
 void LightingEditor::BeginFrame()

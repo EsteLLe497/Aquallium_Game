@@ -1,4 +1,6 @@
 #include "DialoguePlayer.h"
+#include "DialogueTextCodec.h"
+#include "PortraitPresentation.h"
 #include "../../third_party/imgui/imgui.h"
 #include <algorithm>
 #include <fstream>
@@ -14,9 +16,7 @@ std::vector<std::string> Split(const std::string& value) {
 }
 }
 void DialoguePlayer::Initialize(ID3D11Device* device,const std::filesystem::path& root) {
-    const char* names[]={"normal","ase","yan","hiki","nihi","close","smile"};
-    for(size_t i=0;i<portraits_.size();++i)
-        portraits_[i].Load(device,root/"girl"/(std::string("Heroin_")+names[i]+".PNG"));
+    portraits_=PortraitLibrary::load(device,root/"girl");
     clueImage_.Load(device,root/"other"/"nozo1.png");
 }
 bool DialoguePlayer::Start(const std::filesystem::path& script,bool showClueImage,size_t initialLine) {
@@ -31,6 +31,8 @@ bool DialoguePlayer::Start(const std::filesystem::path& script,bool showClueImag
         }else if(fields.size()>=3){
             line={fields[0],fields[1],fields[2]};for(size_t i=3;i<fields.size();++i)line.text+='|'+fields[i];
         }else continue;
+        line.text=dialogueTextCodec::quoteHeroineSpeech(
+            line.speaker,dialogueTextCodec::decode(line.text));
         const auto tagAt=line.expression.find('@');
         if(tagAt!=std::string::npos) {
             const std::string tags=line.expression.substr(tagAt+1);
@@ -38,6 +40,7 @@ bool DialoguePlayer::Start(const std::filesystem::path& script,bool showClueImag
             if(tags.find("fast")!=std::string::npos)line.speed=44.f;
             if(tags.find("auto")!=std::string::npos)line.autoDelay=.28f;
             if(tags.find("small")!=std::string::npos)line.textScale=.72f;
+            if(tags.find("bgmActually")!=std::string::npos)line.cue=Cue::ActuallyBgm;
         }
         lines_.push_back(std::move(line));
     }
@@ -88,11 +91,14 @@ void DialoguePlayer::BeginLine(size_t index) {
     if(!lines_[line_].speaker.empty() && lines_[line_].expression!="none")
         expression_=lines_[line_].expression;
 }
+float DialoguePlayer::textFontSize(float viewportHeight,float textScale) {
+    return std::clamp(viewportHeight*.032f,13.f,24.f)*textScale;
+}
+float DialoguePlayer::textWrapWidth(float viewportWidth) {
+    return viewportWidth*.86f-36.f;
+}
 const StoryTexture* DialoguePlayer::Portrait() const {
-    if(expression_=="hide")return nullptr;
-    const char* names[]={"normal","ase","yan","hiki","nihi","close","smile"};
-    for(size_t i=0;i<portraits_.size();++i)if(expression_==names[i])return &portraits_[i];
-    return &portraits_[0];
+    return portraits_?portraits_->find(expression_):nullptr;
 }
 void DialoguePlayer::DrawOverlay(ImDrawList* background,float x,float y,float width,float height) const {
     if(!Active()||!background||width<=0||height<=0)return;
@@ -104,14 +110,19 @@ void DialoguePlayer::DrawOverlay(ImDrawList* background,float x,float y,float wi
         background->AddImage(ImTextureRef(clueImage_.view.Get()),p0,{p0.x+w,p0.y+h},{0,0},{1,1},IM_COL32(255,255,255,int(255*fade_)));
     }
     if(const auto* portrait=Portrait();portrait&&portrait->view) {
-        const float h=screen.y*.90f,w=h*portrait->width/portrait->height;
-        background->AddImage(ImTextureRef(portrait->view.Get()),{x+screen.x-w-16,y+screen.y-h+8},{x+screen.x-16,y+screen.y+8},{0,0},{1,1},IM_COL32(255,255,255,int(255*fade_)));
+        const auto layout=portraitPresentation::upperBodyLayout(
+            *portrait,{x+screen.x-16,y+screen.y+8},screen.y*1.08f,screen.x*.46f);
+        if(const StoryTexture* underlay=portraits_->underlay(expression_);underlay&&underlay->view)
+            background->AddImage(ImTextureRef(underlay->view.Get()),layout.minimum,layout.maximum,
+                layout.uvMinimum,layout.uvMaximum,IM_COL32(255,255,255,int(255*fade_)));
+        background->AddImage(ImTextureRef(portrait->view.Get()),layout.minimum,layout.maximum,
+            layout.uvMinimum,layout.uvMaximum,IM_COL32(255,255,255,int(255*fade_)));
     }
     if(phase_!=Phase::Talk||line_>=lines_.size())return;
     const float windowHeight=std::clamp(screen.y*.27f,72.f,290.f);
     const ImVec2 p0{x+screen.x*.07f,y+screen.y-windowHeight-24},p1{x+screen.x*.93f,y+screen.y-24};
     background->AddRectFilled(p0,p1,IM_COL32(3,7,15,int(230*fade_)),6.f);
-    const float fontSize=std::clamp(screen.y*.032f,13.f,24.f);
+    const float fontSize=textFontSize(screen.y);
     const ImGuiIO& io=ImGui::GetIO();
     ImFont* dialogueFont=io.FontDefault?io.FontDefault:(io.Fonts->Fonts.empty()?ImGui::GetFont():io.Fonts->Fonts[0]);
     float textY=p0.y+std::max(10.f,windowHeight*.09f);
@@ -120,7 +131,7 @@ void DialoguePlayer::DrawOverlay(ImDrawList* background,float x,float y,float wi
         textY+=fontSize+7;background->AddLine({p0.x+18,textY},{p1.x-18,textY},IM_COL32(90,130,160,180));textY+=8;
     }
     const std::string shown=Prefix(lines_[line_].text,size_t(letters_));
-    background->AddText(dialogueFont,fontSize*lines_[line_].textScale,{p0.x+18,textY},IM_COL32(255,255,255,int(255*fade_)),shown.c_str(),nullptr,p1.x-p0.x-36);
+    background->AddText(dialogueFont,fontSize*lines_[line_].textScale,{p0.x+18,textY},IM_COL32(255,255,255,int(255*fade_)),shown.c_str(),nullptr,textWrapWidth(screen.x));
     if(lines_[line_].autoDelay<0&&size_t(letters_)>=Count(lines_[line_].text)) {
         background->AddText(dialogueFont,fontSize*.72f,{p0.x+18,p1.y-fontSize-8},IM_COL32(150,160,175,int(255*fade_)),"クリック / F で次へ  ▽");
     }

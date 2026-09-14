@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../rendering/AquariumRenderer.h"
+#include <array>
 
 namespace story {
 
@@ -8,10 +9,13 @@ namespace story {
 // 座標判定は演出の開始だけに使い、移動やテラス利用は制限しない。
 class PowerOutage {
 public:
-    enum class Request {None,BlackoutDialogue,FootstepsStart,FootstepsStop,Bang,FishImpact,PowerRestored};
+    enum class Request {
+        None,BlackoutDialogue,FootstepsStart,FootstepsStop,Bang,Hands,FishImpact,PowerRestored
+    };
 
     void Reset();
-    void RestoreProgress(bool started,bool writingSeen,bool fishSeen,bool restored);
+    void RestoreProgress(
+        bool started,bool writingSeen,bool handsSeen,bool fishSeen,bool restored);
     void Update(float dt,bool eligible,bool dialogueActive,const AquariumSettings& camera,
                 AquariumSettings& presentation);
     void ConfirmRestore();
@@ -23,6 +27,7 @@ public:
     bool BlackedOut() const {return phase_==Phase::WaitDialogue||phase_==Phase::Exploration||phase_==Phase::Restoring;}
     bool Restored() const {return phase_==Phase::Complete;}
     bool WritingSeen() const {return writingSeen_;}
+    bool HandsSeen() const {return handsSeen_;}
     bool FishSeen() const {return fishSeen_;}
 
 private:
@@ -32,10 +37,12 @@ private:
     void UpdateFishEvent(float dt,const AquariumSettings& camera,AquariumSettings& presentation);
 
     Phase phase_=Phase::Dormant;
-    Request request_=Request::None;
-    float clock_=0,writingClock_=-1,fishClock_=-1,restoreClock_=0;
-    bool dialogueObserved_=false,writingSeen_=false,fishSeen_=false;
+    // 同じフレームに足音停止と衝撃音が重なっても取りこぼさない固定長キュー。
+    std::array<Request,8> requests_{};
+    unsigned requestRead_=0,requestCount_=0;
+    float clock_=0,writingClock_=-1,handClock_=-1,fishClock_=-1,restoreClock_=0;
+    bool dialogueObserved_=false,writingSeen_=false,handsSeen_=false,fishSeen_=false;
     bool footstepsPlaying_=false;
-    int fishImpactIndex_=0;
+    int handSoundIndex_=0,fishImpactIndex_=0;
 };
 }

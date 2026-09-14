@@ -108,6 +108,14 @@ XMFLOAT3 Normalize(const XMFLOAT3& value, const XMFLOAT3& fallback)
     return length > 0.00001f ? Scale(value, 1.0f / length) : fallback;
 }
 
+XMFLOAT3 LimitLength(const XMFLOAT3& value, float maximum)
+{
+    const float length = Length(value);
+    return length > maximum && length > 0.00001f
+        ? Scale(value, maximum / length)
+        : value;
+}
+
 XMFLOAT3 TransformDirection(const XMFLOAT3& value,float yaw)
 {
     const float c=std::cos(yaw),s=std::sin(yaw);
@@ -176,14 +184,14 @@ void FishRenderer::CreateLowDetailGeometry(ID3D11Device* device)
     // thickness from head-on and top-down views unlike a camera-facing card,
     // while using less than eight percent of the hero fish triangles.
     const std::vector<Vertex> vertices{
-        {{ 0.68f,  0.00f,  0.00f}, { 1, 0, 0}, {1.0f, 0.5f}, 0.00f},
-        {{-0.58f,  0.00f,  0.00f}, {-1, 0, 0}, {0.2f, 0.5f}, 0.72f},
-        {{ 0.00f,  0.22f,  0.00f}, { 0, 1, 0}, {0.6f, 0.0f}, 0.20f},
-        {{ 0.00f, -0.22f,  0.00f}, { 0,-1, 0}, {0.6f, 1.0f}, 0.20f},
-        {{ 0.00f,  0.00f,  0.12f}, { 0, 0, 1}, {0.6f, 0.5f}, 0.20f},
-        {{ 0.00f,  0.00f, -0.12f}, { 0, 0,-1}, {0.6f, 0.5f}, 0.20f},
-        {{-1.08f,  0.31f,  0.00f}, { 0, 0, 1}, {0.0f, 0.0f}, 1.00f},
-        {{-1.08f, -0.31f,  0.00f}, { 0, 0, 1}, {0.0f, 1.0f}, 1.00f}
+        {{ 0.68f,  0.00f,  0.00f}, { 1, 0, 0}, {1.0f, 0.5f}, 0.00f,0.0f},
+        {{-0.58f,  0.00f,  0.00f}, {-1, 0, 0}, {0.2f, 0.5f}, 0.72f,0.0f},
+        {{ 0.00f,  0.22f,  0.00f}, { 0, 1, 0}, {0.6f, 0.0f}, 0.20f,0.0f},
+        {{ 0.00f, -0.22f,  0.00f}, { 0,-1, 0}, {0.6f, 1.0f}, 0.20f,0.0f},
+        {{ 0.00f,  0.00f,  0.12f}, { 0, 0, 1}, {0.6f, 0.5f}, 0.20f,0.0f},
+        {{ 0.00f,  0.00f, -0.12f}, { 0, 0,-1}, {0.6f, 0.5f}, 0.20f,0.0f},
+        {{-1.08f,  0.31f,  0.00f}, { 0, 0, 1}, {0.0f, 0.0f}, 1.00f,1.0f},
+        {{-1.08f, -0.31f,  0.00f}, { 0, 0, 1}, {0.0f, 1.0f}, 1.00f,1.0f}
     };
     const std::vector<std::uint32_t> indices{
         0, 2, 4, 0, 4, 3, 0, 3, 5, 0, 5, 2,
@@ -211,30 +219,31 @@ void FishRenderer::CreateGeometry(ID3D11Device* device)
 {
     std::vector<Vertex> vertices;
     std::vector<std::uint32_t> indices;
-    constexpr int longitudinalSegments = 8;
-    constexpr int radialSegments = 8;
+    // 輪郭を滑らかにしつつ、群泳時の頂点負荷を抑えられる分割数に留める。
+    constexpr int longitudinalSegments = 12;
+    constexpr int radialSegments = 10;
     for (int longitudinal = 0; longitudinal <= longitudinalSegments; ++longitudinal)
     {
         const float u = static_cast<float>(longitudinal) /
             static_cast<float>(longitudinalSegments);
-        const float x = -0.66f + u * 1.32f;
+        const float x = -0.70f + u * 1.40f;
         const float profile = std::max(
-            0.045f,
-            std::pow(std::sin(u * kPi), 0.58f));
+            0.025f,
+            std::pow(std::sin(u * kPi), 0.64f));
         for (int radial = 0; radial <= radialSegments; ++radial)
         {
             const float v = static_cast<float>(radial) /
                 static_cast<float>(radialSegments);
             const float angle = v * kPi * 2.0f;
-            const float y = std::cos(angle) * 0.22f * profile;
-            const float z = std::sin(angle) * 0.115f * profile;
+            const float y = std::cos(angle) * 0.235f * profile;
+            const float z = std::sin(angle) * 0.125f * profile;
             const XMFLOAT3 normal = Normalize(
-                {x / (0.70f * 0.70f),
-                 y / (0.22f * 0.22f),
-                 z / (0.115f * 0.115f)},
+                {x / (0.74f * 0.74f),
+                 y / (0.235f * 0.235f),
+                 z / (0.125f * 0.125f)},
                 {0.0f, 1.0f, 0.0f});
             const float tailWeight = (1.0f - u) * (1.0f - u);
-            vertices.push_back({{x, y, z}, normal, {u, v}, tailWeight});
+            vertices.push_back({{x, y, z}, normal, {u, v}, tailWeight, 0.0f});
         }
     }
     const std::uint32_t row = radialSegments + 1;
@@ -248,16 +257,53 @@ void FishRenderer::CreateGeometry(ID3D11Device* device)
         }
     }
 
+    // 中央に切れ込みを持つ二股尾。旧来の菱形より停止画でも魚に見える。
     const std::uint32_t tailBase = static_cast<std::uint32_t>(vertices.size());
     vertices.insert(vertices.end(), {
-        {{-0.58f, 0.0f, 0.0f}, {0, 0, 1}, {0.0f, 0.5f}, 0.86f},
-        {{-0.98f, 0.34f, 0.0f}, {0, 0, 1}, {0.6f, 0.0f}, 1.0f},
-        {{-1.13f, 0.0f, 0.0f}, {0, 0, 1}, {1.0f, 0.5f}, 1.0f},
-        {{-0.98f, -0.34f, 0.0f}, {0, 0, 1}, {0.6f, 1.0f}, 1.0f}
+        {{-0.58f, 0.0f, 0.0f}, {0, 0, 1}, {0.0f, 0.5f}, 0.82f, 1.0f},
+        {{-1.12f, 0.40f, 0.0f}, {0, 0, 1}, {1.0f, 0.0f}, 1.00f, 1.0f},
+        {{-0.92f, 0.0f, 0.0f}, {0, 0, 1}, {0.66f, 0.5f}, 1.00f, 1.0f},
+        {{-1.12f,-0.40f, 0.0f}, {0, 0, 1}, {1.0f, 1.0f}, 1.00f, 1.0f}
     });
     indices.insert(indices.end(), {
         tailBase, tailBase + 1, tailBase + 2,
         tailBase, tailBase + 2, tailBase + 3
+    });
+
+    // 背びれと左右の胸びれ。種別ごとの大きさは頂点シェーダーで変える。
+    const std::uint32_t dorsalBase = static_cast<std::uint32_t>(vertices.size());
+    vertices.insert(vertices.end(), {
+        {{ 0.24f,0.18f,0.0f},{0,0,1},{0.0f,1.0f},0.18f,2.0f},
+        {{-0.28f,0.20f,0.0f},{0,0,1},{1.0f,1.0f},0.42f,2.0f},
+        {{-0.12f,0.52f,0.0f},{0,0,1},{0.7f,0.0f},0.34f,2.0f},
+        {{ 0.18f,-0.02f, 0.09f},{0,1,0},{0.0f,0.0f},0.14f,3.0f},
+        {{-0.22f,-0.06f, 0.10f},{0,1,0},{0.5f,0.0f},0.42f,3.0f},
+        {{-0.34f,-0.16f, 0.43f},{0,1,0},{1.0f,1.0f},0.55f,3.0f},
+        {{ 0.18f,-0.02f,-0.09f},{0,1,0},{0.0f,0.0f},0.14f,3.0f},
+        {{-0.34f,-0.16f,-0.43f},{0,1,0},{1.0f,1.0f},0.55f,3.0f},
+        {{-0.22f,-0.06f,-0.10f},{0,1,0},{0.5f,0.0f},0.42f,3.0f}
+    });
+    indices.insert(indices.end(), {
+        dorsalBase,dorsalBase+1,dorsalBase+2,
+        dorsalBase+3,dorsalBase+4,dorsalBase+5,
+        dorsalBase+6,dorsalBase+7,dorsalBase+8
+    });
+
+    // 左右へ独立した目を置き、近距離でも頭の向きを瞬時に読めるようにする。
+    const std::uint32_t eyeBase = static_cast<std::uint32_t>(vertices.size());
+    vertices.insert(vertices.end(), {
+        {{0.52f,0.105f, 0.082f},{0,0, 1},{0.5f,0.0f},0.0f,4.0f},
+        {{0.57f,0.070f, 0.082f},{0,0, 1},{1.0f,0.5f},0.0f,4.0f},
+        {{0.52f,0.035f, 0.082f},{0,0, 1},{0.5f,1.0f},0.0f,4.0f},
+        {{0.47f,0.070f, 0.082f},{0,0, 1},{0.0f,0.5f},0.0f,4.0f},
+        {{0.52f,0.105f,-0.082f},{0,0,-1},{0.5f,0.0f},0.0f,4.0f},
+        {{0.47f,0.070f,-0.082f},{0,0,-1},{0.0f,0.5f},0.0f,4.0f},
+        {{0.52f,0.035f,-0.082f},{0,0,-1},{0.5f,1.0f},0.0f,4.0f},
+        {{0.57f,0.070f,-0.082f},{0,0,-1},{1.0f,0.5f},0.0f,4.0f}
+    });
+    indices.insert(indices.end(), {
+        eyeBase,eyeBase+1,eyeBase+2, eyeBase,eyeBase+2,eyeBase+3,
+        eyeBase+4,eyeBase+5,eyeBase+6, eyeBase+4,eyeBase+6,eyeBase+7
     });
 
     D3D11_BUFFER_DESC bufferDesc{};
@@ -280,27 +326,52 @@ void FishRenderer::CreateGeometry(ID3D11Device* device)
 
 void FishRenderer::CreateRayGeometry(ID3D11Device* device)
 {
-    // A compact manta silhouette. Negative bend weights select the wing-flap
-    // path in Fish.hlsl, allowing the same pipeline to animate both meshes.
-    const std::vector<Vertex> vertices{
-        {{ 0.05f, 0.0f,  0.00f}, {0, 1, 0}, {0.50f, 0.50f}, -0.08f},
-        {{ 1.08f, 0.0f,  0.00f}, {0, 1, 0}, {1.00f, 0.50f}, -0.05f},
-        {{ 0.46f, 0.0f,  0.58f}, {0, 1, 0}, {0.72f, 0.73f}, -0.46f},
-        {{-0.12f, 0.0f,  1.28f}, {0, 1, 0}, {0.45f, 1.00f}, -1.00f},
-        {{-0.76f, 0.0f,  0.38f}, {0, 1, 0}, {0.14f, 0.65f}, -0.32f},
-        {{-0.86f, 0.0f,  0.00f}, {0, 1, 0}, {0.10f, 0.50f}, -0.05f},
-        {{-0.76f, 0.0f, -0.38f}, {0, 1, 0}, {0.14f, 0.35f}, -0.32f},
-        {{-0.12f, 0.0f, -1.28f}, {0, 1, 0}, {0.45f, 0.00f}, -1.00f},
-        {{ 0.46f, 0.0f, -0.58f}, {0, 1, 0}, {0.72f, 0.27f}, -0.46f},
-        {{-0.82f, 0.0f,  0.00f}, {0, 1, 0}, {0.08f, 0.50f}, -0.04f},
-        {{-2.16f, 0.0f,  0.00f}, {0, 1, 0}, {0.00f, 0.50f}, -0.03f},
-        {{-1.45f, 0.0f,  0.055f}, {0, 1, 0}, {0.03f, 0.53f}, -0.04f}
+    // 厚みのある中央胴、後退翼、頭鰭、細い尾でエイ固有の輪郭を作る。
+    // 負のbendWeightはFish.hlslの翼羽ばたき経路を選択する。
+    std::vector<Vertex> vertices{
+        {{ 0.08f, 0.28f, 0.00f},{0,1,0},{0.54f,0.50f},-0.06f,0.0f}, // 0 上面中央
+        {{ 1.16f, 0.03f, 0.00f},{0,1,0},{1.00f,0.50f},-0.04f,0.0f}, // 1 吻端
+        {{ 0.48f, 0.02f, 0.70f},{0,1,0},{0.76f,0.74f},-0.48f,0.0f}, // 2 右翼前縁
+        {{-0.08f,-0.02f, 1.46f},{0,1,0},{0.48f,1.00f},-1.00f,0.0f}, // 3 右翼端
+        {{-0.72f, 0.01f, 0.58f},{0,1,0},{0.18f,0.70f},-0.44f,0.0f}, // 4 右翼後縁
+        {{-0.84f, 0.10f, 0.00f},{0,1,0},{0.12f,0.50f},-0.05f,0.0f}, // 5 尾根元
+        {{-0.72f, 0.01f,-0.58f},{0,1,0},{0.18f,0.30f},-0.44f,0.0f}, // 6 左翼後縁
+        {{-0.08f,-0.02f,-1.46f},{0,1,0},{0.48f,0.00f},-1.00f,0.0f}, // 7 左翼端
+        {{ 0.48f, 0.02f,-0.70f},{0,1,0},{0.76f,0.26f},-0.48f,0.0f}, // 8 左翼前縁
+        {{ 0.08f,-0.22f, 0.00f},{0,-1,0},{0.54f,0.50f},-0.06f,0.0f}, // 9 下面中央
+        {{ 0.92f,-0.02f, 0.27f},{0,-1,0},{0.91f,0.60f},-0.18f,0.0f}, // 10 右頭鰭
+        {{ 1.28f,-0.01f, 0.18f},{0,-1,0},{1.00f,0.57f},-0.16f,0.0f}, // 11
+        {{ 0.92f,-0.02f,-0.27f},{0,-1,0},{0.91f,0.40f},-0.18f,0.0f}, // 12 左頭鰭
+        {{ 1.28f,-0.01f,-0.18f},{0,-1,0},{1.00f,0.43f},-0.16f,0.0f}, // 13
+        {{-0.76f, 0.08f, 0.045f},{0,1,0},{0.10f,0.52f},-0.03f,0.0f}, // 14 尾上
+        {{-2.85f, 0.02f, 0.018f},{0,1,0},{0.00f,0.51f},-0.02f,0.0f}, // 15 尾先
+        {{-0.76f, 0.02f,-0.045f},{0,1,0},{0.10f,0.48f},-0.03f,0.0f}  // 16 尾下
     };
-    const std::vector<std::uint32_t> indices{
-        0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5,
-        0, 5, 6, 0, 6, 7, 0, 7, 8, 0, 8, 1,
-        9, 10, 11
+    // 翼外周にも下面を持たせ、横から見ても紙のように消えない厚みを作る。
+    constexpr std::uint32_t perimeter[]{1,2,3,4,5,6,7,8};
+    const std::uint32_t lowerRimBase=static_cast<std::uint32_t>(vertices.size());
+    for(const std::uint32_t vertexIndex:perimeter)
+    {
+        Vertex lower=vertices[vertexIndex];
+        lower.position.y-=(vertexIndex==3||vertexIndex==7)?.16f:.26f;
+        lower.normal={0,-1,0};
+        vertices.push_back(lower);
+    }
+    std::vector<std::uint32_t> indices{
+        0,1,2, 0,2,3, 0,3,4, 0,4,5,
+        0,5,6, 0,6,7, 0,7,8, 0,8,1,
+        10,11,1, 12,1,13,
+        14,15,16
     };
+    for(std::uint32_t index=0;index<8;++index)
+    {
+        const std::uint32_t next=(index+1)%8;
+        const std::uint32_t topA=perimeter[index],topB=perimeter[next];
+        const std::uint32_t bottomA=lowerRimBase+index,bottomB=lowerRimBase+next;
+        indices.insert(indices.end(),{
+            9,bottomB,bottomA,
+            topA,bottomA,bottomB,topA,bottomB,topB});
+    }
     D3D11_BUFFER_DESC bufferDesc{};
     bufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
     bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
@@ -332,7 +403,7 @@ void FishRenderer::CreatePipeline(
         pixelBytecode->GetBufferPointer(), pixelBytecode->GetBufferSize(),
         nullptr, pixelShader_.GetAddressOf()), "CreatePixelShader (fish)");
 
-    const std::array<D3D11_INPUT_ELEMENT_DESC, 8> layout{{
+    const std::array<D3D11_INPUT_ELEMENT_DESC, 9> layout{{
         {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,
          D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12,
@@ -340,6 +411,8 @@ void FishRenderer::CreatePipeline(
         {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24,
          D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"TEXCOORD", 1, DXGI_FORMAT_R32_FLOAT, 0, 32,
+         D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 0, 36,
          D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"INSTANCE_POSITION_SCALE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,
          D3D11_INPUT_PER_INSTANCE_DATA, 1},
@@ -366,6 +439,9 @@ void FishRenderer::CreatePipeline(
     ThrowIfFailed(device->CreateBuffer(
         &bufferDesc, nullptr, lowDetailInstanceBuffer_.GetAddressOf()),
         "CreateBuffer (low-detail fish instances)");
+    ThrowIfFailed(device->CreateBuffer(
+        &bufferDesc, nullptr, floorShadowInstanceBuffer_.GetAddressOf()),
+        "CreateBuffer (floor shadow instances)");
     bufferDesc.ByteWidth = 8u * sizeof(Instance);
     ThrowIfFailed(device->CreateBuffer(
         &bufferDesc, nullptr, rayInstanceBuffer_.GetAddressOf()),
@@ -383,6 +459,26 @@ void FishRenderer::CreatePipeline(
     ThrowIfFailed(device->CreateDepthStencilState(
         &depthDesc, depthState_.GetAddressOf()),
         "CreateDepthStencilState (fish)");
+
+    // 魚影は砂面の奥行きを壊さず、既存の岩には正しく遮蔽される。
+    depthDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    ThrowIfFailed(device->CreateDepthStencilState(
+        &depthDesc, shadowDepthState_.GetAddressOf()),
+        "CreateDepthStencilState (fish floor shadow)");
+
+    D3D11_BLEND_DESC shadowBlendDesc{};
+    auto& shadowTarget = shadowBlendDesc.RenderTarget[0];
+    shadowTarget.BlendEnable = TRUE;
+    shadowTarget.SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    shadowTarget.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    shadowTarget.BlendOp = D3D11_BLEND_OP_ADD;
+    shadowTarget.SrcBlendAlpha = D3D11_BLEND_ONE;
+    shadowTarget.DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    shadowTarget.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    shadowTarget.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    ThrowIfFailed(device->CreateBlendState(
+        &shadowBlendDesc, shadowBlendState_.GetAddressOf()),
+        "CreateBlendState (fish floor shadow)");
 
     D3D11_RASTERIZER_DESC rasterizerDesc{};
     rasterizerDesc.FillMode = D3D11_FILL_SOLID;
@@ -413,11 +509,12 @@ void FishRenderer::ResetHabitat(Habitat habitat)
         return static_cast<float>((randomState >> 8u) & 0x00ffffffu) /
             static_cast<float>(0x01000000u);
     };
-    const std::uint32_t smallFishPerSchool =
-        habitat == Habitat::UnderwaterArch
-            ? 15u : 200u;
-    const std::uint32_t smallSchoolCount =
-        habitat == Habitat::UnderwaterArch ? 3u : 1u;
+    const std::uint32_t smallFishPerSchool = habitat == Habitat::UnderwaterArch
+        ? 15u : (habitat == Habitat::ReceptionHeroTank ? 144u : 200u);
+    // 大水槽は一塊に増量せず、色と遊泳層の異なる三群で密度を出す。
+    // 遠距離では既存の軽量メッシュへ落ちるため、描画回数は増えない。
+    const std::uint32_t smallSchoolCount = habitat == Habitat::UnderwaterArch
+        ? 3u : (habitat == Habitat::ReceptionHeroTank ? 3u : 1u);
     const std::uint32_t entranceFishCount =
         habitat == Habitat::UnderwaterArch ? 9u : 0u;
     const std::uint32_t mediumFishCount =
@@ -484,7 +581,7 @@ XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
         // Aquarium fish cruise slowly during exploration. The chase applies a
         // separate common acceleration, so calm movement need not be sped up.
         const float routeSpeed = school == 3u
-            ? 0.038f : (school == 4u ? 0.045f : 0.060f);
+            ? 0.030f : (school == 4u ? 0.035f : 0.046f);
         const float route = time * routeSpeed + schoolPhase;
         if (school == 4u)
         {
@@ -526,14 +623,14 @@ XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
             // One shared, continuous target keeps the school together. Slow
             // incommensurate waves vary its depth and occasional turns without
             // random per-fish impulses that would scatter the formation.
-            const float turn = std::pow(std::max(0.0f, std::sin(time * 0.19f)), 6.0f);
-            const float route = time * 0.18f + std::sin(time * 0.071f) * 0.65f;
+            const float turn = std::pow(std::max(0.0f, std::sin(time * 0.14f)), 6.0f);
+            const float route = time * 0.135f + std::sin(time * 0.053f) * 0.65f;
             return {std::cos(route) * 5.5f + std::sin(time * 0.83f) * turn * 0.8f,
                 4.1f + std::sin(time * 0.117f) * 1.35f,
                 11.8f + std::sin(route * 0.79f) * 1.85f};
         }
-        const float speed = school == 0u ? 0.23f
-            : (school == 1u ? 0.18f : (school == 2u ? 0.14f : 0.11f));
+        const float speed = school == 0u ? 0.17f
+            : (school == 1u ? 0.135f : (school == 2u ? 0.105f : 0.082f));
         const float route = time * speed + schoolPhase;
         const float layerY = school == 0u ? 5.95f
             : (school == 1u ? 2.15f : (school == 2u ? -0.25f : 3.65f));
@@ -547,8 +644,8 @@ XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
     // Separate authored targets keep one giant Boids blob from filling the
     // whole tank without adding simulation agents or draw calls.
     const float routeSpeed = school == 0u
-        ? 0.25f
-        : (school == 1u ? 0.19f : (school == 2u ? 0.145f : 0.105f));
+        ? 0.18f
+        : (school == 1u ? 0.14f : (school == 2u ? 0.108f : 0.078f));
     const float route = time * routeSpeed + schoolPhase;
     if (school == 0u)
     {
@@ -602,11 +699,10 @@ void FishRenderer::ApplyHabitatSteering(
     {
         minimum = {-8.05f, -1.45f, 8.35f};
         maximum = {8.05f, 7.55f, 15.60f};
-        // Conservative clearance envelope around the fourteen authored rear
-        // reefs (highest tip ~1.8 m runtime). Rise before reaching them; leave
-        // room for the whole fish, including medium tails and body height.
-        const float reef = SmoothStep(10.8f, 12.0f, agent.position.z);
-        minimum.y = -1.45f + reef * 4.25f;
+        // U字型岩礁の高い両翼だけを避け、低い中央には魚を通す。
+        const float reef = SmoothStep(10.7f,12.3f,agent.position.z);
+        const float side = SmoothStep(3.0f,6.5f,std::abs(agent.position.x));
+        minimum.y=-1.42f+reef*(.62f+side*5.05f);
     }
     else
     {
@@ -658,8 +754,9 @@ void FishRenderer::ConstrainToHabitat(Agent& agent) const
     {
         agent.position.x = std::clamp(agent.position.x, -8.05f, 8.05f);
         agent.position.z = std::clamp(agent.position.z, 8.35f, 15.60f);
-        const float reefFloor = -1.45f +
-            SmoothStep(10.8f, 12.0f, agent.position.z) * 4.25f;
+        const float reef=SmoothStep(10.7f,12.3f,agent.position.z);
+        const float side=SmoothStep(3.0f,6.5f,std::abs(agent.position.x));
+        const float reefFloor=-1.42f+reef*(.62f+side*5.05f);
         agent.position.y = std::clamp(agent.position.y, reefFloor, 7.55f);
         if (agent.position.y <= reefFloor && agent.velocity.y < 0.0f)
         {
@@ -789,22 +886,32 @@ void FishRenderer::Simulate(float stepSeconds, float totalTime)
             steering.y+=std::sin(totalTime*4.f+agent.phase)*.22f*fleeToEntrance_;
         }
         ApplyHabitatSteering(agent, steering);
+        // 極端に近い個体の反発を上限処理し、1フレームの方向反転を防ぐ。
+        const float steeringLimit=habitat_==Habitat::UnderwaterArch&&
+            fleeToEntrance_>.001f?9.0f:2.25f;
+        steering=LimitLength(steering,steeringLimit);
 
-        XMFLOAT3 velocity = Add(agent.velocity, Scale(steering, stepSeconds));
+        XMFLOAT3 targetVelocity = Add(agent.velocity, Scale(steering, stepSeconds));
         const float speciesSpeedScale = agent.species == 0u ? 1.0f : 0.88f;
         const float minimumSpeed = (habitat_ == Habitat::UnderwaterArch
-            ? 0.24f : 0.82f) * speciesSpeedScale;
+            ? 0.18f : 0.48f) * speciesSpeedScale;
         const float maximumSpeed = (habitat_ == Habitat::UnderwaterArch
-            ? 0.60f+4.00f*fleeToEntrance_ : 1.78f) * speciesSpeedScale;
-        const float speed = Length(velocity);
+            ? 0.46f+4.00f*fleeToEntrance_ : 1.18f) * speciesSpeedScale;
+        const float speed = Length(targetVelocity);
         if (speed < minimumSpeed)
         {
-            velocity = Scale(Normalize(velocity, agent.velocity), minimumSpeed);
+            targetVelocity = Scale(
+                Normalize(targetVelocity, agent.velocity), minimumSpeed);
         }
         else if (speed > maximumSpeed)
         {
-            velocity = Scale(velocity, maximumSpeed / speed);
+            targetVelocity = Scale(targetVelocity, maximumSpeed / speed);
         }
+        // 目標速度への指数補間で群れの細かなびくつきを吸収する。
+        const float response=1-std::exp(-stepSeconds*(
+            fleeToEntrance_>.001f?7.0f:2.6f));
+        const XMFLOAT3 velocity=Add(
+            Scale(agent.velocity,1-response),Scale(targetVelocity,response));
         nextVelocities[index] = velocity;
     }
 
@@ -814,6 +921,13 @@ void FishRenderer::Simulate(float stepSeconds, float totalTime)
         agent.velocity = nextVelocities[index];
         agent.position = Add(agent.position, Scale(agent.velocity, stepSeconds));
         ConstrainToHabitat(agent);
+    }
+    if(habitat_==Habitat::UnderwaterArch&&fleeToEntrance_>.55f)
+    {
+        // 入口まで逃げ切った個体は境界へ貼り付けず、展示から退場させる。
+        std::erase_if(agents_,[](const Agent& agent){return agent.position.x<=.205f;});
+        // 逃走演出が完了した時点で、遠方に残った個体も展示外へ抜けた扱いにする。
+        if(fleeToEntrance_>.995f)agents_.clear();
     }
 }
 
@@ -932,13 +1046,13 @@ void FishRenderer::BuildRayInstances(
         }
         if (habitat_ == Habitat::ReceptionHeroTank)
         {
-            const float route = time * (0.075f + index * 0.011f) + phase;
+            const float route = time * (0.052f + index * 0.008f) + phase;
             return XMFLOAT3{
                 std::cos(route) * (4.8f + index * 0.4f),
                 2.55f + std::sin(route * 0.61f) * 1.05f,
                 12.0f + std::sin(route) * (2.65f + index * 0.35f)};
         }
-        const float route = time * (0.082f + index * 0.009f) + phase;
+        const float route = time * (0.058f + index * 0.006f) + phase;
         return XMFLOAT3{
             14.4f + std::cos(route) * (4.6f + index * 0.35f),
             3.8f + std::sin(route * 0.67f + phase) * 1.35f,
@@ -964,8 +1078,121 @@ void FishRenderer::BuildRayInstances(
             {position.x, position.y, position.z, scale},
             {forward.x, forward.y, forward.z,
              0.73f + static_cast<float>(index) * 1.91f},
-            {0.035f, 0.115f, 0.205f, 2.05f + index * 0.13f},
+            {0.055f, 0.145f, 0.235f, 1.28f + index * 0.09f},
             {2.0f, 1.0f, 1.0f, 0.72f}
+        });
+    }
+}
+
+// =========================================================
+// 中央ライトを横切った魚を、実座標から砂面へ投影
+// =========================================================
+void FishRenderer::BuildFloorShadowInstances(
+    const DirectX::XMMATRIX& viewProjection,
+    const XMFLOAT3& cameraPosition,
+    const Presentation& presentation,
+    const lighting::HeroTankLightingRig* heroTankLighting)
+{
+    visibleFloorShadowInstances_.clear();
+    if (habitat_ != Habitat::ReceptionHeroTank || heroTankLighting == nullptr)
+    {
+        return;
+    }
+
+    constexpr float tankCenterZ = 12.0f;
+    constexpr float waterSurfaceY = 7.95f;
+    constexpr float sandSurfaceY = -2.19f;
+    constexpr float tankHalfWidth = 8.25f;
+    constexpr float tankMinZ = 8.2f;
+    constexpr float tankMaxZ = 15.8f;
+
+    const XMFLOAT3 localLightPosition{
+        heroTankLighting->keyOffset.x,
+        waterSurfaceY + heroTankLighting->keyOffset.y,
+        tankCenterZ + heroTankLighting->keyOffset.z};
+    const XMFLOAT3 lightPosition =
+        TransformPosition(localLightPosition, presentation);
+    const XMFLOAT3 lightDirection = Normalize(
+        TransformDirection(
+            heroTankLighting->keyDirection, presentation.yawRadians),
+        {0.0f, -1.0f, 0.0f});
+    const float coneCosine = std::cos(
+        heroTankLighting->keyConeDegrees * 0.5f * kPi / 180.0f);
+    const float lightToFloorHeight =
+        std::max(lightPosition.y - sandSurfaceY, 0.1f);
+    visibleFloorShadowInstances_.reserve(agents_.size() / 3u);
+
+    for (const Agent& agent : agents_)
+    {
+        if (visibleFloorShadowInstances_.size() >= instanceCapacity_)
+        {
+            break;
+        }
+
+        const XMFLOAT3 fishPosition =
+            TransformPosition(agent.position, presentation);
+        const XMFLOAT3 lightToFish = Subtract(fishPosition, lightPosition);
+        const float distanceToLight = Length(lightToFish);
+        if (distanceToLight <= 0.01f || lightToFish.y >= -0.01f ||
+            fishPosition.y <= sandSurfaceY)
+        {
+            continue;
+        }
+
+        const XMFLOAT3 lightRay = Scale(lightToFish, 1.0f / distanceToLight);
+        const float coneAlignment =
+            lightRay.x * lightDirection.x +
+            lightRay.y * lightDirection.y +
+            lightRay.z * lightDirection.z;
+        if (coneAlignment < coneCosine)
+        {
+            continue;
+        }
+
+        const float projectionDistance =
+            (sandSurfaceY - lightPosition.y) / lightToFish.y;
+        const XMFLOAT3 shadowPosition = Add(
+            lightPosition, Scale(lightToFish, projectionDistance));
+        const XMFLOAT3 localShadowPosition =
+            InverseTransformPosition(shadowPosition, presentation);
+        if (std::abs(localShadowPosition.x) > tankHalfWidth ||
+            localShadowPosition.z < tankMinZ ||
+            localShadowPosition.z > tankMaxZ ||
+            !IsVisible(shadowPosition, viewProjection, cameraPosition))
+        {
+            continue;
+        }
+
+        const float heightRatio = std::clamp(
+            (fishPosition.y - sandSurfaceY) / lightToFloorHeight,
+            0.0f, 1.0f);
+        const float coneEdge = std::clamp(
+            (coneAlignment - coneCosine) /
+                std::max(1.0f - coneCosine, 0.001f),
+            0.0f, 1.0f);
+        const float shadowOpacity =
+            (0.30f - heightRatio * 0.20f) *
+            SmoothStep(0.0f, 0.28f, coneEdge);
+        if (shadowOpacity <= 0.012f)
+        {
+            continue;
+        }
+
+        XMFLOAT3 forward = TransformDirection(
+            {agent.velocity.x, 0.0f, agent.velocity.z},
+            presentation.yawRadians);
+        forward = Normalize(forward, {1.0f, 0.0f, 0.0f});
+        const bool mediumSpecies = agent.species == 1u;
+        const float projectedScale = agent.scale *
+            std::clamp(projectionDistance, 1.0f, 2.35f);
+        visibleFloorShadowInstances_.push_back({
+            {shadowPosition.x, shadowPosition.y, shadowPosition.z, projectedScale},
+            {forward.x, forward.y, forward.z, agent.phase},
+            {shadowOpacity, 0.0f, 0.0f, 0.0f},
+            {static_cast<float>(agent.species),
+             mediumSpecies ? 1.24f : 1.0f,
+             mediumSpecies ? 1.12f : 1.0f,
+             -1.0f}
         });
     }
 }
@@ -1033,6 +1260,7 @@ void FishRenderer::Render(
     visibleInstances_.reserve(agents_.size());
     visibleLowDetailInstances_.clear();
     visibleLowDetailInstances_.reserve(agents_.size());
+    visibleFloorShadowInstances_.clear();
     for (const Agent& agent : agents_)
     {
         const XMFLOAT3 worldPosition=TransformPosition(agent.position,presentation);
@@ -1092,16 +1320,19 @@ void FishRenderer::Render(
              bodyTint.y,
              bodyTint.z,
              (overheadSilhouette ? -1.0f : 1.0f) *
-                 (mediumSpecies ? 3.15f : 4.3f + agent.tint * 1.5f)},
+                 (mediumSpecies ? 2.15f : 2.85f + agent.tint * .75f)},
             {static_cast<float>(agent.species),
              mediumSpecies ? 1.24f : 1.0f,
              mediumSpecies ? 1.12f : 1.0f,
              mediumSpecies ? 0.58f : 0.36f}
         });
     }
+    BuildFloorShadowInstances(
+        viewProjection, cameraPosition, presentation, heroTankLighting);
     BuildRayInstances(viewProjection, cameraPosition, totalTime,presentation);
     if (visibleInstances_.empty() &&
         visibleLowDetailInstances_.empty() &&
+        visibleFloorShadowInstances_.empty() &&
         visibleRayInstances_.empty())
     {
         return;
@@ -1110,6 +1341,8 @@ void FishRenderer::Render(
     UploadInstances(context, instanceBuffer_.Get(), visibleInstances_);
     UploadInstances(
         context, lowDetailInstanceBuffer_.Get(), visibleLowDetailInstances_);
+    UploadInstances(
+        context, floorShadowInstanceBuffer_.Get(), visibleFloorShadowInstances_);
     UploadInstances(context, rayInstanceBuffer_.Get(), visibleRayInstances_);
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -1194,6 +1427,21 @@ void FishRenderer::Render(
         context->IASetIndexBuffer(indices, DXGI_FORMAT_R32_UINT, 0);
         context->DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0);
     };
+
+    if (!visibleFloorShadowInstances_.empty())
+    {
+        const float blendFactor[4] = {};
+        context->OMSetBlendState(
+            shadowBlendState_.Get(), blendFactor, 0xffffffffu);
+        context->OMSetDepthStencilState(shadowDepthState_.Get(), 0);
+        drawInstances(
+            lowDetailVertexBuffer_.Get(), lowDetailIndexBuffer_.Get(),
+            floorShadowInstanceBuffer_.Get(), lowDetailIndexCount_,
+            static_cast<UINT>(visibleFloorShadowInstances_.size()));
+        context->OMSetBlendState(nullptr, blendFactor, 0xffffffffu);
+        context->OMSetDepthStencilState(depthState_.Get(), 0);
+    }
+
     drawInstances(
         vertexBuffer_.Get(), indexBuffer_.Get(), instanceBuffer_.Get(),
         indexCount_, static_cast<UINT>(visibleInstances_.size()));
@@ -1206,5 +1454,6 @@ void FishRenderer::Render(
         rayIndexCount_, static_cast<UINT>(visibleRayInstances_.size()));
 
     context->OMSetDepthStencilState(nullptr, 0);
+    context->OMSetBlendState(nullptr, nullptr, 0xffffffffu);
     context->RSSetState(nullptr);
 }

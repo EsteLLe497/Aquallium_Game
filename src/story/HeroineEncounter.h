@@ -1,7 +1,7 @@
 #pragma once
+#include "PortraitLibrary.h"
 #include "StoryTexture.h"
 #include "../../third_party/imgui/imgui.h"
-#include <array>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -27,7 +27,7 @@ private:
     void Advance();
     const StoryTexture* Portrait() const;
     std::vector<Line> lines_;std::filesystem::path storyFolder_;
-    StoryTexture still_;std::array<StoryTexture,5> portraits_;
+    StoryTexture still_;std::shared_ptr<PortraitLibrary> portraits_;
     Phase phase_=Phase::Dormant;size_t line_=0;float letters_=0,fade_=0;
     bool emergencyFailed_=false;std::string expression_="normal";
 };

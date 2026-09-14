@@ -18,6 +18,7 @@
 - テラス両開きドアも同じ速度で開閉し、十分に開いた時点で当たり判定を通行可能位置へ移す。
 - パスワードの数字入力は `select.mp3`、正解は `open.mp3`、不正解は `miss.mp3` を再生する。
 - AQUARIUM_START_VIEW / AQUARIUM_START_ZONE は既存の検証用起動指定。ZONE 指定時は通常の冒頭を省略する場合がある。
+- タイトルの「設定」とゲーム内メニューの「設定」からBGM・SE音量を個別変更できる。初期値は各50%。
 
 ## 変更するファイル
 
@@ -26,11 +27,14 @@
 |asset/story/opening.dialogue|UTF-8、1 行が 1 メッセージ。# で始まる行はコメント。追加・書き換え後 F2 → Reload files|
 |asset/story/exit.dialogue|出口が開かないことを確認した後の会話|
 |asset/story/heroine_encounter.dialogue|`layer|speaker|expression|event|text` 形式の遭遇会話。表情・目的更新イベントもデータ側で指定|
-|asset/story/clue.dialogue|`speaker|expression|text` 形式の紙取得会話。speaker が空なら主人公として名前欄を隠す|
+|asset/story/clue.dialogue|`speaker|expression|text` 形式の紙取得会話。渚生の発話・思考はspeakerへ名前を設定し、地の文のみ空にする|
+|src/story/DialogueTextCodec.h|改行の保存形式と、少女・凪沙の発話に対する鉤括弧の自動補完を共通管理|
+|src/story/EndingSequence.*|Normalエンドカードと、スタッフロール動画からTrueエンドカードへの遷移を管理|
+|src/audio/BackgroundMusic.*|タイトル・館内・正体判明・Normal EndのBGM割り当てと音量を管理|
 |asset/story/password_wrong.dialogue|管理室パスワード誤入力時の短い戻り会話|
 |asset/sound/se/*.mp3|テンキー入力・認証成功・認証失敗の効果音|
 |asset/texture/stile/HeroineEncounter_placeholder.png|湾曲クラゲ室の仮イベントスチル。正式スチルへ同名で差し替え可能|
-|asset/texture/girl/Heroin_*.PNG|ヒロインの表情立ち絵。会話窓より後ろ、画面右側へ描画|
+|asset/texture/girl/*.PNG|凪沙の表情立ち絵。ファイル名が表情IDになり、会話窓より後ろの画面右側へ描画|
 |asset/texture/other/nozo1.png|展示室で拾う紙の3D表示、会話中の拡大表示、アイテム画面で共用|
 |src/player/InteractionUI.h|距離・視線・遮蔽物判定、対象右側のカメラ向きUI|
 |asset/story/opening.camera|カメラ位置・向き・ぼけ・瞬きの時間キー|
@@ -63,8 +67,18 @@ ExitChecked() は出口を調べた事実で、会話開始時点から true。�
 
 `asset/story/clue.dialogue` は1行を `speaker|expression|text` で記述する。
 主人公の行は speaker を空にして `|normal|セリフ`、少女の行は `少女|ase|セリフ` のようにする。speaker に文字がある行だけ会話窓左上へ名前を出す。
-expression は `normal` / `ase` / `yan` / `hiki` / `nihi`。`none` を指定すると直前の表情を維持し、`hide` なら立ち絵を隠す。`#` で始まる行はコメントとして無視する。
+expression は `asset/texture/girl` 内のPNGファイル名を指定する。追加したPNGはF3の一覧へ自動反映される。`none` を指定すると直前の表情を維持し、`hide` なら立ち絵を隠す。`#` で始まる行はコメントとして無視する。
 本文はウィンドウ幅で自動折り返しし、UTF-8の文字境界を保ったままタイプ表示する。
+表情タグへ `@bgmActually` を付けた行が表示されると正体判明BGMへ切り替わる。現在は `beach_seated.dialogue` の「凪沙……なのか？」に指定している。
+
+### 音声割り当て
+
+- タイトル: `asset/Sound/BGM/title.mp3`
+- アクアリウム探索: `asset/Sound/BGM/stage.wav`
+- 「凪沙……なのか？」以降: `asset/Sound/BGM/actually.mp3`
+- Normal End: `asset/Sound/BGM/end.mp3`
+- 夜・昼の浜辺環境音: `asset/Sound/SE/Beach.mp3` / `beachMorning.mp3`
+- 朝のサイレンと群衆音は一度だけ再生し、ループしない。
 
 ### インタラクト対象の追加
 
@@ -99,6 +113,7 @@ AquariumScene::UpdatePlayer の InteractionTarget 配列に、ID・コライダ�
 - asset/font：cinecaption226.ttf と原文ライセンス。
 - asset/texture：画像テクスチャ用の配置先。現在の手続き型マテリアルはシェーダー側。
 - asset/story：カメラと会話データ。
+- asset/video：Trueルートのスタッフロール動画。`true_end.mp4` を配置する。
 - shaders：HLSL ソース。src：C++ / 生成済み当たり判定データ。tools：生成・検証ツール。
 - build/Debug、build/Release：ビルド成果物。実行に必要な asset はビルド時にコピー。
 - third_party：依存ライブラリー。ライセンス・必要な文書は削除しない。
@@ -117,6 +132,7 @@ Visual Studio 2022、Debug / Release、x64。
 InputScript の WAIT / F / F2 / LCLICK / WASD が利用できる。
 tools/test_opening_flow.cpp は GPU 不要の C++ 状態遷移テスト。起床、編集時停止、文字送り、立ち上がり、出口の階層判定、再開始を検証する。
 `AQUARIUM_START_ZONE=ENCOUNTER` は遭遇シーン専用のQA起動。通常進行を変更せず、スチル、立ち絵、目的更新を短時間で確認できる。
+`AQUARIUM_START_ZONE=NORMAL_END` / `TRUE_END` はエンド表示専用のQA起動。True側は動画未配置なら8秒の代替スタッフロールを表示する。
 ビルド成功だけでは視覚品質の保証にならないため、起床、全文表示、会話送り、立ち上がり、移動、目的の順にゲーム画面も確認する。
 
 ## テラス会話と水中アーチ・チェイス

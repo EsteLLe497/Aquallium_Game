@@ -14,6 +14,7 @@ public:
     StagnationDialogue,
     Creak,
     CreakDialogue,
+    PredatorAppear,
     EscapeDialogue,
     AftermathDialogue,
     Impact

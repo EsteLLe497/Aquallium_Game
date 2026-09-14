@@ -85,6 +85,8 @@ struct AquariumSettings
     float powerOutage = 0.0f;
     float flashlightOn = 1.0f;
     float blackoutWriting = 0.0f;
+    // 負数は非表示、0以上は手形が後方から現れる演出の経過秒。
+    float blackoutHands = -1.0f;
     float blackoutPredatorVisibility = 0.0f;
     float blackoutPredatorApproach = 0.0f;
     bool adaptiveResolution = true;
@@ -198,6 +200,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Buffer> frameConstantBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> flashlightConstantBuffer_;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> tankWritingTexture_;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> wallHandprintTexture_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> shadowConstantBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> froxelConstantBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> shadowVertexBuffer_;

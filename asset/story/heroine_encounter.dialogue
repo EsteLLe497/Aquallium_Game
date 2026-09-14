@@ -1,27 +1,33 @@
 # layer|speaker|expression|event|text
 # layer: still=イベントスチル / portrait=右側の立ち絵
-# speaker: 空なら主人公または地の文。「少女」なら名前をウィンドウ左上へ表示。
-# expression: normal,ase,yan,hiki,nihi。none は現在の画像を維持。
+# speaker: 渚生または少女を名前欄へ表示。空欄は地の文。
+# expression: girlフォルダ内のPNG名。none は現在の画像を維持。
 # event: fail_emergency は非常口ミッションに×、none は変更なし。
-still||none|none|少女が水槽をぼーっと眺めている。
-still||none|none|彼女もここに取り残されてしまったのだろうか
-portrait|少女|normal|none|・・・
-portrait||normal|none|あの・・・
-portrait||ase|none|少女は目が合うなり警戒するような目でこちらを見つめる
-portrait|少女|ase|none|・・・
-portrait||ase|none|怪しい者じゃないんだ
-portrait|少女|ase|none|それ、怪しい者が言うセリフですよ
-portrait||yan|none|とにかく、エントランスが施錠されてて非常口を探してるんだけど
-portrait|少女|ase|fail_emergency|そうですか・・・。残念ですけどそこ閉まってましたよ
-portrait||ase|none|マジか・・・
-portrait|少女|ase|none|それにここには危険が潜んでます。得体のしれない何かがそこら中に
-portrait||ase|none|ここまで何とも遭遇してないが
-portrait|少女|yan|none|すぐに分かりますよ。下手に動かずここにいるのが賢明です
-portrait||yan|none|そう言われても、早く帰りたいし
-portrait||ase|none|せっかくだから協力しないか？
-portrait|少女|hiki|none|えー
-portrait||hiki|none|二人の方が何かと便利だろ？
-portrait|少女|hiki|none|そうですけど・・・
-portrait|少女|normal|none|まぁ、いいですよ
-portrait|少女|nihi|none|何かあったら守ってくださいね
-portrait||nihi|none|とりあえず館内の電力を復旧してみよう。そうしたらゲートも開くかもしれん
+still||none|none|少女が、水槽をぼーっと眺めながら立っている。
+portrait|少女|kira|none|……。
+portrait|渚生|none|none|「あの……」
+portrait|少女|ase|none|っ……！
+portrait|渚生|none|none|「驚かせたなら悪い。怪しい者じゃない」
+portrait|少女|hiki|none|それ、怪しい人がよく言う台詞ですよ。
+portrait|渚生|none|none|「確かに。言い方を間違えた」
+portrait|少女|emi|none|ふふっ……。それで、何かご用ですか？
+portrait|渚生|none|none|「出口を探してる。正面は開かなかった」
+portrait|少女|samisige|fail_emergency|そうですか。残念ですけど、非常口も閉まっていましたよ。
+portrait|渚生|none|none|「もう調べたのか？」
+portrait|少女|normal|none|ええ。ここに来てから、少し歩き回りましたから。
+portrait|少女|kowa|none|それより、ここには危険なものがいます。
+portrait|少女|ase|none|水槽の中だけじゃありません。暗い場所を、一人で歩かないほうがいいです。
+portrait|渚生|none|none|「ここまで何にも遭遇してないけどな」
+portrait|少女|samisige|none|……何だか、無茶をしそうな人ですね。
+portrait|渚生|none|none|「会ったばかりで、よく分かるな」
+portrait|少女|tukurismile|none|そういう顔をしている、という意味です。
+portrait|渚生|none|none|「なら、なおさら一緒に来ないか？　二人のほうが安全だろ」
+portrait|少女|hiki|none|えー……。初対面の人についていくのは、ちょっと。
+portrait|渚生|none|none|「その初対面の人に、一人で動くなって言ったのはそっちだろ」
+portrait|少女|hanikami|none|……仕方ありませんね。そこまで言うなら、ご一緒します。
+portrait|渚生|none|none|「ずいぶん早く折れたな」
+portrait|少女|emi|none|気が変わらないうちに行きましょう。
+portrait|渚生|none|none|「まずは館内の電力を復旧させたい。ゲートも動くかもしれない」
+portrait|少女|normal|none|それなら、管理室を探しましょう。
+portrait|渚生|none|none|「館内を回りながら、案内表示を確認するか」
+portrait|少女|hanikami|none|はい。……一緒に行きましょう。

@@ -31,6 +31,8 @@ public static class AquariumCaptureNative
     public delegate bool EnumWindowsProc(IntPtr handle, IntPtr parameter);
     [StructLayout(LayoutKind.Sequential)]
     public struct Rect { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Point { public int X, Y; }
 
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr handle, out Rect rect);
@@ -70,7 +72,7 @@ public static class AquariumCaptureNative
     public static extern IntPtr GetConsoleWindow();
 
     [DllImport("user32.dll")]
-    public static extern bool ClientToScreen(IntPtr handle, ref System.Drawing.Point point);
+    public static extern bool ClientToScreen(IntPtr handle, ref Point point);
 
     [DllImport("user32.dll")]
     public static extern bool SetCursorPos(int x, int y);
@@ -162,7 +164,9 @@ try {
         foreach ($operation in $InputScript.Split(',')) {
             $parts = $operation.Trim().Split(':')
             if ($parts.Count -eq 3 -and $parts[0] -eq 'MOVE') {
-                $point = New-Object System.Drawing.Point ([int]$parts[1]), ([int]$parts[2])
+                $point = New-Object AquariumCaptureNative+Point
+                $point.X = [int]$parts[1]
+                $point.Y = [int]$parts[2]
                 [AquariumCaptureNative]::ClientToScreen($windowHandle, [ref]$point) | Out-Null
                 [AquariumCaptureNative]::SetCursorPos($point.X, $point.Y) | Out-Null
                 Start-Sleep -Milliseconds 250

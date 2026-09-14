@@ -461,7 +461,7 @@ AquariumScene::AquariumScene(
     storyFolder_=std::filesystem::exists(std::filesystem::current_path()/"asset"/"story"/"minimap.goals")
         ? std::filesystem::current_path()/"asset"/"story"
         : shaderPath.parent_path().parent_path()/"asset"/"story";
-    const auto textureFolder=std::filesystem::exists(std::filesystem::current_path()/"asset"/"texture"/"girl"/"Heroin_normal.PNG")
+    const auto textureFolder=std::filesystem::exists(std::filesystem::current_path()/"asset"/"texture"/"girl"/"normal.PNG")
         ? std::filesystem::current_path()/"asset"/"texture"
         : shaderPath.parent_path().parent_path()/"asset"/"texture";
     miniMap_.LoadGoals(storyFolder_);
@@ -471,13 +471,15 @@ AquariumScene::AquariumScene(
     eventDialogue_.Initialize(device,textureFolder);
     inWaterStill_.Load(device,textureFolder/"stile"/"inWater.jpeg");
     storyFlowEditor_.Initialize(device,storyFolder_,textureFolder);
+    endingSequence_.initialize(storyFolder_.parent_path()/"video"/"true_end.mp4");
     gameMenu_.Initialize(device,textureFolder);
     const auto soundFolder=std::filesystem::exists(std::filesystem::current_path()/"asset"/"sound"/"se"/"select.mp3")
         ? std::filesystem::current_path()/"asset"/"sound"/"se"
         : shaderPath.parent_path().parent_path()/"asset"/"sound"/"se";
     soundEffects_.Initialize(soundFolder);
-    beachSoundPath_=soundFolder.parent_path()/"BGM"/"Beach.mp3";
-    backgroundMusic_.Initialize(soundFolder.parent_path()/"BGM");
+    beachSoundPath_=soundFolder/"Beach.mp3";
+    beachMorningSoundPath_=soundFolder/"beachMorning.mp3";
+    backgroundMusic_.initialize(soundFolder.parent_path()/"BGM");
 #if defined(_DEBUG)
     wchar_t validateLayout[2]{};
     if (GetEnvironmentVariableW(
@@ -1091,8 +1093,12 @@ void AquariumScene::Update(
     const framework::FrameContext& frame,
     const framework::InputSystem& input)
 {
+    updateAudioSettings();
+    // すべてのBGM変更要求を一つの時間軸でフェード処理する。
+    updateBackgroundMusic();
+    backgroundMusic_.advance(frame.deltaTime);
     ProcessMenuRequest();
-    if(input.WasPressed(VK_F3))storyFlowEditor_.Toggle();
+    if(!endingSequence_.active()&&input.WasPressed(VK_F3))storyFlowEditor_.Toggle();
     if(storyFlowEditor_.Visible()){
         storyFlowEditor_.Update(frame.deltaTime);
         storyFlowEditor_.Draw();
@@ -1100,7 +1106,7 @@ void AquariumScene::Update(
         return;
     }
     if(UpdateSceneTransition(frame.deltaTime)) {
-        backgroundMusic_.Update(gameMenu_.IsTitle(),inWaterIntro_||beachPreview_);
+        updateBackgroundMusic();
         if(inWaterIntro_){DrawInWaterStill();eventDialogue_.Draw();}
         if(gameMenu_.IsTitle())gameMenu_.SetSlots(saveSystem_.Inspect());
         gameMenu_.Draw();
@@ -1108,8 +1114,19 @@ void AquariumScene::Update(
         return;
     }
     if(gameMenu_.IsTitle()){
-        backgroundMusic_.Update(true,false);
+        updateBackgroundMusic();
         gameMenu_.SetSlots(saveSystem_.Inspect());gameMenu_.Draw();
+        if(!settings_.paused)simulationTime_+=frame.deltaTime;
+        return;
+    }
+    if(endingSequence_.active()){
+        const bool advance=input.WasPressed(VK_LBUTTON)||input.WasPressed('F');
+        endingSequence_.update(frame.deltaTime,advance);
+        updateBackgroundMusic();
+        endingSequence_.draw();
+        if(endingSequence_.consumeReturnTitle())
+            BeginSceneTransition({player::GameMenu::RequestType::ReturnTitle,-1});
+        DrawSceneFade();
         if(!settings_.paused)simulationTime_+=frame.deltaTime;
         return;
     }
@@ -1120,7 +1137,7 @@ void AquariumScene::Update(
             inWaterIntroDialoguePending_=false;
             inWaterIntroTransition_=transitionFade_.BeginOut();
         }
-        backgroundMusic_.Update(false,true);
+        updateBackgroundMusic();
         DrawInWaterStill();eventDialogue_.Draw();gameMenu_.Draw();DrawSceneFade();
         if(!settings_.paused)simulationTime_+=frame.deltaTime;
         return;
@@ -1162,9 +1179,27 @@ void AquariumScene::Update(
             }
         } else {
             eventDialogue_.Update(frame.deltaTime,beachAdvance);
+            if(beachSeatedDialoguePendingChoice_&&!actuallyMusicStarted_&&
+               eventDialogue_.currentCue()==story::DialoguePlayer::Cue::ActuallyBgm){
+                // 「凪沙……なのか？」へ到達した瞬間から正体判明曲へ切り替える。
+                actuallyMusicStarted_=true;
+                updateBackgroundMusic();
+            }
             if(morningWakeDialoguePendingStand_&&!eventDialogue_.Active()){
                 morningWakeDialoguePendingStand_=false;
                 morningStandTransition_=true;morningStandTime_=0.f;
+            }
+            if(beachStayDialoguePendingAftermath_&&!eventDialogue_.Active()){
+                beachStayDialoguePendingAftermath_=false;
+                actuallyMusicStarted_=false;normalEndingMusic_=false;
+                soundEffects_.Stop("beach");StopMorningAmbience();
+                // 選択直後にエンドカードへ飛ばさず、現実と死の世界の間に残る後日談を挟む。
+                beachStayAftermathPendingEnding_=
+                    eventDialogue_.Start(storyFolder_/"beach_stay_aftermath.dialogue",false);
+            }
+            if(beachStayAftermathPendingEnding_&&!eventDialogue_.Active()){
+                beachStayAftermathPendingEnding_=false;
+                endingSequence_.startNormalEnd();
             }
             if(beachLeaveDialoguePendingTransition_&&!eventDialogue_.Active()){
                 beachLeaveDialoguePendingTransition_=false;
@@ -1206,7 +1241,7 @@ void AquariumScene::Update(
         const auto eye=beachPlayer_.EyePosition();
         settings_.cameraPositionX=eye.x;settings_.cameraPositionY=eye.y;settings_.cameraPositionZ=eye.z;
         settings_.cameraYaw=beachPlayer_.Yaw();settings_.cameraPitch=beachPlayer_.Pitch();
-        backgroundMusic_.Update(false,true);
+        updateBackgroundMusic();
         if(!settings_.paused)simulationTime_+=frame.deltaTime;
         if(!beachStoryMode_){
             auto* draw=ImGui::GetForegroundDrawList();
@@ -1366,6 +1401,7 @@ void AquariumScene::Update(
     case story::ArchChase::Request::Creak:soundEffects_.PlayCreak();break;
     case story::ArchChase::Request::CreakDialogue:
         eventDialogue_.Start(storyFolder_/"arch_creak.dialogue",false);break;
+    case story::ArchChase::Request::PredatorAppear:soundEffects_.Play("kaigyo");break;
     case story::ArchChase::Request::EscapeDialogue:
         eventDialogue_.Start(storyFolder_/"arch_escape.dialogue",false);break;
     case story::ArchChase::Request::AftermathDialogue:
@@ -1383,6 +1419,12 @@ void AquariumScene::Update(
             settings_.cameraYaw);break;
     case story::PowerOutage::Request::FootstepsStop:soundEffects_.StopGenerated();break;
     case story::PowerOutage::Request::Bang:soundEffects_.Play("glass");break;
+    case story::PowerOutage::Request::Hands:
+        // hand.mp3 が未配置の開発環境でも演出自体を無音にしない。
+        // 8枚が短時間に続くため、独立チャンネルで最後まで重ねて鳴らす。
+        if(soundEffects_.Has("hand"))soundEffects_.PlayPolyphonic("hand",8);
+        else soundEffects_.PlayBang();
+        break;
     case story::PowerOutage::Request::FishImpact:soundEffects_.PlayBurst();break;
     case story::PowerOutage::Request::PowerRestored:
         soundEffects_.StopGenerated();
@@ -1394,8 +1436,7 @@ void AquariumScene::Update(
     if(archChase_.GameOver()&&advance){
         BeginSceneTransition({player::GameMenu::RequestType::ReturnTitle,-1});
     }
-    backgroundMusic_.Update(gameMenu_.IsTitle(),!gameMenu_.IsTitle()&&
-        (archChase_.Active()||archChase_.GameOver()||powerOutage_.BlackedOut()||emergencyExitTransition_));
+    updateBackgroundMusic();
     if(powerOutage_.Restored()&&!eventDialogue_.Active())opening_.SetPowerRestored();
     const bool consoleWasActive=tankLightingConsole_.Active();
     tankLightingConsole_.Update(frame.deltaTime,settings_);
@@ -1466,12 +1507,16 @@ void AquariumScene::Update(
 }
 
 void AquariumScene::StartNewGame(){
+    endingSequence_.reset();
+    actuallyMusicStarted_=normalEndingMusic_=false;
     beachPreview_=beachMorning_=beachStoryMode_=false;
     beachArrivalLook_=false;beachArrivalLookTime_=0.f;
     beachArrivalDialoguePendingSit_=beachSitTransition_=beachSeated_=false;
     beachSeatedDialoguePendingChoice_=beachChoiceActive_=false;
     beachBranch_=BeachBranch::Undecided;
-    beachLeaveDialoguePendingTransition_=morningBeachTransition_=morningBeachEntered_=morningWake_=false;
+    beachStayDialoguePendingAftermath_=beachStayAftermathPendingEnding_=false;
+    beachLeaveDialoguePendingTransition_=false;
+    morningBeachTransition_=morningBeachEntered_=morningWake_=false;
     morningBeachTransitionTime_=morningWakeTime_=morningWakeBlur_=morningWakeBlink_=0.f;
     morningWakeDialoguePendingStand_=morningStandTransition_=false;morningStandTime_=0.f;
     beachSitTransitionTime_=0.f;
@@ -1496,6 +1541,7 @@ player::SaveData AquariumScene::CaptureSave() const{
     d.yaw=settings_.cameraYaw;d.pitch=settings_.cameraPitch;d.playSeconds=playTimeSeconds_;
     d.heroineJoined=heroineJoined_;d.clueCollected=clueCollected_;d.managementUnlocked=passwordLock_.Unlocked();d.archComplete=archChase_.Complete();
     d.blackoutStarted=powerOutage_.Started();d.blackoutWritingSeen=powerOutage_.WritingSeen();
+    d.blackoutHandsSeen=powerOutage_.HandsSeen();
     d.blackoutFishSeen=powerOutage_.FishSeen();d.powerRestored=powerOutage_.Restored();
     d.terraceRestCompleted=opening_.RestCompleted();d.manualCollected=opening_.ManualCollected();
     d.facilityPasswordCollected=opening_.FacilityPasswordCollected();
@@ -1510,12 +1556,16 @@ player::SaveData AquariumScene::CaptureSave() const{
 }
 
 void AquariumScene::ApplySave(const player::SaveData& d){
+    endingSequence_.reset();
+    actuallyMusicStarted_=normalEndingMusic_=false;
     beachPreview_=beachMorning_=beachStoryMode_=false;
     beachArrivalLook_=false;beachArrivalLookTime_=0.f;
     beachArrivalDialoguePendingSit_=beachSitTransition_=beachSeated_=false;
     beachSeatedDialoguePendingChoice_=beachChoiceActive_=false;
     beachBranch_=BeachBranch::Undecided;
-    beachLeaveDialoguePendingTransition_=morningBeachTransition_=morningBeachEntered_=morningWake_=false;
+    beachStayDialoguePendingAftermath_=beachStayAftermathPendingEnding_=false;
+    beachLeaveDialoguePendingTransition_=false;
+    morningBeachTransition_=morningBeachEntered_=morningWake_=false;
     morningBeachTransitionTime_=morningWakeTime_=morningWakeBlur_=morningWakeBlink_=0.f;
     morningWakeDialoguePendingStand_=morningStandTransition_=false;morningStandTime_=0.f;
     beachSitTransitionTime_=0.f;
@@ -1532,7 +1582,8 @@ void AquariumScene::ApplySave(const player::SaveData& d){
     if(heroineJoined_){heroineEncounter_.MarkComplete();terraceConversation_.RestoreAfterEncounter();}
     if(d.archComplete)archChase_.MarkComplete();if(d.managementUnlocked)passwordLock_.ForceUnlocked();
     if(d.facilityPasswordCollected)facilityPasswordLock_.ForceUnlocked();
-    powerOutage_.RestoreProgress(d.blackoutStarted,d.blackoutWritingSeen,d.blackoutFishSeen,d.powerRestored);
+    powerOutage_.RestoreProgress(d.blackoutStarted,d.blackoutWritingSeen,
+        d.blackoutHandsSeen,d.blackoutFishSeen,d.powerRestored);
     const auto savedLight=static_cast<story::TankLightingConsole::Color>(std::clamp(d.heroTankLightColor,0,2));
     tankLightingConsole_.Reset(savedLight);ApplyHeroTankLightColor(savedLight);
     staffDoorTargetOpen_=d.staffDoorOpen&&d.powerRestored;
@@ -1547,7 +1598,10 @@ void AquariumScene::ApplySave(const player::SaveData& d){
     if(d.beachDecisionPoint){
         beachPreview_=true;beachMorning_=false;beachStoryMode_=true;
         beachSeated_=true;beachChoiceActive_=true;
-        soundEffects_.PlayFile("beach",beachSoundPath_,true);
+        // 分岐直前なら「凪沙……なのか？」のBGMキューは通過済み。
+        // 保存済みの旧データにも追加項目なしでactually.mp3を復元できる。
+        actuallyMusicStarted_=true;
+        playBeachAmbience(false);
         beachPlayer_.Reset(d.position,d.yaw,d.pitch);
         settings_.cameraPositionX=d.position.x;settings_.cameraPositionY=d.position.y;settings_.cameraPositionZ=d.position.z;
         settings_.cameraYaw=d.yaw;settings_.cameraPitch=d.pitch;
@@ -1588,6 +1642,8 @@ void AquariumScene::ApplySceneTransition() {
         player::SaveData data;
         if(saveSystem_.Load(request.slot,data))ApplySave(data);
     } else if(request.type==T::ReturnTitle) {
+        endingSequence_.reset();
+        actuallyMusicStarted_=normalEndingMusic_=false;
         opening_.Stop();archChase_.Reset();soundEffects_.StopGenerated();
         soundEffects_.Stop("beach");soundEffects_.Stop("transition");soundEffects_.Stop("inwater");
         StopMorningAmbience();inWaterIntro_=inWaterIntroDialoguePending_=inWaterIntroTransition_=false;
@@ -1650,13 +1706,14 @@ void AquariumScene::DrawBeachChoice()
     ImGui::Begin("##beach_branch",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoSavedSettings);
     ImGui::TextDisabled("選択してください");ImGui::Dummy({0,12});
     const ImVec2 buttonSize{ImGui::GetContentRegionAvail().x,54};
-    if(ImGui::Button("ここに残る",buttonSize)){
+    if(ImGui::Button("凪沙の手を取る",buttonSize)){
         beachChoiceActive_=false;beachBranch_=BeachBranch::Stay;
         soundEffects_.Play("select");
-        eventDialogue_.Start(storyFolder_/"beach_stay.dialogue",false);
+        beachStayDialoguePendingAftermath_=
+            eventDialogue_.Start(storyFolder_/"beach_stay.dialogue",false);
     }
     ImGui::Dummy({0,8});
-    if(ImGui::Button("この世界から出る",buttonSize)){
+    if(ImGui::Button("凪沙に別れを告げる",buttonSize)){
         beachChoiceActive_=false;beachBranch_=BeachBranch::Leave;
         soundEffects_.Play("select");
         beachLeaveDialoguePendingTransition_=
@@ -1688,13 +1745,13 @@ void AquariumScene::ToggleBeachPreview(bool morning)
         settings_.cameraYaw=beachReturnYaw_;settings_.cameraPitch=beachReturnPitch_;
         return;
     }
-    if(beachPreview_){beachMorning_=morning;return;}
+    if(beachPreview_){beachMorning_=morning;playBeachAmbience(morning);return;}
     beachReturnEye_={settings_.cameraPositionX,settings_.cameraPositionY,settings_.cameraPositionZ};
     beachReturnYaw_=settings_.cameraYaw;beachReturnPitch_=settings_.cameraPitch;
     beachPreview_=true;
     beachMorning_=morning;
     beachStoryMode_=false;
-    soundEffects_.PlayFile("beach",beachSoundPath_,true);
+    playBeachAmbience(morning);
     beachPlayer_.Reset({3.8f,.06f+beachPlayer_.Capsule().eyeHeight,0.f},-.68f,-.035f);
     settings_.cameraPositionX=beachPlayer_.EyePosition().x;
     settings_.cameraPositionY=beachPlayer_.EyePosition().y;
@@ -1714,17 +1771,21 @@ void AquariumScene::BeginEmergencyExitTransition()
 
 void AquariumScene::EnterStoryBeach()
 {
+    endingSequence_.reset();
+    actuallyMusicStarted_=normalEndingMusic_=false;
     beachPreview_=true;beachMorning_=false;beachStoryMode_=true;
     beachArrivalLook_=true;beachArrivalLookTime_=0.f;
     beachArrivalDialoguePendingSit_=beachSitTransition_=beachSeated_=false;
     beachSeatedDialoguePendingChoice_=beachChoiceActive_=false;
     beachBranch_=BeachBranch::Undecided;
-    beachLeaveDialoguePendingTransition_=morningBeachTransition_=morningBeachEntered_=morningWake_=false;
+    beachStayDialoguePendingAftermath_=beachStayAftermathPendingEnding_=false;
+    beachLeaveDialoguePendingTransition_=false;
+    morningBeachTransition_=morningBeachEntered_=morningWake_=false;
     morningBeachTransitionTime_=morningWakeTime_=morningWakeBlur_=morningWakeBlink_=0.f;
     morningWakeDialoguePendingStand_=morningStandTransition_=false;morningStandTime_=0.f;
     beachSitTransitionTime_=0.f;
     StopMorningAmbience();
-    soundEffects_.PlayFile("beach",beachSoundPath_,true);
+    playBeachAmbience(false);
     beachPlayer_.Reset({3.8f,.06f+beachPlayer_.Capsule().eyeHeight,0.f},-.68f,-.035f);
     const auto eye=beachPlayer_.EyePosition();
     settings_.cameraPositionX=eye.x;settings_.cameraPositionY=eye.y;settings_.cameraPositionZ=eye.z;
@@ -1746,7 +1807,7 @@ bool AquariumScene::UpdateEmergencyExitTransition(float deltaTime)
         soundEffects_.Stop("transition");
         return false;
     }
-    backgroundMusic_.Update(false,true);
+    updateBackgroundMusic();
     return true;
 }
 
@@ -1757,6 +1818,7 @@ void AquariumScene::BeginMorningBeachTransition()
     morningBeachTransitionTime_=0.f;
     morningWakeBlur_=morningWakeBlink_=0.f;
     morningWakeDialoguePendingStand_=morningStandTransition_=false;morningStandTime_=0.f;
+    actuallyMusicStarted_=false;
     StopMorningAmbience();
     soundEffects_.Play("transition");
 }
@@ -1768,6 +1830,7 @@ bool AquariumScene::UpdateMorningBeachTransition(float deltaTime)
     if(!settings_.paused)simulationTime_+=deltaTime;
     if(morningBeachTransitionTime_>=1.05f&&!morningBeachEntered_){
         morningBeachEntered_=true;beachMorning_=true;
+        playBeachAmbience(true);
         beachPlayer_.SetControlledPose({2.12f,.34f,.28f},-.78f,1.54f);
         // Update returns early while the destination white is fading. Sync the
         // render camera at peak white so the first revealed frame is already
@@ -1784,7 +1847,7 @@ bool AquariumScene::UpdateMorningBeachTransition(float deltaTime)
         StartMorningAmbience();
         return false;
     }
-    backgroundMusic_.Update(false,true);
+    updateBackgroundMusic();
     return true;
 }
 
@@ -1827,14 +1890,52 @@ void AquariumScene::UpdateMorningStand(float deltaTime)
         morningStandTransition_=false;morningStandTime_=0.f;beachSeated_=false;
         beachPlayer_.Reset({2.60f,standingY,.38f},-.68f,-.035f);
         BeginMorningAmbienceFadeOut();
+        if(beachStoryMode_&&beachBranch_==BeachBranch::Leave){
+            soundEffects_.Stop("beach");StopMorningAmbience();
+            endingSequence_.startTrueEnd();
+        }
     }
+}
+
+// =========================================================
+// メニュー設定を各音声プレイヤーへ反映
+// =========================================================
+void AquariumScene::updateAudioSettings()
+{
+    backgroundMusic_.setVolume(gameMenu_.bgmVolume());
+    soundEffects_.setMasterVolume(gameMenu_.seVolume());
+}
+
+// =========================================================
+// 現在のゲーム状態に対応するBGMへ更新
+// =========================================================
+void AquariumScene::updateBackgroundMusic()
+{
+    using Track=audio::BackgroundMusic::Track;
+    Track track=Track::Aquarium;
+    if(gameMenu_.IsTitle())track=Track::Title;
+    else if(normalEndingMusic_)track=Track::Ending;
+    else if(actuallyMusicStarted_)track=Track::Actually;
+    else if(archChase_.PlayerCanRun())track=Track::Chase;
+    else if(inWaterIntro_||beachPreview_||archChase_.Active()||archChase_.GameOver()||
+            powerOutage_.BlackedOut()||emergencyExitTransition_)track=Track::Silent;
+    backgroundMusic_.update(track);
+}
+
+// =========================================================
+// 夜・昼の浜辺環境音切替
+// =========================================================
+void AquariumScene::playBeachAmbience(bool morning)
+{
+    soundEffects_.Stop("beach");
+    soundEffects_.PlayFile("beach",morning?beachMorningSoundPath_:beachSoundPath_,true);
 }
 
 void AquariumScene::StartMorningAmbience()
 {
     soundEffects_.Stop("gaya");soundEffects_.Stop("siren");
-    soundEffects_.Play("gaya",true,0.f);
-    soundEffects_.Play("siren",true,0.f);
+    soundEffects_.Play("gaya",false,0.f);
+    soundEffects_.Play("siren",false,0.f);
     morningAmbienceFading_=true;morningAmbienceFadingOut_=false;
     morningAmbienceFadeTime_=morningAmbienceFadeOutTime_=0.f;
     morningAmbienceAppliedVolume_=0.f;
@@ -2273,7 +2374,7 @@ void AquariumScene::SelectReceptionLobbyView()
         const auto eye=beachPlayer_.EyePosition();
         settings_.cameraPositionX=eye.x;settings_.cameraPositionY=eye.y;settings_.cameraPositionZ=eye.z;
         settings_.cameraYaw=beachPlayer_.Yaw();settings_.cameraPitch=beachPlayer_.Pitch();
-        soundEffects_.PlayFile("beach",beachSoundPath_,true);
+        playBeachAmbience(false);
     }
     else if (std::wcscmp(startZone, L"MORNING_WAKE") == 0)
     {
@@ -2287,8 +2388,19 @@ void AquariumScene::SelectReceptionLobbyView()
         const auto eye=beachPlayer_.EyePosition();
         settings_.cameraPositionX=eye.x;settings_.cameraPositionY=eye.y;settings_.cameraPositionZ=eye.z;
         settings_.cameraYaw=beachPlayer_.Yaw();settings_.cameraPitch=beachPlayer_.Pitch();
-        soundEffects_.PlayFile("beach",beachSoundPath_,true);
+        playBeachAmbience(true);
         StartMorningAmbience();
+    }
+    else if (std::wcscmp(startZone, L"NORMAL_END") == 0)
+    {
+        // 分岐後のエンドカードだけを短時間で確認するQA起動。
+        normalEndingMusic_=false;
+        endingSequence_.startNormalEnd();
+    }
+    else if (std::wcscmp(startZone, L"TRUE_END") == 0)
+    {
+        // 動画未配置時の代替スタッフロールも同じ経路で確認する。
+        endingSequence_.startTrueEnd();
     }
     else if (std::wcscmp(startZone, L"RAMP_MID") == 0)
     {
@@ -2440,6 +2552,26 @@ void AquariumScene::SelectReceptionLobbyView()
         settings_.cameraPitch=0;
         opening_.BeginPowerMission();
     }
+    else if (std::wcscmp(startZone,L"REST_PENDING")==0)
+    {
+        // 電力復旧直後のPCロックと休憩ミッションを短時間で確認する。
+        settings_.cameraPositionX=24.0f;
+        settings_.cameraPositionY=3.25f+playerManager_.Capsule().eyeHeight;
+        settings_.cameraPositionZ=6.72f;
+        settings_.cameraYaw=DirectX::XM_PIDIV2;settings_.cameraPitch=-0.12f;
+        heroineJoined_=clueCollected_=true;
+        opening_.RestoreProgress(true,false,true,true,true,false,false,false);
+        powerOutage_.RestoreProgress(true,true,true,true,true);
+        passwordLock_.ForceUnlocked();
+    }
+    else if (std::wcscmp(startZone,L"FISH_POLISH")==0)
+    {
+        // 大水槽の生体メッシュを近距離で検証する専用視点。
+        settings_.cameraPositionX=0.0f;
+        settings_.cameraPositionY=4.7f;
+        settings_.cameraPositionZ=8.15f;
+        settings_.cameraYaw=0.0f;settings_.cameraPitch=-0.04f;
+    }
     else if (std::wcscmp(startZone,L"BLACKOUT")==0)
     {
         settings_.cameraPositionX=0;settings_.cameraPositionY=-2.25f+playerManager_.Capsule().eyeHeight;
@@ -2451,14 +2583,23 @@ void AquariumScene::SelectReceptionLobbyView()
         settings_.cameraPositionX=17.6f;settings_.cameraPositionY=.5f;
         settings_.cameraPositionZ=9.2f;settings_.cameraYaw=0;settings_.cameraPitch=0;
         heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();archChase_.MarkComplete();
-        powerOutage_.RestoreProgress(true,false,false,false);
+        powerOutage_.RestoreProgress(true,false,false,false,false);
+    }
+    else if (std::wcscmp(startZone,L"HANDS")==0)
+    {
+        // 曲がり角後の固定手形を、奥スロープ内ですぐ確認するQA起動。
+        settings_.cameraPositionX=6.7f;settings_.cameraPositionY=3.9f;
+        settings_.cameraPositionZ=-20.30f;settings_.cameraYaw=0;
+        settings_.cameraPitch=-.03f;
+        heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();archChase_.MarkComplete();
+        powerOutage_.RestoreProgress(true,true,true,false,false);
     }
     else if (std::wcscmp(startZone,L"IMPACT")==0)
     {
         settings_.cameraPositionX=0;settings_.cameraPositionY=3.25f+playerManager_.Capsule().eyeHeight;
         settings_.cameraPositionZ=6.2f;settings_.cameraYaw=0;settings_.cameraPitch=0;
         heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();archChase_.MarkComplete();
-        powerOutage_.RestoreProgress(true,true,false,false);
+        powerOutage_.RestoreProgress(true,true,true,false,false);
     }
     if(startZone[0]==0) opening_.Start();
     ResetPlayer();
@@ -2595,6 +2736,7 @@ void AquariumScene::UpdatePlayer(
         player::InteractionTarget targets[10]{};
         int targetCount=0;
         const bool emergencyReady=opening_.FacilityPasswordCollected();
+        const bool pcLockedForRest=powerOutage_.Restored()&&!opening_.RestCompleted();
         targets[targetCount++]={0,L"Reception_ExteriorGlassDoor",{-.85f,-1.65f,-8.60f},{.85f,-.20f,-8.20f},{.25f,-.90f,-8.18f},
             opening_.ExitChecked()?"開かない":"調べる",!opening_.ExitChecked()};
         targets[targetCount++]={9,L"JellyPanorama_FutureExit",{.63f,-6.80f,89.12f},{.94f,-3.72f,91.68f},{.62f,-5.35f,90.40f},
@@ -2611,12 +2753,13 @@ void AquariumScene::UpdatePlayer(
         if(opening_.RestCompleted()&&!opening_.ManualCollected())
             targets[targetCount++]={6,L"Reception_ManualSheet_A",{5.18f,-2.30f,-2.48f},{6.46f,-2.08f,-1.18f},{5.78f,-2.12f,-1.82f},"マニュアルを拾う",true};
         if(powerOutage_.Restored())
-            targets[targetCount++]={7,L"V4_Monitor2",{28.45f,4.00f,6.50f},{29.55f,4.90f,7.10f},{29.f,4.62f,6.72f},"大水槽照明を調整",true};
+            targets[targetCount++]={7,L"V4_Monitor2",{28.45f,4.00f,6.50f},{29.55f,4.90f,7.10f},{29.f,4.62f,6.72f},
+                pcLockedForRest?"ひとまず休もう":"大水槽照明を調整",!pcLockedForRest};
         if(powerOutage_.Restored())
             targets[targetCount++]={8,L"V4_Monitor1",{25.45f,4.00f,6.50f},{26.55f,4.90f,7.10f},{26.f,4.62f,6.72f},
-                opening_.FacilityPasswordCollected()?"非常口 起動済み":
+                pcLockedForRest?"ひとまず休もう":opening_.FacilityPasswordCollected()?"非常口 起動済み":
                     (opening_.ManualCollected()?"起動パスワードを入力":"マニュアルが必要"),
-                opening_.ManualCollected()&&!opening_.FacilityPasswordCollected()};
+                !pcLockedForRest&&opening_.ManualCollected()&&!opening_.FacilityPasswordCollected()};
         const int selected=player::FindInteraction(ray,receptionLobbyCollision_,targets,targetCount);
         if(selected>=0) {
             if(targets[selected].id==3)settings_.cluePaperHighlighted=true;

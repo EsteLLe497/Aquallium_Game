@@ -59,6 +59,7 @@ private:
         DirectX::XMFLOAT3 normal;
         DirectX::XMFLOAT2 uv;
         float bendWeight;
+        float meshPart; // 0:胴体 1:尾びれ 2:背びれ 3:胸びれ 4:目
     };
 
     struct Instance
@@ -113,6 +114,11 @@ private:
         const DirectX::XMFLOAT3& cameraPosition,
         float totalTime,
         const Presentation& presentation);
+    void BuildFloorShadowInstances(
+        const DirectX::XMMATRIX& viewProjection,
+        const DirectX::XMFLOAT3& cameraPosition,
+        const Presentation& presentation,
+        const lighting::HeroTankLightingRig* heroTankLighting);
     void UploadInstances(
         ID3D11DeviceContext* context,
         ID3D11Buffer* buffer,
@@ -127,15 +133,19 @@ private:
     Microsoft::WRL::ComPtr<ID3D11Buffer> lowDetailVertexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> lowDetailIndexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> lowDetailInstanceBuffer_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> floorShadowInstanceBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> rayVertexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> rayIndexBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> rayInstanceBuffer_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> constantBuffer_;
     Microsoft::WRL::ComPtr<ID3D11DepthStencilState> depthState_;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilState> shadowDepthState_;
+    Microsoft::WRL::ComPtr<ID3D11BlendState> shadowBlendState_;
     Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizerState_;
     std::vector<Agent> agents_;
     std::vector<Instance> visibleInstances_;
     std::vector<Instance> visibleLowDetailInstances_;
+    std::vector<Instance> visibleFloorShadowInstances_;
     std::vector<Instance> visibleRayInstances_;
     std::uint32_t indexCount_ = 0;
     std::uint32_t lowDetailIndexCount_ = 0;

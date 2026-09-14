@@ -61,6 +61,7 @@ bool SaveSystem::Save(int slot, const SaveData &d) {
       << "arch=" << d.archComplete << '\n'
       << "blackout=" << d.blackoutStarted << '\n'
       << "blackoutWriting=" << d.blackoutWritingSeen << '\n'
+      << "blackoutHands=" << d.blackoutHandsSeen << '\n'
       << "blackoutFish=" << d.blackoutFishSeen << '\n'
       << "powerRestored=" << d.powerRestored << '\n'
       << "terraceRest=" << d.terraceRestCompleted << '\n'
@@ -116,6 +117,8 @@ bool SaveSystem::Load(int slot, SaveData &d) const {
         d.blackoutStarted = Bool(v);
       else if (k == "blackoutWriting")
         d.blackoutWritingSeen = Bool(v);
+      else if (k == "blackoutHands")
+        d.blackoutHandsSeen = Bool(v);
       else if (k == "blackoutFish")
         d.blackoutFishSeen = Bool(v);
       else if (k == "powerRestored")

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DialoguePlayer.h"
-#include "StoryTexture.h"
+#include "PortraitLibrary.h"
 
 #include <array>
 #include <filesystem>
@@ -62,7 +62,7 @@ private:
     std::vector<Node> nodes_;
     std::vector<DialogueLine> lines_;
     std::vector<std::string> dialogueComments_;
-    std::array<StoryTexture,7> portraits_;
+    std::shared_ptr<PortraitLibrary> portraits_;
     DialoguePlayer previewDialogue_;
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> scenePreviewTexture_;
@@ -79,6 +79,7 @@ private:
     std::array<char,96> speakerBuffer_{},expressionBuffer_{};
     std::array<char,96> layerBuffer_{},eventBuffer_{};
     std::array<char,2048> textBuffer_{};
+    bool insertTextLineBreak_=false;
 };
 
 }

@@ -1,4 +1,6 @@
 #include "HeroineEncounter.h"
+#include "DialogueTextCodec.h"
+#include "PortraitPresentation.h"
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -19,11 +21,11 @@ void HeroineEncounter::Initialize(ID3D11Device* device,const std::filesystem::pa
         if(value.empty()||value[0]=='#')continue;
         auto fields=Split(value);if(fields.size()<5)continue;
         std::string text=fields[4];for(size_t i=5;i<fields.size();++i)text+='|'+fields[i];
+        text=dialogueTextCodec::quoteHeroineSpeech(fields[1],dialogueTextCodec::decode(text));
         lines_.push_back({fields[0]=="still",fields[1],fields[2],fields[3],std::move(text)});
     }
     still_.Load(device,textureFolder/"stile"/"HeroineEncounter_placeholder.png");
-    const char* names[]={"normal","ase","yan","hiki","nihi"};
-    for(size_t i=0;i<portraits_.size();++i)portraits_[i].Load(device,textureFolder/"girl"/(std::string("Heroin_")+names[i]+".PNG"));
+    portraits_=PortraitLibrary::load(device,textureFolder/"girl");
 }
 void HeroineEncounter::Reset(){phase_=Phase::Dormant;line_=0;letters_=fade_=0;emergencyFailed_=false;expression_="normal";}
 void HeroineEncounter::Update(float dt,bool advance,float x,float floorY,float z,bool canTrigger) {
@@ -62,9 +64,7 @@ void HeroineEncounter::Advance() {
     }
 }
 const StoryTexture* HeroineEncounter::Portrait() const {
-    const char* names[]={"normal","ase","yan","hiki","nihi"};
-    for(size_t i=0;i<portraits_.size();++i)if(expression_==names[i])return &portraits_[i];
-    return &portraits_[0];
+    return portraits_?portraits_->find(expression_):nullptr;
 }
 void HeroineEncounter::Draw() {
     if(phase_==Phase::Dormant||phase_==Phase::Complete)return;
@@ -78,8 +78,13 @@ void HeroineEncounter::Draw() {
         background->AddImage(ImTextureRef(still_.view.Get()),{0,0},size,uv0,uv1,IM_COL32(255,255,255,int(255*fade_)));
         background->AddRectFilled({0,0},size,IM_COL32(2,8,18,int(55*fade_)));
     } else if(const StoryTexture* portrait=Portrait();portrait&&portrait->view) {
-        float h=size.y*.92f,w=h*portrait->width/portrait->height;
-        background->AddImage(ImTextureRef(portrait->view.Get()),{size.x-w-18,size.y-h+8},{size.x-18,size.y+8},{0,0},{1,1},IM_COL32(255,255,255,int(255*fade_)));
+        const auto layout=portraitPresentation::upperBodyLayout(
+            *portrait,{size.x-18,size.y+8},size.y*1.08f,size.x*.46f);
+        if(const StoryTexture* underlay=portraits_->underlay(expression_);underlay&&underlay->view)
+            background->AddImage(ImTextureRef(underlay->view.Get()),layout.minimum,layout.maximum,
+                layout.uvMinimum,layout.uvMaximum,IM_COL32(255,255,255,int(255*fade_)));
+        background->AddImage(ImTextureRef(portrait->view.Get()),layout.minimum,layout.maximum,
+            layout.uvMinimum,layout.uvMaximum,IM_COL32(255,255,255,int(255*fade_)));
     }
     if(!DialogueVisible()||line_>=lines_.size())return;
     const float windowHeight=std::clamp(size.y*.27f,190.f,290.f);

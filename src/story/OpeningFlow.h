@@ -17,10 +17,11 @@ namespace story {
 class OpeningFlow {
 public:
     struct Key { float t,x,y,z,yaw,pitch,blur,blink; };
+    struct DialogueLine { std::string speaker,text; };
     enum class Phase { Off, Wake, Dialogue, Stand, Free, ExitDialogue, FindEmergency };
     void Load(const std::filesystem::path& folder) {
         folder_=folder;
-        std::vector<Key> keys; std::vector<std::string> lines;
+        std::vector<Key> keys; std::vector<DialogueLine> lines;
         std::ifstream camera(folder/"opening.camera"); std::string s;
         while(std::getline(camera,s)) {
             if(s.empty() || s[0]=='#') continue;
@@ -30,7 +31,7 @@ public:
         std::ifstream dialogue(folder/"opening.dialogue");
         while(std::getline(dialogue,s)) {
             if(!s.empty() && s.back()=='\r') s.pop_back();
-            if(!s.empty() && s[0]!='#') lines.push_back(s);
+            if(!s.empty() && s[0]!='#') lines.push_back(parseDialogueLine(s));
         }
         if(keys.size()<2 || lines.empty()) { error_="Camera/dialogue file is missing or invalid"; return; }
         std::stable_sort(keys.begin(),keys.end(),[](auto a,auto b){return a.t<b.t;});
@@ -44,10 +45,10 @@ public:
         keys_=std::move(keys); lines_=std::move(lines); error_.clear();
         if(phase_!=Phase::ExitDialogue) line_=std::min(line_,lines_.size()-1);
         std::ifstream exitFile(folder/"exit.dialogue");
-        std::vector<std::string> exitLines;
+        std::vector<DialogueLine> exitLines;
         while(std::getline(exitFile,s)) {
             if(!s.empty() && s.back()=='\r') s.pop_back();
-            if(!s.empty() && s[0]!='#') exitLines.push_back(s);
+            if(!s.empty() && s[0]!='#') exitLines.push_back(parseDialogueLine(s));
         }
         if(!exitLines.empty()) exitLines_=std::move(exitLines);
         if(phase_==Phase::ExitDialogue) line_=std::min(line_,exitLines_.size()-1);
@@ -95,7 +96,7 @@ public:
             else if(phase_==Phase::Dialogue || phase_==Phase::ExitDialogue) {
                 const auto& dialogue=phase_==Phase::ExitDialogue ? exitLines_ : lines_;
                 letters_+=dt*charactersPerSecond_;
-                const size_t count=Count(dialogue[line_]);
+                const size_t count=Count(dialogue[line_].text);
                 if(click) {
                     if(letters_<float(count)) letters_=float(count);
                     else if(++line_<dialogue.size()) letters_=0;
@@ -120,10 +121,14 @@ public:
             ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.018f,.035f,.07f,.8f));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(24,18));
             ImGui::Begin("##dialogue",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);
-            const std::string visible=Prefix(dialogue[line_],size_t(letters_));
+            if(!dialogue[line_].speaker.empty()) {
+                ImGui::TextColored({.60f,.84f,1.f,1.f},"%s",dialogue[line_].speaker.c_str());
+                ImGui::Separator();
+            }
+            const std::string visible=Prefix(dialogue[line_].text,size_t(letters_));
             ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
             ImGui::TextUnformatted(visible.c_str()); ImGui::PopTextWrapPos();
-            if(size_t(letters_)>=Count(dialogue[line_])) {
+            if(size_t(letters_)>=Count(dialogue[line_].text)) {
                 ImGui::SetCursorPosY(size.y*.20f-45); ImGui::TextDisabled("クリック / F で次へ  ▽");
             }
             ImGui::End(); ImGui::PopStyleVar(); ImGui::PopStyleColor();
@@ -205,6 +210,14 @@ public:
         ImGui::End();
     }
 private:
+    // F3編集形式と従来の本文一行形式を両方読み込む。
+    static DialogueLine parseDialogueLine(const std::string& value) {
+        const size_t first=value.find('|');
+        if(first==std::string::npos)return {"",value};
+        const size_t second=value.find('|',first+1);
+        if(second==std::string::npos)return {"",value};
+        return {value.substr(0,first),value.substr(second+1)};
+    }
     static size_t Count(const std::string& s) {size_t n=0;for(unsigned char c:s) if((c&0xc0)!=0x80) ++n;return n;}
     static std::string Prefix(const std::string& s,size_t n) {size_t i=0,c=0;for(;i<s.size();++i) if((static_cast<unsigned char>(s[i])&0xc0)!=0x80 && c++>=n) break;return s.substr(0,i);}
     void Apply(AquariumSettings& s) {
@@ -217,8 +230,8 @@ private:
         s.cameraYaw=mix(a.yaw,b.yaw)*.0174532925f;s.cameraPitch=mix(a.pitch,b.pitch)*.0174532925f;
         s.wakeBlur=mix(a.blur,b.blur);blink_=mix(a.blink,b.blink);
     }
-    std::filesystem::path folder_; std::vector<Key> keys_; std::vector<std::string> lines_;
-    std::vector<std::string> exitLines_{"開かない・・・","非常口とかあるだろうし、探してみるか"};
+    std::filesystem::path folder_; std::vector<Key> keys_; std::vector<DialogueLine> lines_;
+    std::vector<DialogueLine> exitLines_{{"渚生","「開かない……」"},{"渚生","「非常口を探してみるか」"}};
     Phase phase_=Phase::Off;float clock_=0,letters_=0,charactersPerSecond_=22,blink_=0;
     size_t line_=0;int selected_=0;bool preview_=false,emergencyFailed_=false,powerMission_=false;
     bool clueCollected_=false,managementEntered_=false,powerRestored_=false;

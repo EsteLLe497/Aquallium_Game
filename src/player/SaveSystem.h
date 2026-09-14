@@ -11,7 +11,8 @@ struct SaveData {
   bool heroineJoined = false, findingEmergency = false, clueCollected = false,
        managementUnlocked = false, managementEntered = false,
        archComplete = false, blackoutStarted = false,
-       blackoutWritingSeen = false, blackoutFishSeen = false,
+       blackoutWritingSeen = false, blackoutHandsSeen = false,
+       blackoutFishSeen = false,
        powerRestored = false, terraceRestCompleted = false,
        manualCollected = false, facilityPasswordCollected = false,
        staffDoorOpen = false, beachDecisionPoint = false;
