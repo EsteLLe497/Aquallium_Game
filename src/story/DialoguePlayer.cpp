@@ -121,14 +121,20 @@ void DialoguePlayer::DrawOverlay(ImDrawList* background,float x,float y,float wi
     if(phase_!=Phase::Talk||line_>=lines_.size())return;
     const float windowHeight=std::clamp(screen.y*.27f,72.f,290.f);
     const ImVec2 p0{x+screen.x*.07f,y+screen.y-windowHeight-24},p1{x+screen.x*.93f,y+screen.y-24};
-    background->AddRectFilled(p0,p1,IM_COL32(3,7,15,int(230*fade_)),6.f);
+    background->AddRectFilledMultiColor(p0,p1,IM_COL32(3,14,26,int(238*fade_)),
+        IM_COL32(7,29,43,int(232*fade_)),IM_COL32(2,8,17,int(242*fade_)),
+        IM_COL32(2,8,17,int(242*fade_)));
+    background->AddRect(p0,p1,IM_COL32(92,196,230,int(125*fade_)),5.f,0,1.f);
+    background->AddRectFilled({p0.x+1,p0.y+1},{p0.x+4,p1.y-1},
+        IM_COL32(84,211,248,int(220*fade_)),3.f);
     const float fontSize=textFontSize(screen.y);
     const ImGuiIO& io=ImGui::GetIO();
     ImFont* dialogueFont=io.FontDefault?io.FontDefault:(io.Fonts->Fonts.empty()?ImGui::GetFont():io.Fonts->Fonts[0]);
     float textY=p0.y+std::max(10.f,windowHeight*.09f);
     if(!lines_[line_].speaker.empty()) {
         background->AddText(dialogueFont,fontSize,{p0.x+18,textY},IM_COL32(153,214,255,int(255*fade_)),lines_[line_].speaker.c_str());
-        textY+=fontSize+7;background->AddLine({p0.x+18,textY},{p1.x-18,textY},IM_COL32(90,130,160,180));textY+=8;
+        textY+=fontSize+7;background->AddLine({p0.x+18,textY},{p1.x-18,textY},
+            IM_COL32(82,174,207,int(125*fade_)));textY+=8;
     }
     const std::string shown=Prefix(lines_[line_].text,size_t(letters_));
     background->AddText(dialogueFont,fontSize*lines_[line_].textScale,{p0.x+18,textY},IM_COL32(255,255,255,int(255*fade_)),shown.c_str(),nullptr,textWrapWidth(screen.x));

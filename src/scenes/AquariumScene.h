@@ -67,15 +67,6 @@ public:
 
 private:
     enum class BeachBranch {Undecided,Stay,Leave};
-    void ResetSettings();
-    void SelectUnderwaterView();
-    void SelectStageGlassView();
-    void SelectAquariumGreyboxView();
-    void SelectUnderwaterArchView();
-    void SelectJellyfishReverseValidationView();
-    void SelectWatatsumiTankView();
-    void SelectContinuousAquariumView();
-    void SelectGameLayoutV3View();
     void SelectReceptionLobbyView();
     void ApplyReceptionHallLighting();
     void UpdatePlayer(float deltaTime, const framework::InputSystem& input);
@@ -98,7 +89,6 @@ private:
     void DrawSceneFade() const;
     void DrawInWaterStill() const;
     void FinishInWaterIntro();
-    void ToggleBeachPreview(bool morning);
     void BeginEmergencyExitTransition();
     bool UpdateEmergencyExitTransition(float deltaTime);
     void BeginMorningBeachTransition();
@@ -116,6 +106,8 @@ private:
     void updateAudioSettings();
     void updateBackgroundMusic();
     void playBeachAmbience(bool morning);
+    void applyTitlePresentation();
+    void updateTitlePresentation();
 
     AquariumRenderer renderer_;
     BeachPreviewRenderer beachRenderer_;
@@ -178,7 +170,6 @@ private:
     bool beachStayAftermathPendingEnding_=false;
     bool beachLeaveDialoguePendingTransition_=false;
     bool actuallyMusicStarted_=false;
-    bool normalEndingMusic_=false;
     bool morningBeachTransition_=false;
     bool morningBeachEntered_=false;
     float morningBeachTransitionTime_=0.f;
@@ -187,6 +178,7 @@ private:
     float morningWakeBlur_=0.f;
     float morningWakeBlink_=0.f;
     bool morningWakeDialoguePendingStand_=false;
+    bool trueEpiloguePendingEnding_=false;
     bool morningStandTransition_=false;
     float morningStandTime_=0.f;
     bool morningAmbienceFading_=false;
@@ -204,6 +196,4 @@ private:
     bool inWaterIntro_=false;
     bool inWaterIntroDialoguePending_=false;
     bool inWaterIntroTransition_=false;
-    DirectX::XMFLOAT3 beachReturnEye_{};
-    float beachReturnYaw_=0.f,beachReturnPitch_=0.f;
 };

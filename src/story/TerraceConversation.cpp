@@ -1,4 +1,5 @@
 #include "TerraceConversation.h"
+#include "../ui/AquariumUi.h"
 #include "../../third_party/imgui/imgui.h"
 #include <algorithm>
 #include <cmath>
@@ -124,28 +125,19 @@ void TerraceConversation::Draw(bool hintAvailable) {
   (void)hintAvailable;
   const ImVec2 screen = ImGui::GetIO().DisplaySize;
   if (tutorialPending_) {
+    aquariumUi::drawBackdrop(screen,150);
+    aquariumUi::PanelStyle style;
     const float width = std::min(640.f, screen.x * .78f);
     ImGui::SetNextWindowPos({screen.x * .5f, screen.y * .48f}, ImGuiCond_Always,
                             {.5f, .5f});
     ImGui::SetNextWindowSize({width, 350.f});
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, {.008f, .026f, .052f, .82f});
-    ImGui::PushStyleColor(ImGuiCol_Border, {.25f, .68f, .86f, .58f});
-    ImGui::PushStyleColor(ImGuiCol_Button, {.07f, .27f, .40f, .82f});
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, {.10f, .40f, .57f, .94f});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {34, 27});
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.f);
     ImGui::Begin("##terrace_tutorial", nullptr,
                  ImGuiWindowFlags_NoDecoration |
                      ImGuiWindowFlags_NoSavedSettings);
-    auto *draw = ImGui::GetWindowDrawList();
-    const ImVec2 p = ImGui::GetWindowPos();
-    draw->AddRectFilled({p.x, p.y}, {p.x + 5.f, p.y + 350.f},
-                        IM_COL32(53, 180, 220, 205), 12.f);
+    aquariumUi::drawPanelAccent();
     ImGui::TextColored({.55f, .86f, 1.f, 1.f}, "TERRACE  /  会話について");
-    ImGui::Dummy({0, 5});
-    ImGui::Separator();
-    ImGui::Dummy({0, 10});
+    ImGui::Dummy({0, 8});ImGui::Separator();ImGui::Dummy({0, 10});
     ImGui::TextWrapped("テラスのベンチでは、少女と話す事ができます。");
     ImGui::Dummy({0, 10});
     if (ImGui::BeginTable("##terrace_help", 2,
@@ -174,34 +166,34 @@ void TerraceConversation::Draw(bool hintAvailable) {
                        "ベンチに照準を合わせる  -  F / 左クリック");
     const float w = 142.f;
     ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - w);
-    if (ImGui::Button("閉じる", {w, 36})) {
+    if (aquariumUi::button("閉じる", {w, 36},true)) {
       tutorialPending_ = false;
       tutorialSeen_ = true;
     }
     ImGui::End();
-    ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar();
   }
   if (phase_ != Phase::Menu)
     return;
   ImGui::SetNextWindowPos({screen.x * .5f, screen.y * .66f}, ImGuiCond_Always,
                           {.5f, .5f});
-  ImGui::SetNextWindowSize({360, 0});
-  ImGui::PushStyleColor(ImGuiCol_WindowBg, {.010f, .022f, .050f, .94f});
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {24, 20});
+  aquariumUi::PanelStyle style;
+  ImGui::SetNextWindowSize({410, 0});
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {28, 24});
   ImGui::Begin("##terrace_choices", nullptr,
                ImGuiWindowFlags_NoDecoration |
                    ImGuiWindowFlags_AlwaysAutoResize |
                    ImGuiWindowFlags_NoSavedSettings);
-  ImGui::TextDisabled("ヒロインと話す");
-  ImGui::Spacing();
-  const ImVec2 button{ImGui::GetContentRegionAvail().x, 38};
-  if (ImGui::Button("雑談する", button)) {
+  aquariumUi::drawPanelAccent();
+  ImGui::TextDisabled("ヒロインと話す");ImGui::Spacing();
+  const ImVec2 button{ImGui::GetContentRegionAvail().x, 42};
+  if (aquariumUi::button("雑談する", button,false,{.08f,.5f})) {
     request_ = Request::Gossip;
     restDialogue_ = false;
     phase_ = Phase::WaitingDialogue;
   }
-  if (ImGui::Button("ヒントを聞く", button)) {
+  ImGui::Dummy({0,7});
+  if (aquariumUi::button("ヒントを聞く", button,false,{.08f,.5f})) {
     request_ = Request::Hint;
     restDialogue_ = false;
     phase_ = Phase::WaitingDialogue;
@@ -209,12 +201,12 @@ void TerraceConversation::Draw(bool hintAvailable) {
   // Standing is always the third choice. Previously this button was the
   // unbraced body of `if (!hintAvailable)`, so it disappeared once a hint
   // became available.
-  if (ImGui::Button("立ち上がる", button)) {
+  ImGui::Dummy({0,7});
+  if (aquariumUi::button("立ち上がる", button,false,{.08f,.5f})) {
     phase_ = Phase::Standing;
     clock_ = 0;
   }
   ImGui::End();
   ImGui::PopStyleVar();
-  ImGui::PopStyleColor();
 }
 } // namespace story

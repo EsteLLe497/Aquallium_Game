@@ -46,11 +46,13 @@ void LightingEditor::Shutdown()
 bool LightingEditor::HandleMessage(
     HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
+#if defined(_DEBUG)
     if (message == WM_KEYDOWN && wParam == VK_F2)
     {
         visible_ = !visible_;
         return true;
     }
+#endif
     // F3のストーリー編集画面なども同じImGuiコンテキストを使う。
     // 処理済みメッセージをOSへ再送すると、IMEの確定文字が二重入力されるため必ず消費する。
     return initialized_ &&

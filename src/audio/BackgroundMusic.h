@@ -6,7 +6,7 @@ namespace audio {
 // シーンごとのBGMを一つのMCIデバイスで切り替える軽量プレイヤー。
 class BackgroundMusic {
 public:
-    enum class Track {Silent,Title,Aquarium,Chase,Actually,Ending};
+    enum class Track {Silent,Title,Aquarium,Chase,Actually};
     ~BackgroundMusic();
     void initialize(const std::filesystem::path& folder);
     // 希望曲を予約し、advanceで停止・切替・再生開始を滑らかにつなぐ。

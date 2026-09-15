@@ -54,6 +54,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -71,6 +72,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -152,6 +154,7 @@
     <ClInclude Include="src\rendering\StageModel.h" />
     <ClInclude Include="src\rendering\TextureUpload.h" />
     <ClInclude Include="src\rendering\ScreenFade.h" />
+    <ClInclude Include="src\ui\AquariumUi.h" />
     <ClInclude Include="src\audio\BackgroundMusic.h" />
     <ClInclude Include="third_party\cgltf\cgltf.h" />
     <ClInclude Include="third_party\imgui\imgui.h" />
@@ -162,7 +165,6 @@
   <ItemGroup>
     <None Include="asset\story\inwater_intro.dialogue" />
     <None Include="asset\story\story_flow.cfg" />
-    <None Include="shaders\AquariumFroxel.hlsl" />
     <None Include="shaders\AquariumPrototype.hlsl" />
     <None Include="shaders\BeachPreview.hlsl" />
     <None Include="shaders\ExitPortal.hlsl" />
@@ -184,30 +186,8 @@
     <None Include="asset\model\tree.glb" />
     <None Include="third_party\cgltf\LICENSE" />
     <None Include="third_party\imgui\LICENSE.txt" />
-    <None Include="tools\generate_aquarium_greybox.py" />
-    <None Include="tools\generate_route_01_02.py" />
-    <None Include="tools\generate_underwater_arch.py" />
-    <None Include="tools\generate_watatsumi_hall.py" />
-    <None Include="tools\generate_continuous_aquarium.py" />
-    <None Include="tools\validate_continuous_aquarium.py" />
-    <None Include="tools\validate_aquarium_collision_layout.py" />
-    <None Include="tools\validate_fish_schooling.py" />
-    <None Include="tools\generate_game_layout_v3.py" />
-    <None Include="tools\validate_game_layout_v3.py" />
-    <None Include="tools\generate_reception_lobby.py" />
-    <None Include="tools\upper_doors.py" />
-    <None Include="tools\generate_jelly_basement.py" />
-    <None Include="tools\validate_jelly_basement.py" />
-    <None Include="tools\validate_reception_lobby.py" />
-    <None Include="tools\capture_runtime_view.ps1" />
-    <None Include="tools\generate_aquarium_floorplan_v2.py" />
-    <None Include="tools\generate_aquarium_floorplan_v3.py" />
-    <None Include="tools\generate_aquarium_floorplan_v4.py" />
-    <None Include="tools\generate_aquarium_floorplan_v5.py" />
-    <None Include="tools\generate_aquarium_area_detail_v1.py" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="TECHNICAL_NOTES.md" />
     <None Include="asset\story\opening.camera" />
     <None Include="asset\story\opening.dialogue" />
     <None Include="asset\story\exit.dialogue" />
@@ -251,27 +231,21 @@
     <None Include="asset\story\beach_stay_aftermath.dialogue" />
     <None Include="asset\story\beach_leave.dialogue" />
     <None Include="asset\story\beach_morning_wake.dialogue" />
+    <None Include="asset\story\beach_true_epilogue.dialogue" />
     <None Include="asset\font\onryou.TTF" />
     <None Include="asset\sound\se\glass.mp3" />
     <None Include="asset\sound\BGM\title.mp3" />
     <None Include="asset\sound\BGM\stage.wav" />
     <None Include="asset\sound\BGM\actually.mp3" />
-    <None Include="asset\sound\BGM\end.mp3" />
     <None Include="asset\sound\se\Beach.mp3" />
     <None Include="asset\sound\se\beachMorning.mp3" />
     <None Include="asset\sound\se\select.mp3" />
     <None Include="asset\sound\se\open.mp3" />
     <None Include="asset\sound\se\miss.mp3" />
-    <None Include="asset\texture\stile\HeroineEncounter_placeholder.png" />
     <None Include="asset\texture\other\nozo1.png" />
+    <None Include="asset\texture\other\title.png" />
     <None Include="asset\font\cinecaption226.ttf" />
     <None Include="asset\font\license-original.txt" />
-    <None Include="tools\test_opening_flow.cpp" />
-    <None Include="tools\test_power_outage.cpp" />
-    <None Include="tools\render_blackout_probe.cpp" />
-    <None Include="tools\render_beach_probe.cpp" />
-    <None Include="tools\test_minimap.cpp" />
-    <None Include="tools\organize_project.ps1" />
   </ItemGroup>
   <Target Name="CopyShaders" AfterTargets="Build">
     <ItemGroup>
@@ -279,16 +253,14 @@
       <FontAssets Include="$(ProjectDir)asset\font\*" />
       <TextureAssets Include="$(ProjectDir)asset\texture\**\*" />
       <SoundAssets Include="$(ProjectDir)asset\sound\**\*" />
-      <VideoAssets Include="$(ProjectDir)asset\video\*" />
     </ItemGroup>
-    <MakeDir Directories="$(OutDir)asset\story;$(OutDir)asset\font;$(OutDir)asset\texture;$(OutDir)asset\video;@(TextureAssets->'$(OutDir)asset\texture\%(RecursiveDir)');@(SoundAssets->'$(OutDir)asset\sound\%(RecursiveDir)')" />
+    <MakeDir Directories="$(OutDir)asset\story;$(OutDir)asset\font;$(OutDir)asset\texture;@(TextureAssets->'$(OutDir)asset\texture\%(RecursiveDir)');@(SoundAssets->'$(OutDir)asset\sound\%(RecursiveDir)')" />
     <Copy SourceFiles="@(StoryAssets)" DestinationFolder="$(OutDir)asset\story" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(FontAssets)" DestinationFolder="$(OutDir)asset\font" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(TextureAssets)" DestinationFiles="@(TextureAssets->'$(OutDir)asset\texture\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SoundAssets)" DestinationFiles="@(SoundAssets->'$(OutDir)asset\sound\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(VideoAssets)" DestinationFolder="$(OutDir)asset\video" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)shaders" />
-    <Copy SourceFiles="$(ProjectDir)shaders\AquariumPrototype.hlsl;$(ProjectDir)shaders\AquariumFroxel.hlsl;$(ProjectDir)shaders\Stage.hlsl;$(ProjectDir)shaders\Jellyfish.hlsl;$(ProjectDir)shaders\Fish.hlsl;$(ProjectDir)shaders\BeachPreview.hlsl;$(ProjectDir)shaders\ExitPortal.hlsl" DestinationFolder="$(OutDir)shaders" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)shaders\AquariumPrototype.hlsl;$(ProjectDir)shaders\Stage.hlsl;$(ProjectDir)shaders\Jellyfish.hlsl;$(ProjectDir)shaders\Fish.hlsl;$(ProjectDir)shaders\BeachPreview.hlsl;$(ProjectDir)shaders\ExitPortal.hlsl" DestinationFolder="$(OutDir)shaders" SkipUnchangedFiles="true" />
     <MakeDir Directories="$(OutDir)shaders\lighting" />
     <Copy SourceFiles="$(ProjectDir)shaders\lighting\LocalLighting.hlsli" DestinationFolder="$(OutDir)shaders\lighting" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(ProjectDir)shaders\lighting\Flashlight.hlsli" DestinationFolder="$(OutDir)shaders\lighting" SkipUnchangedFiles="true" />

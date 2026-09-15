@@ -37,9 +37,6 @@
     <Filter Include="08 Documents">
       <UniqueIdentifier>{F027755A-66B1-4E6C-965B-E1E4A708BE6C}</UniqueIdentifier>
     </Filter>
-    <Filter Include="09 Tools">
-      <UniqueIdentifier>{771B23C8-4097-4B36-B4BB-A0790B15E936}</UniqueIdentifier>
-    </Filter>
     <Filter Include="04 Rendering\Lighting">
       <UniqueIdentifier>{B512F514-34E8-4FF7-A34B-CE84F195EB0A}</UniqueIdentifier>
     </Filter>
@@ -252,9 +249,6 @@
     <ClInclude Include="src\player\SaveSystem.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\AquariumFroxel.hlsl">
-      <Filter>05 Shaders</Filter>
-    </None>
     <None Include="shaders\AquariumPrototype.hlsl">
       <Filter>05 Shaders</Filter>
     </None>
@@ -309,70 +303,9 @@
     <None Include="third_party\imgui\LICENSE.txt">
       <Filter>07 Third Party</Filter>
     </None>
-    <None Include="tools\generate_aquarium_greybox.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_route_01_02.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_underwater_arch.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_watatsumi_hall.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_continuous_aquarium.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\validate_continuous_aquarium.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\validate_aquarium_collision_layout.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\validate_fish_schooling.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_game_layout_v3.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\validate_game_layout_v3.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_reception_lobby.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\upper_doors.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_jelly_basement.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\validate_reception_lobby.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\capture_runtime_view.ps1">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_aquarium_floorplan_v2.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_aquarium_floorplan_v3.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_aquarium_floorplan_v4.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_aquarium_floorplan_v5.py">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\generate_aquarium_area_detail_v1.py">
-      <Filter>09 Tools</Filter>
-    </None>
     <None Include="shaders\lighting\Flashlight.hlsli" />
     <None Include="asset\model\aquarium_jelly_basement.glb" />
     <None Include="asset\model\anglerfish.glb" />
-    <None Include="tools\validate_jelly_basement.py" />
     <None Include="asset\story\terrace_hint_before.dialogue" />
     <None Include="asset\story\terrace_hint_after.dialogue" />
     <None Include="asset\story\terrace_gossip.dialogue" />
@@ -382,9 +315,6 @@
     <None Include="asset\story\arch_creak.dialogue" />
     <None Include="asset\story\arch_escape.dialogue" />
     <None Include="asset\story\blackout.dialogue" />
-    <None Include="tools\test_power_outage.cpp" />
-    <None Include="tools\render_blackout_probe.cpp" />
-    <None Include="tools\render_beach_probe.cpp" />
     <None Include="asset\story\inwater_intro.dialogue">
       <Filter>11 Story</Filter>
     </None>
@@ -417,18 +347,6 @@
     </None>
     <None Include="asset\font\license-original.txt">
       <Filter>11 Story</Filter>
-    </None>
-    <None Include="TECHNICAL_NOTES.md">
-      <Filter>08 Documents</Filter>
-    </None>
-    <None Include="tools\test_opening_flow.cpp">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\test_minimap.cpp">
-      <Filter>09 Tools</Filter>
-    </None>
-    <None Include="tools\organize_project.ps1">
-      <Filter>09 Tools</Filter>
     </None>
     <ClCompile Include="src\story\StoryTexture.cpp">
       <Filter>11 Story</Filter>
@@ -502,6 +420,9 @@
     <ClInclude Include="src\rendering\ScreenFade.h">
       <Filter>02 Framework</Filter>
     </ClInclude>
+    <ClInclude Include="src\ui\AquariumUi.h">
+      <Filter>10 ImGui</Filter>
+    </ClInclude>
     <None Include="asset\story\power_restored.dialogue">
       <Filter>11 Story</Filter>
     </None>
@@ -527,6 +448,9 @@
       <Filter>11 Story</Filter>
     </None>
     <None Include="asset\story\beach_morning_wake.dialogue">
+      <Filter>11 Story</Filter>
+    </None>
+    <None Include="asset\story\beach_true_epilogue.dialogue">
       <Filter>11 Story</Filter>
     </None>
     <None Include="asset\font\onryou.TTF">
@@ -562,10 +486,10 @@
     <None Include="asset\sound\se\miss.mp3">
       <Filter>11 Story</Filter>
     </None>
-    <None Include="asset\texture\stile\HeroineEncounter_placeholder.png">
+    <None Include="asset\texture\other\nozo1.png">
       <Filter>11 Story</Filter>
     </None>
-    <None Include="asset\texture\other\nozo1.png">
+    <None Include="asset\texture\other\title.png">
       <Filter>11 Story</Filter>
     </None>
   </ItemGroup>

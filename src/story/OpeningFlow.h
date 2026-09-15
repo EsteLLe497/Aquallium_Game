@@ -1,5 +1,6 @@
 #pragma once
 #include "../rendering/AquariumRenderer.h"
+#include "../ui/AquariumUi.h"
 #include "../../third_party/imgui/imgui.h"
 #include <algorithm>
 #include <cmath>
@@ -83,8 +84,6 @@ public:
         restCompleted_=restCompleted;manualCollected_=manualCollected;
         facilityPasswordCollected_=facilityPasswordCollected;
     }
-    // AQUARIUM_START_ZONE=ENCOUNTER 専用。通常のゲーム進行では呼ばない。
-    void BeginEmergencySearchForQa(){phase_=Phase::FindEmergency;line_=0;letters_=0;preview_=false;emergencyFailed_=powerMission_=clueCollected_=managementEntered_=powerRestored_=restCompleted_=manualCollected_=facilityPasswordCollected_=false;}
     // 距離だけでは達成しない。視線のヒットと選択入力を確認した呼び出し元だけが実行する。
     void InspectExit() {
         if(phase_!=Phase::Free) return;
@@ -114,13 +113,13 @@ public:
         if(phase_==Phase::Off && !preview_) return;
         const ImVec2 size=ImGui::GetIO().DisplaySize;
         if((phase_==Phase::Dialogue || phase_==Phase::ExitDialogue) && !preview_) {
+            aquariumUi::PanelStyle style;
             const auto& dialogue=phase_==Phase::ExitDialogue ? exitLines_ : lines_;
             ImGui::SetNextWindowPos({size.x*.10f,size.y*.76f});
             ImGui::SetNextWindowSize({size.x*.8f,size.y*.20f});
-            ImGui::SetNextWindowBgAlpha(.76f);
-            ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.018f,.035f,.07f,.8f));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(24,18));
             ImGui::Begin("##dialogue",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);
+            aquariumUi::drawPanelAccent();
             if(!dialogue[line_].speaker.empty()) {
                 ImGui::TextColored({.60f,.84f,1.f,1.f},"%s",dialogue[line_].speaker.c_str());
                 ImGui::Separator();
@@ -131,15 +130,20 @@ public:
             if(size_t(letters_)>=Count(dialogue[line_].text)) {
                 ImGui::SetCursorPosY(size.y*.20f-45); ImGui::TextDisabled("クリック / F で次へ  ▽");
             }
-            ImGui::End(); ImGui::PopStyleVar(); ImGui::PopStyleColor();
+            ImGui::End();ImGui::PopStyleVar();
         }
         if(hudVisible && (phase_==Phase::Free || ExitChecked())) {
             auto* d=ImGui::GetForegroundDrawList();
             const float bottom=facilityPasswordCollected_?78.f:
                 (((powerMission_&&!powerRestored_)||restCompleted_)?132.f:78.f);
-            d->AddRectFilled({size.x-330,25},{size.x-20,bottom},IM_COL32(8,18,30,120),8);
+            d->AddRectFilledMultiColor({size.x-340,20},{size.x-20,bottom+5},
+                IM_COL32(4,19,31,205),IM_COL32(7,31,44,198),
+                IM_COL32(3,13,23,215),IM_COL32(3,13,23,215));
+            d->AddRect({size.x-340,20},{size.x-20,bottom+5},IM_COL32(91,188,220,115),5,0,1);
+            d->AddRectFilled({size.x-340,27},{size.x-337,bottom-2},IM_COL32(84,211,248,205),2);
             auto mission=[&](float y,const char* text,int mark){
-                d->AddRect({size.x-310,y+5},{size.x-292,y+23},IM_COL32(210,225,240,150));
+                y+=16;
+                d->AddRect({size.x-310,y+5},{size.x-292,y+23},IM_COL32(210,225,240,150),2);
                 if(mark==1){d->AddLine({size.x-308,y+14},{size.x-302,y+20},IM_COL32(160,225,210,220),2);d->AddLine({size.x-302,y+20},{size.x-294,y+8},IM_COL32(160,225,210,220),2);}
                 if(mark==2){d->AddLine({size.x-307,y+8},{size.x-295,y+20},IM_COL32(230,115,125,225),2);d->AddLine({size.x-295,y+8},{size.x-307,y+20},IM_COL32(230,115,125,225),2);}
                 d->AddText({size.x-277,y},IM_COL32(220,230,240,210),text);
@@ -158,8 +162,12 @@ public:
             else if(FindingEmergency())mission(35,"非常口を探す",emergencyFailed_?2:0);
             else mission(35,"出口に向かう",phase_==Phase::ExitDialogue?1:0);
             if(phase_==Phase::Free) {
-            d->AddRectFilled({20,size.y-55},{size.x-20,size.y-12},IM_COL32(8,18,30,95),5);
-            d->AddText({32,size.y-49},IM_COL32(210,224,236,185),"WASD 移動   マウス 視点操作   F / 左クリック 選択   Shift ダッシュ");
+            d->AddRectFilledMultiColor({20,size.y-57},{size.x-20,size.y-12},
+                IM_COL32(3,15,25,190),IM_COL32(8,30,42,168),
+                IM_COL32(4,17,28,185),IM_COL32(3,13,23,190));
+            d->AddRect({20,size.y-57},{size.x-20,size.y-12},IM_COL32(91,188,220,90),4);
+            d->AddText({34,size.y-49},IM_COL32(207,230,240,205),
+                "WASD 移動   マウス 視点操作   F / 左クリック 選択   Shift ダッシュ");
             }
         }
         // 湾曲した上下のまぶた。時間キーで閉じ率を編集できる。
