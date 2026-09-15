@@ -51,7 +51,9 @@ private:
   enum class Page { Title, Items, Save, Load, Settings };
   void DrawSlots(bool saving);
   void drawVolumeSettings();
+  void drawTitlePage(float screenWidth, float screenHeight);
   story::StoryTexture clue_;
+  story::StoryTexture titleLogo_;
   std::array<SaveSlotInfo, SaveSystem::kSlotCount> slots_{};
   Request request_{};
   Page page_ = Page::Items;

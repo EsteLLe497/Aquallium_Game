@@ -36,7 +36,6 @@ std::filesystem::path BackgroundMusic::fileFor(Track track,const std::filesystem
         return std::filesystem::exists(requested)?requested:folder/"chase.mp3";
     }
     case Track::Actually:return folder/"actually.mp3";
-    case Track::Ending:return folder/"end.mp3";
     default:return {};
     }
 }

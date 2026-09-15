@@ -1,4 +1,5 @@
 #include "TankLightingConsole.h"
+#include "../ui/AquariumUi.h"
 #include "../../third_party/imgui/imgui.h"
 #include <algorithm>
 #include <cmath>
@@ -70,29 +71,31 @@ void TankLightingConsole::Draw(){
         return;
     }
     ImGui::SetNextWindowPos({screen.x*.5f,screen.y*.5f},ImGuiCond_Always,{.5f,.5f});
-    ImGui::SetNextWindowSize({470,0});
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,{.008f,.020f,.040f,.97f});
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{26,22});
+    aquariumUi::drawBackdrop(screen,165);
+    aquariumUi::PanelStyle style;
+    ImGui::SetNextWindowSize({520,0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{34,28});
     ImGui::Begin("##tank_lighting_console",nullptr,ImGuiWindowFlags_NoDecoration|
         ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoSavedSettings);
-    ImGui::TextColored({.52f,.84f,1.f,1.f},"大水槽ライティング制御");
-    ImGui::TextDisabled("照明色を選択して保存してください");
-    ImGui::Separator();ImGui::Spacing();
+    aquariumUi::drawPanelAccent();
+    aquariumUi::heading("","大水槽ライティング制御",
+        "照明色を選択して保存してください");
     auto choice=[&](const char* label,Color color,const ImVec4& tint){
         const bool active=selected_==color;
-        ImGui::PushStyleColor(ImGuiCol_Button,active?tint:ImVec4(tint.x*.35f,tint.y*.35f,tint.z*.35f,.85f));
-        if(ImGui::Button(label,{128,44})&&selected_!=color){selected_=color;feedback_=Feedback::Select;}
-        ImGui::PopStyleColor();
+        if(aquariumUi::button(label,{216,52},active)&&selected_!=color){selected_=color;feedback_=Feedback::Select;}
+        const ImVec2 minimum=ImGui::GetItemRectMin();
+        ImGui::GetWindowDrawList()->AddCircleFilled({minimum.x+22,minimum.y+26},6,
+            ImGui::ColorConvertFloat4ToU32(tint));
     };
     choice("青",Color::Blue,{.04f,.28f,.75f,1});ImGui::SameLine();
     choice("白",Color::White,{.72f,.72f,.68f,1});
-    ImGui::Spacing();ImGui::Separator();ImGui::Spacing();
-    if(ImGui::Button("キャンセル",{198,38}))phase_=Phase::Closed;
+    ImGui::Dummy({0,18});ImGui::Separator();ImGui::Dummy({0,12});
+    if(aquariumUi::button("キャンセル",{216,40}))phase_=Phase::Closed;
     ImGui::SameLine();
-    if(ImGui::Button("保存",{198,38})){
+    if(aquariumUi::button("保存",{216,40},true)){
         applied_=selected_;feedback_=Feedback::Save;phase_=Phase::FadeToPreview;clock_=fadeAlpha_=0;
     }
-    ImGui::End();ImGui::PopStyleVar();ImGui::PopStyleColor();
+    ImGui::End();ImGui::PopStyleVar();
 }
 
 TankLightingConsole::Feedback TankLightingConsole::ConsumeFeedback(){

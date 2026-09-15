@@ -39,6 +39,7 @@ public:
 private:
     Phase phase_=Phase::In;
     float alpha_=1.f;
-    float outDuration_=.42f,inDuration_=.62f;
+    // 場面転換を認識できる余白を持たせ、切替直後の一瞬の露出も防ぐ。
+    float outDuration_=.95f,inDuration_=1.15f;
 };
 }

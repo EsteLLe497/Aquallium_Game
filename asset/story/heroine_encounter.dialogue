@@ -1,9 +1,9 @@
 # layer|speaker|expression|event|text
-# layer: still=イベントスチル / portrait=右側の立ち絵
+# layer: portrait=右側の上半身立ち絵
 # speaker: 渚生または少女を名前欄へ表示。空欄は地の文。
 # expression: girlフォルダ内のPNG名。none は現在の画像を維持。
 # event: fail_emergency は非常口ミッションに×、none は変更なし。
-still||none|none|少女が、水槽をぼーっと眺めながら立っている。
+portrait||normal|none|少女が、水槽をぼーっと眺めながら立っている。
 portrait|少女|kira|none|……。
 portrait|渚生|none|none|「あの……」
 portrait|少女|ase|none|っ……！

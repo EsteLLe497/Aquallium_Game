@@ -21,21 +21,7 @@ public:
   };
 
   void Reset();
-  void BeginExtendedForQa(AquariumSettings& settings) {
-    extension_=30;settings.archExtension=extension_;
-    BeginRevealForQa(settings);
-  }
   void MarkComplete() { phase_ = Phase::Complete; }
-  void BeginRevealForQa(const AquariumSettings &settings) {
-    phase_ = Phase::Reveal;
-    clock_ = 0;
-    anchor_ = {settings.cameraPositionX, settings.cameraPositionY,
-               settings.cameraPositionZ};
-    anchorYaw_ = settings.cameraYaw;
-    anchorPitch_ = settings.cameraPitch;
-    havePreviousZ_ = true;
-    previousZ_ = settings.cameraPositionZ;
-  }
   void Update(float deltaTime, bool eligible, bool movingTowardEntrance,
               bool dialogueActive, AquariumSettings &settings);
   void Draw() const;

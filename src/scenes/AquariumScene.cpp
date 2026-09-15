@@ -10,18 +10,15 @@
 
 #include "../framework/input.h"
 #include "../player/InteractionUI.h"
+#include "../ui/AquariumUi.h"
 #include "../generated/GameLayoutV3Generated.h"
 #include "../generated/ReceptionLobbyGenerated.h"
 #include "../generated/JellyBasementGenerated.h"
 
 #include <algorithm>
 #include <cmath>
-#include <cwchar>
 #include <stdexcept>
-#include <span>
 #include <string>
-#include <fstream>
-#include <vector>
 #include <utility>
 #include <windows.h>
 
@@ -134,291 +131,6 @@ DirectX::XMFLOAT3 EvaluateUnderwaterArchPoint(float t)
     return {48.0f * t, kStageFloorOffset - 4.70f * smooth, 0.0f};
 }
 
-#if defined(_DEBUG)
-void ValidateGameLayoutV3Traversal(const physics::CollisionWorld& world)
-{
-    using DirectX::XMFLOAT3;
-    const physics::CharacterCapsule capsule{};
-    std::ofstream report("game_layout_v3_traversal.log", std::ios::trunc);
-    report << "Game layout V3 capsule traversal\n";
-
-    const auto validateRoute = [&world, &capsule, &report](
-        const char* routeName,
-        const XMFLOAT3& startFoot,
-        const std::vector<XMFLOAT3>& waypoints)
-    {
-        physics::CharacterState character{
-            {startFoot.x, startFoot.y + capsule.eyeHeight, startFoot.z}};
-        for (const XMFLOAT3& target : waypoints)
-        {
-            int stagnantSteps = 0;
-            bool reached = false;
-            for (int iteration = 0; iteration < 1800; ++iteration)
-            {
-                const float dx = target.x - character.eyePosition.x;
-                const float dz = target.z - character.eyePosition.z;
-                const float distance = std::sqrt(dx * dx + dz * dz);
-                const float footY = character.eyePosition.y - capsule.eyeHeight;
-                if (distance < 0.12f && std::abs(footY - target.y) < 0.18f)
-                {
-                    reached = true;
-                    break;
-                }
-                const float stepLength = std::min(distance, 0.075f);
-                const XMFLOAT3 before = character.eyePosition;
-                world.MoveCharacter(
-                    character,
-                    {dx / std::max(distance, 0.001f) * stepLength,
-                     0.0f,
-                     dz / std::max(distance, 0.001f) * stepLength},
-                    capsule);
-                const float movedX = character.eyePosition.x - before.x;
-                const float movedZ = character.eyePosition.z - before.z;
-                if (movedX * movedX + movedZ * movedZ < 1.0e-8f)
-                {
-                    ++stagnantSteps;
-                }
-                else
-                {
-                    stagnantSteps = 0;
-                }
-                if (stagnantSteps > 32)
-                {
-                    break;
-                }
-            }
-            if (!reached)
-            {
-                report << "BLOCKED " << routeName << " target=("
-                       << target.x << ", " << target.y << ", " << target.z
-                       << ") actual=(" << character.eyePosition.x << ", "
-                       << character.eyePosition.y - capsule.eyeHeight << ", "
-                       << character.eyePosition.z << ") activePath="
-                       << character.activePath << " segment="
-                       << character.activeSegment << "\n";
-                const float probeDistance = std::sqrt(
-                    (target.x - character.eyePosition.x) *
-                        (target.x - character.eyePosition.x) +
-                    (target.z - character.eyePosition.z) *
-                        (target.z - character.eyePosition.z));
-                const float probeX = character.eyePosition.x +
-                    (target.x - character.eyePosition.x) /
-                        std::max(probeDistance, 0.001f) * 0.075f;
-                const float probeZ = character.eyePosition.z +
-                    (target.z - character.eyePosition.z) /
-                        std::max(probeDistance, 0.001f) * 0.075f;
-                const float feet = character.eyePosition.y - capsule.eyeHeight;
-                const float head = feet + capsule.height;
-                for (const auto& box : world.Boxes())
-                {
-                    const float nearestX = std::clamp(
-                        probeX, box.minimum.x, box.maximum.x);
-                    const float nearestZ = std::clamp(
-                        probeZ, box.minimum.z, box.maximum.z);
-                    const float ox = probeX - nearestX;
-                    const float oz = probeZ - nearestZ;
-                    if (head > box.minimum.y && feet < box.maximum.y &&
-                        ox * ox + oz * oz < capsule.radius * capsule.radius)
-                    {
-                        report << "  overlap box tag="
-                               << static_cast<int>(box.tag) << " min=("
-                               << box.minimum.x << ", " << box.minimum.y
-                               << ", " << box.minimum.z << ") max=("
-                               << box.maximum.x << ", " << box.maximum.y
-                               << ", " << box.maximum.z << ")\n";
-                    }
-                }
-                for (const auto& floor : world.WalkableRects())
-                {
-                    if (probeX >= floor.minimumX && probeX <= floor.maximumX &&
-                        probeZ >= floor.minimumZ && probeZ <= floor.maximumZ)
-                    {
-                        report << "  floor y=" << floor.floorY << " bounds=("
-                               << floor.minimumX << ", " << floor.maximumX
-                               << ", " << floor.minimumZ << ", "
-                               << floor.maximumZ << ")\n";
-                    }
-                }
-                report.flush();
-                throw std::runtime_error(
-                    std::string("Game layout V3 traversal blocked on ") +
-                    routeName + " near (" +
-                    std::to_string(character.eyePosition.x) + ", " +
-                    std::to_string(character.eyePosition.y - capsule.eyeHeight) + ", " +
-                    std::to_string(character.eyePosition.z) + ").");
-            }
-            report << "PASS " << routeName << " target=("
-                   << target.x << ", " << target.y << ", " << target.z
-                   << ") actual=(" << character.eyePosition.x << ", "
-                   << character.eyePosition.y - capsule.eyeHeight << ", "
-                   << character.eyePosition.z << ")\n";
-        }
-    };
-
-    std::vector<XMFLOAT3> mainRoute{
-        {0.0f, -2.25f, -10.8f}, {0.0f, -2.25f, -5.0f},
-        {-10.5f, -2.25f, 0.8f}, {-13.6f, -2.25f, 1.8f},
-        {-14.0f, -2.25f, 8.0f}, {-18.0f, -2.25f, 8.0f},
-        {-23.6f, -2.25f, 8.0f}};
-    const auto appendPath = [](std::vector<XMFLOAT3>& route,
-                               const game_layout_v3::PathSpec& path)
-    {
-        for (std::size_t index = 0; index < path.count; index += 2)
-        {
-            const auto& point = path.points[index];
-            route.push_back({point.x, point.y, point.z});
-        }
-        const auto& end = path.points[path.count - 1];
-        route.push_back({end.x, end.y, end.z});
-    };
-    appendPath(mainRoute, game_layout_v3::kPaths[0]);
-    mainRoute.insert(mainRoute.end(), {
-        {-19.5f, -6.95f, -15.0f}, {-18.5f, -6.95f, -14.0f},
-        {-14.8f, -6.95f, -13.8f}, {-11.5f, -6.95f, -13.8f},
-        {-7.0f, -6.95f, -14.0f}, {-5.0f, -6.95f, -15.0f},
-        {0.0f, -6.95f, -15.0f},
-        {15.5f, -6.95f, -15.0f}, {17.6f, -6.95f, -12.0f}});
-    appendPath(mainRoute, game_layout_v3::kPaths[1]);
-    mainRoute.insert(mainRoute.end(), {
-        {16.0f, -2.25f, -19.0f}, {8.0f, -2.25f, -18.0f},
-        {6.5f, -2.25f, -18.0f}});
-    validateRoute("main route", {0.0f, -2.25f, -18.0f}, mainRoute);
-
-    std::vector<XMFLOAT3> upperRoute{
-        {13.8f, -2.25f, -8.4f}};
-    appendPath(upperRoute, game_layout_v3::kPaths[2]);
-    upperRoute.push_back({37.8f, 0.45f, 14.0f});
-    appendPath(upperRoute, game_layout_v3::kPaths[3]);
-    upperRoute.insert(upperRoute.end(), {
-        {15.3f, 3.15f, -7.0f}, {13.0f, 3.15f, -7.0f},
-        {13.0f, 3.15f, 0.0f}, {0.0f, 3.15f, 0.0f}});
-    // Begin on the public hall floor, clear of the start bench. The previous
-    // probe started inside the bench collider and falsely reported R1 blocked.
-    validateRoute("upper route", {10.0f, -2.25f, -6.6f}, upperRoute);
-    report << "PASS all routes\n";
-}
-
-void ValidateReceptionLobbyTraversal(const physics::CollisionWorld& sourceWorld)
-{
-    auto world=sourceWorld;
-    player::TerraceDoor testDoor;
-    const physics::CharacterCapsule doorCapsule{};
-    physics::CharacterState closedProbe{{0,3.25f+doorCapsule.eyeHeight,1.0f}};
-    for(int i=0;i<80;++i) world.MoveCharacter(closedProbe,{0,0,-.05f},doorCapsule);
-    if(closedProbe.eyePosition.z<.30f) throw std::runtime_error("Closed terrace door leaked.");
-    if(!testDoor.Select({{0,5.14f,2},{0,0,-1}}))
-        throw std::runtime_error("Terrace selection failed.");
-    physics::CharacterState lockedProbe{{20,5.14f,5.5f}};
-    for(int i=0;i<80;++i) world.MoveCharacter(lockedProbe,{.05f,0,0},doorCapsule);
-    if(lockedProbe.eyePosition.x>20.65f) throw std::runtime_error("Locked office door leaked.");
-    std::ofstream report("reception_traversal.log", std::ios::trunc);
-    using DirectX::XMFLOAT3;
-    const physics::CharacterCapsule capsule{};
-    const auto traverse = [&](const char* routeName,
-                              physics::CharacterState& character,
-                              std::span<const XMFLOAT3> waypoints)
-    {
-        for (const XMFLOAT3& target : waypoints)
-        {
-            report << routeName << " target " << target.x << ", " << target.z << std::endl;
-            bool reached = false;
-            for (int iteration = 0; iteration < 1400; ++iteration)
-            {
-                const float dx = target.x - character.eyePosition.x;
-                const float dz = target.z - character.eyePosition.z;
-                const float distance = std::sqrt(dx * dx + dz * dz);
-                if (distance < 0.10f)
-                {
-                    reached = true;
-                    break;
-                }
-                const float step = std::min(distance, 0.055f);
-                world.MoveCharacter(
-                    character,
-                    {dx / std::max(distance, 0.001f) * step, 0.0f,
-                     dz / std::max(distance, 0.001f) * step},
-                    capsule);
-            }
-            if (!reached)
-            {
-                report << "BLOCKED " << character.eyePosition.x << ", " << character.eyePosition.y << ", " << character.eyePosition.z << std::endl;
-                throw std::runtime_error(
-                    std::string(routeName) + " traversal blocked near (" +
-                    std::to_string(character.eyePosition.x) + ", " +
-                    std::to_string(character.eyePosition.z) + ").");
-            }
-        }
-    };
-
-    physics::CharacterState galleryCharacter{
-        {0.0f, kStageFloorOffset + capsule.eyeHeight, -7.20f}};
-    std::vector<XMFLOAT3> galleryRoute{
-        XMFLOAT3{-1.30f, kStageFloorOffset, -4.0f},
-        XMFLOAT3{-1.30f, kStageFloorOffset, 0.5f},
-        XMFLOAT3{0.0f, kStageFloorOffset, 4.0f},
-        XMFLOAT3{-10.0f, kStageFloorOffset, 7.55f},
-        XMFLOAT3{-10.0f, kStageFloorOffset, 12.0f},
-        XMFLOAT3{-10.0f, kStageFloorOffset, 17.4f},
-        XMFLOAT3{-10.0f, kStageFloorOffset, 19.0f},
-        XMFLOAT3{-10.05f, kStageFloorOffset, 24.5f}};
-    for (const reception_lobby::PathPoint& point :
-         reception_lobby::kPath1Points)
-    {
-        galleryRoute.push_back({point.x, point.y, point.z});
-    }
-    galleryRoute.insert(galleryRoute.end(), {
-        {-10.05f, -6.95f, 74.2f}, {-10.05f, -6.95f, 78.8f},
-        {-7.75f, -6.95f, 81.4f}, {-7.75f, -6.95f, 86.2f},
-        {-10.05f, -6.95f, 88.2f}, {-10.05f, -6.95f, 92.0f},
-        {-16.8f, -6.95f, 94.0f}, {-10.05f, -6.95f, 92.0f},
-        {-3.3f, -6.95f, 94.0f}});
-    traverse("Reception-to-underwater-arch", galleryCharacter, galleryRoute);
-    const float archFootY = galleryCharacter.eyePosition.y - capsule.eyeHeight;
-    if (std::abs(archFootY - (kStageFloorOffset - 4.70f)) > 0.08f)
-    {
-        throw std::runtime_error(
-            "Underwater-arch traversal reached the exit at the wrong elevation.");
-    }
-
-    physics::CharacterState rampCharacter{
-        {0.0f, kStageFloorOffset + capsule.eyeHeight, -7.20f}};
-    std::vector<XMFLOAT3> rampRoute{
-        {-1.30f, kStageFloorOffset, -4.0f},
-        {-1.30f, kStageFloorOffset, 0.5f},
-        {0.0f, kStageFloorOffset, 1.0f},
-        {10.7f, kStageFloorOffset, 3.0f}};
-    for (const reception_lobby::PathPoint& point :
-         reception_lobby::kPath0Points)
-    {
-        rampRoute.push_back({point.x, point.y, point.z});
-    }
-    rampRoute.insert(rampRoute.end(), {
-        {-11.85f, 3.25f, 17.0f}, {-11.85f, 3.25f, 5.5f},
-        {-16.0f, 3.25f, 5.5f}, {-11.85f, 3.25f, 5.5f},
-        {0.0f, 3.25f, 5.5f}, {11.85f, 3.25f, 5.5f},
-        {20.0f, 3.25f, 5.5f}, {11.85f, 3.25f, 5.5f},
-        {11.85f, 3.25f, 10.5f}, {24.0f, 3.25f, 10.5f},
-        {11.85f, 3.25f, 10.5f}});
-    traverse("Reception-to-upper-H", rampCharacter, rampRoute);
-    const float upperFootY = rampCharacter.eyePosition.y - capsule.eyeHeight;
-    if (std::abs(upperFootY - 3.25f) > 0.08f)
-    {
-        throw std::runtime_error(
-            "Upper-H traversal reached the plan position at the wrong elevation.");
-    }
-    std::vector<XMFLOAT3> returnRoute{
-        {11.85f,3.25f,5.5f}, {-11.85f,3.25f,5.5f},
-        {-11.85f,3.25f,16.8f}};
-    for (auto it = reception_lobby::kPath0Points.rbegin();
-         it != reception_lobby::kPath0Points.rend(); ++it)
-        returnRoute.push_back({it->x,it->y,it->z});
-    returnRoute.push_back({9.5f,kStageFloorOffset,3.0f});
-    traverse("Upper-to-hall-return",rampCharacter,returnRoute);
-    if (std::abs(rampCharacter.eyePosition.y-capsule.eyeHeight-kStageFloorOffset)>.08f)
-        throw std::runtime_error("Ramp return elevation mismatch.");
-    report << "PASS reception, basement, ramp, all four upper rooms" << std::endl;
-}
-#endif
 }
 
 AquariumScene::AquariumScene(
@@ -471,7 +183,6 @@ AquariumScene::AquariumScene(
     eventDialogue_.Initialize(device,textureFolder);
     inWaterStill_.Load(device,textureFolder/"stile"/"inWater.jpeg");
     storyFlowEditor_.Initialize(device,storyFolder_,textureFolder);
-    endingSequence_.initialize(storyFolder_.parent_path()/"video"/"true_end.mp4");
     gameMenu_.Initialize(device,textureFolder);
     const auto soundFolder=std::filesystem::exists(std::filesystem::current_path()/"asset"/"sound"/"se"/"select.mp3")
         ? std::filesystem::current_path()/"asset"/"sound"/"se"
@@ -480,41 +191,11 @@ AquariumScene::AquariumScene(
     beachSoundPath_=soundFolder/"Beach.mp3";
     beachMorningSoundPath_=soundFolder/"beachMorning.mp3";
     backgroundMusic_.initialize(soundFolder.parent_path()/"BGM");
-#if defined(_DEBUG)
-    wchar_t validateLayout[2]{};
-    if (GetEnvironmentVariableW(
-            L"AQUARIUM_VALIDATE_LAYOUT", validateLayout,
-            ARRAYSIZE(validateLayout)) > 0 &&
-        validateLayout[0] == L'1')
-    {
-        ValidateGameLayoutV3Traversal(gameLayoutV3Collision_);
-        ValidateReceptionLobbyTraversal(receptionLobbyCollision_);
-    }
-#endif
-
-    // Keep automated performance captures reproducible without changing the
-    // normal player-facing startup route. Example: AQUARIUM_START_VIEW=6.
-    wchar_t startView[8]{};
     opening_.Load(shaderPath.parent_path().parent_path()/"asset"/"story");
     if(std::filesystem::exists(std::filesystem::current_path()/"asset"/"story"/"opening.camera"))
         opening_.Load(std::filesystem::current_path()/"asset"/"story");
-    if (GetEnvironmentVariableW(
-            L"AQUARIUM_START_VIEW", startView,
-            ARRAYSIZE(startView)) > 0)
-    {
-        switch (startView[0])
-        {
-        case L'3': SelectAquariumGreyboxView(); break;
-        case L'4': SelectUnderwaterArchView(); break;
-        case L'5': SelectJellyfishReverseValidationView(); break;
-        case L'6': SelectWatatsumiTankView(); break;
-        case L'7': SelectContinuousAquariumView(); break;
-        case L'8': SelectGameLayoutV3View(); break;
-        case L'9': SelectReceptionLobbyView(); break;
-        default: break;
-        }
-    }
-    else { SelectReceptionLobbyView(); gameMenu_.SetSlots(saveSystem_.Inspect());gameMenu_.ShowTitle(); }
+    SelectReceptionLobbyView();applyTitlePresentation();
+    gameMenu_.SetSlots(saveSystem_.Inspect());gameMenu_.ShowTitle();
     ResetPlayer();
 }
 
@@ -1098,7 +779,9 @@ void AquariumScene::Update(
     updateBackgroundMusic();
     backgroundMusic_.advance(frame.deltaTime);
     ProcessMenuRequest();
+#if defined(_DEBUG)
     if(!endingSequence_.active()&&input.WasPressed(VK_F3))storyFlowEditor_.Toggle();
+#endif
     if(storyFlowEditor_.Visible()){
         storyFlowEditor_.Update(frame.deltaTime);
         storyFlowEditor_.Draw();
@@ -1108,12 +791,16 @@ void AquariumScene::Update(
     if(UpdateSceneTransition(frame.deltaTime)) {
         updateBackgroundMusic();
         if(inWaterIntro_){DrawInWaterStill();eventDialogue_.Draw();}
+        // 水中から館内へ切り替えた直後も、起床演出の閉じたまぶたを維持する。
+        // 共通フェードより先に館内だけが露出する一フレームを作らない。
+        else if(opening_.ControlsCamera())opening_.Draw(editorOpen_,false);
         if(gameMenu_.IsTitle())gameMenu_.SetSlots(saveSystem_.Inspect());
         gameMenu_.Draw();
         DrawSceneFade();
         return;
     }
     if(gameMenu_.IsTitle()){
+        updateTitlePresentation();
         updateBackgroundMusic();
         gameMenu_.SetSlots(saveSystem_.Inspect());gameMenu_.Draw();
         if(!settings_.paused)simulationTime_+=frame.deltaTime;
@@ -1144,13 +831,6 @@ void AquariumScene::Update(
     }
     if(UpdateEmergencyExitTransition(frame.deltaTime))return;
     if(UpdateMorningBeachTransition(frame.deltaTime))return;
-    const bool beachToggleAllowed=(beachPreview_&&!beachStoryMode_)||(!beachPreview_&&!editorOpen_&&!gameMenu_.IsOpen()&&
-        !passwordLock_.Active()&&!facilityPasswordLock_.Active()&&!opening_.BlocksPlayer()&&
-        !heroineEncounter_.BlocksPlayer()&&!eventDialogue_.BlocksPlayer()&&
-        !terraceConversation_.BlocksPlayer()&&!archChase_.Active()&&
-        !powerOutage_.BlackedOut()&&!powerOutage_.BlocksPlayer()&&!tankLightingConsole_.Active());
-    if(beachToggleAllowed&&input.WasPressed('P'))ToggleBeachPreview(false);
-    else if(beachToggleAllowed&&input.WasPressed('O'))ToggleBeachPreview(true);
     if(beachPreview_){
         const bool beachAdvance=input.WasPressed(VK_LBUTTON)||input.WasPressed('F');
         UpdateMorningAmbience(frame.deltaTime);
@@ -1191,15 +871,17 @@ void AquariumScene::Update(
             }
             if(beachStayDialoguePendingAftermath_&&!eventDialogue_.Active()){
                 beachStayDialoguePendingAftermath_=false;
-                actuallyMusicStarted_=false;normalEndingMusic_=false;
-                soundEffects_.Stop("beach");StopMorningAmbience();
-                // 選択直後にエンドカードへ飛ばさず、現実と死の世界の間に残る後日談を挟む。
-                beachStayAftermathPendingEnding_=
-                    eventDialogue_.Start(storyFolder_/"beach_stay_aftermath.dialogue",false);
+                actuallyMusicStarted_=false;
+                // どちらの結末も同じ生還演出から始め、記憶の残り方で差を描く。
+                BeginMorningBeachTransition();
             }
             if(beachStayAftermathPendingEnding_&&!eventDialogue_.Active()){
                 beachStayAftermathPendingEnding_=false;
                 endingSequence_.startNormalEnd();
+            }
+            if(trueEpiloguePendingEnding_&&!eventDialogue_.Active()){
+                trueEpiloguePendingEnding_=false;
+                endingSequence_.startTrueEnd();
             }
             if(beachLeaveDialoguePendingTransition_&&!eventDialogue_.Active()){
                 beachLeaveDialoguePendingTransition_=false;
@@ -1258,59 +940,6 @@ void AquariumScene::Update(
     // 1フレームだけ反応する操作
     // 数字キーは通常時だけQA用ビュー切替に使う。パスワード入力中まで
     // ルート切替へ流すと、124を打っただけで別シーンへ飛んでしまう。
-    const bool allowDebugViewSwitch=!editorOpen_&&!passwordLock_.Active()&&!facilityPasswordLock_.Active()&&
-        !gameMenu_.IsOpen()&&!opening_.BlocksPlayer()&&
-        !heroineEncounter_.BlocksPlayer()&&!eventDialogue_.BlocksPlayer()&&
-        !terraceConversation_.BlocksPlayer()&&!archChase_.Active()&&
-        !powerOutage_.BlackedOut()&&!powerOutage_.BlocksPlayer()&&
-        !tankLightingConsole_.Active();
-    if(allowDebugViewSwitch) {
-    if (input.WasPressed(VK_SPACE))
-    {
-        settings_.paused = !settings_.paused;
-    }
-    if (input.WasPressed('R'))
-    {
-        ResetSettings();
-    }
-    if (input.WasPressed('1'))
-    {
-        SelectUnderwaterView();
-    }
-    if (input.WasPressed('2'))
-    {
-        SelectStageGlassView();
-    }
-    if (input.WasPressed('3'))
-    {
-        SelectAquariumGreyboxView();
-    }
-    if (input.WasPressed('4'))
-    {
-        SelectUnderwaterArchView();
-    }
-    if (input.WasPressed('5'))
-    {
-        SelectJellyfishReverseValidationView();
-    }
-    if (input.WasPressed('6'))
-    {
-        SelectWatatsumiTankView();
-    }
-    if (input.WasPressed('7'))
-    {
-        SelectContinuousAquariumView();
-    }
-    if (input.WasPressed('8'))
-    {
-        SelectGameLayoutV3View();
-    }
-    if (input.WasPressed('9'))
-    {
-        SelectReceptionLobbyView();
-    }
-
-    }
     // プレイヤー入力とライティング調整を各専用クラスへ委譲する。
     if(!settings_.receptionLobbyMode) { opening_.Stop();settings_.wakeBlur=0; }
     const bool passwordWasActive=passwordLock_.Active()||facilityPasswordLock_.Active();
@@ -1508,7 +1137,7 @@ void AquariumScene::Update(
 
 void AquariumScene::StartNewGame(){
     endingSequence_.reset();
-    actuallyMusicStarted_=normalEndingMusic_=false;
+    actuallyMusicStarted_=false;
     beachPreview_=beachMorning_=beachStoryMode_=false;
     beachArrivalLook_=false;beachArrivalLookTime_=0.f;
     beachArrivalDialoguePendingSit_=beachSitTransition_=beachSeated_=false;
@@ -1518,7 +1147,8 @@ void AquariumScene::StartNewGame(){
     beachLeaveDialoguePendingTransition_=false;
     morningBeachTransition_=morningBeachEntered_=morningWake_=false;
     morningBeachTransitionTime_=morningWakeTime_=morningWakeBlur_=morningWakeBlink_=0.f;
-    morningWakeDialoguePendingStand_=morningStandTransition_=false;morningStandTime_=0.f;
+    morningWakeDialoguePendingStand_=trueEpiloguePendingEnding_=false;
+    morningStandTransition_=false;morningStandTime_=0.f;
     beachSitTransitionTime_=0.f;
     emergencyExitTransition_=emergencyExitBeachEntered_=false;emergencyExitTransitionTime_=0;
     settings_.emergencyExitDoorOpen=0.f;
@@ -1557,7 +1187,7 @@ player::SaveData AquariumScene::CaptureSave() const{
 
 void AquariumScene::ApplySave(const player::SaveData& d){
     endingSequence_.reset();
-    actuallyMusicStarted_=normalEndingMusic_=false;
+    actuallyMusicStarted_=false;
     beachPreview_=beachMorning_=beachStoryMode_=false;
     beachArrivalLook_=false;beachArrivalLookTime_=0.f;
     beachArrivalDialoguePendingSit_=beachSitTransition_=beachSeated_=false;
@@ -1567,7 +1197,8 @@ void AquariumScene::ApplySave(const player::SaveData& d){
     beachLeaveDialoguePendingTransition_=false;
     morningBeachTransition_=morningBeachEntered_=morningWake_=false;
     morningBeachTransitionTime_=morningWakeTime_=morningWakeBlur_=morningWakeBlink_=0.f;
-    morningWakeDialoguePendingStand_=morningStandTransition_=false;morningStandTime_=0.f;
+    morningWakeDialoguePendingStand_=trueEpiloguePendingEnding_=false;
+    morningStandTransition_=false;morningStandTime_=0.f;
     beachSitTransitionTime_=0.f;
     emergencyExitTransition_=emergencyExitBeachEntered_=false;emergencyExitTransitionTime_=0;
     settings_.emergencyExitDoorOpen=0.f;
@@ -1643,10 +1274,11 @@ void AquariumScene::ApplySceneTransition() {
         if(saveSystem_.Load(request.slot,data))ApplySave(data);
     } else if(request.type==T::ReturnTitle) {
         endingSequence_.reset();
-        actuallyMusicStarted_=normalEndingMusic_=false;
+        actuallyMusicStarted_=false;
         opening_.Stop();archChase_.Reset();soundEffects_.StopGenerated();
         soundEffects_.Stop("beach");soundEffects_.Stop("transition");soundEffects_.Stop("inwater");
         StopMorningAmbience();inWaterIntro_=inWaterIntroDialoguePending_=inWaterIntroTransition_=false;
+        applyTitlePresentation();
         gameMenu_.ShowTitle();
     } else if(request.type==T::Quit) {
         soundEffects_.StopGenerated();soundEffects_.Stop("beach");
@@ -1683,7 +1315,10 @@ void AquariumScene::DrawInWaterStill() const {
 void AquariumScene::FinishInWaterIntro() {
     inWaterIntro_=inWaterIntroDialoguePending_=inWaterIntroTransition_=false;
     soundEffects_.Stop("inwater");eventDialogue_.Reset();
-    opening_.Start();ResetPlayer();
+    opening_.Start();
+    // 暗転の頂点で起床カメラと閉じたまぶたを適用してから館内へ切り替える。
+    opening_.Tick(0.f,false,false,settings_);
+    ResetPlayer();
 }
 
 void AquariumScene::BuildBeachCollision()
@@ -1699,21 +1334,23 @@ void AquariumScene::BuildBeachCollision()
 void AquariumScene::DrawBeachChoice()
 {
     const ImVec2 screen=ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowPos({screen.x*.5f,screen.y*.52f},ImGuiCond_Always,{.5f,.5f});
-    ImGui::SetNextWindowSize({520,230});
-    ImGui::SetNextWindowBgAlpha(.92f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{34,28});
+    aquariumUi::drawBackdrop(screen,128);
+    aquariumUi::PanelStyle style;
+    ImGui::SetNextWindowPos({screen.x*.5f,screen.y*.54f},ImGuiCond_Always,{.5f,.5f});
+    ImGui::SetNextWindowSize({600,278});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{38,30});
     ImGui::Begin("##beach_branch",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoSavedSettings);
+    aquariumUi::drawPanelAccent();
     ImGui::TextDisabled("選択してください");ImGui::Dummy({0,12});
-    const ImVec2 buttonSize{ImGui::GetContentRegionAvail().x,54};
-    if(ImGui::Button("凪沙の手を取る",buttonSize)){
+    const ImVec2 buttonSize{ImGui::GetContentRegionAvail().x,50};
+    if(aquariumUi::button("凪沙の手を取る",buttonSize,false,{.08f,.5f})){
         beachChoiceActive_=false;beachBranch_=BeachBranch::Stay;
         soundEffects_.Play("select");
         beachStayDialoguePendingAftermath_=
             eventDialogue_.Start(storyFolder_/"beach_stay.dialogue",false);
     }
-    ImGui::Dummy({0,8});
-    if(ImGui::Button("凪沙に別れを告げる",buttonSize)){
+    ImGui::Dummy({0,9});
+    if(aquariumUi::button("凪沙に別れを告げる",buttonSize,false,{.08f,.5f})){
         beachChoiceActive_=false;beachBranch_=BeachBranch::Leave;
         soundEffects_.Play("select");
         beachLeaveDialoguePendingTransition_=
@@ -1721,42 +1358,17 @@ void AquariumScene::DrawBeachChoice()
     }
     ImGui::End();ImGui::PopStyleVar();
 
-    ImGui::SetNextWindowPos({screen.x-264,screen.y-86},ImGuiCond_Always);
-    ImGui::SetNextWindowSize({244,62});ImGui::SetNextWindowBgAlpha(.78f);
+    ImGui::SetNextWindowPos({screen.x-280,screen.y-82},ImGuiCond_Always);
+    ImGui::SetNextWindowSize({260,56});
     ImGui::Begin("##beach_save_load",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoSavedSettings);
-    if(ImGui::Button("セーブ",{104,38})){
+    if(aquariumUi::button("セーブ",{112,36})){
         gameMenu_.SetSlots(saveSystem_.Inspect());gameMenu_.OpenSavePage();
     }
     ImGui::SameLine();
-    if(ImGui::Button("ロード",{104,38})){
+    if(aquariumUi::button("ロード",{112,36})){
         gameMenu_.SetSlots(saveSystem_.Inspect());gameMenu_.OpenLoadPage();
     }
     ImGui::End();
-}
-
-void AquariumScene::ToggleBeachPreview(bool morning)
-{
-    if(beachPreview_&&beachMorning_==morning){
-        beachPreview_=false;
-        soundEffects_.Stop("beach");StopMorningAmbience();
-        settings_.cameraPositionX=beachReturnEye_.x;
-        settings_.cameraPositionY=beachReturnEye_.y;
-        settings_.cameraPositionZ=beachReturnEye_.z;
-        settings_.cameraYaw=beachReturnYaw_;settings_.cameraPitch=beachReturnPitch_;
-        return;
-    }
-    if(beachPreview_){beachMorning_=morning;playBeachAmbience(morning);return;}
-    beachReturnEye_={settings_.cameraPositionX,settings_.cameraPositionY,settings_.cameraPositionZ};
-    beachReturnYaw_=settings_.cameraYaw;beachReturnPitch_=settings_.cameraPitch;
-    beachPreview_=true;
-    beachMorning_=morning;
-    beachStoryMode_=false;
-    playBeachAmbience(morning);
-    beachPlayer_.Reset({3.8f,.06f+beachPlayer_.Capsule().eyeHeight,0.f},-.68f,-.035f);
-    settings_.cameraPositionX=beachPlayer_.EyePosition().x;
-    settings_.cameraPositionY=beachPlayer_.EyePosition().y;
-    settings_.cameraPositionZ=beachPlayer_.EyePosition().z;
-    settings_.cameraYaw=beachPlayer_.Yaw();settings_.cameraPitch=beachPlayer_.Pitch();
 }
 
 void AquariumScene::BeginEmergencyExitTransition()
@@ -1772,7 +1384,7 @@ void AquariumScene::BeginEmergencyExitTransition()
 void AquariumScene::EnterStoryBeach()
 {
     endingSequence_.reset();
-    actuallyMusicStarted_=normalEndingMusic_=false;
+    actuallyMusicStarted_=false;
     beachPreview_=true;beachMorning_=false;beachStoryMode_=true;
     beachArrivalLook_=true;beachArrivalLookTime_=0.f;
     beachArrivalDialoguePendingSit_=beachSitTransition_=beachSeated_=false;
@@ -1782,7 +1394,8 @@ void AquariumScene::EnterStoryBeach()
     beachLeaveDialoguePendingTransition_=false;
     morningBeachTransition_=morningBeachEntered_=morningWake_=false;
     morningBeachTransitionTime_=morningWakeTime_=morningWakeBlur_=morningWakeBlink_=0.f;
-    morningWakeDialoguePendingStand_=morningStandTransition_=false;morningStandTime_=0.f;
+    morningWakeDialoguePendingStand_=trueEpiloguePendingEnding_=false;
+    morningStandTransition_=false;morningStandTime_=0.f;
     beachSitTransitionTime_=0.f;
     StopMorningAmbience();
     playBeachAmbience(false);
@@ -1817,7 +1430,8 @@ void AquariumScene::BeginMorningBeachTransition()
     morningBeachTransition_=true;morningBeachEntered_=false;
     morningBeachTransitionTime_=0.f;
     morningWakeBlur_=morningWakeBlink_=0.f;
-    morningWakeDialoguePendingStand_=morningStandTransition_=false;morningStandTime_=0.f;
+    morningWakeDialoguePendingStand_=trueEpiloguePendingEnding_=false;
+    morningStandTransition_=false;morningStandTime_=0.f;
     actuallyMusicStarted_=false;
     StopMorningAmbience();
     soundEffects_.Play("transition");
@@ -1872,8 +1486,14 @@ void AquariumScene::UpdateMorningWake(float deltaTime)
     beachPlayer_.SetControlledPose(eye,-.78f+.10f*rise,1.54f-1.575f*rise);
     if(morningWakeTime_>=5.05f){
         morningWake_=false;morningWakeBlur_=morningWakeBlink_=0.f;
-        morningWakeDialoguePendingStand_=true;
-        eventDialogue_.Start(storyFolder_/"beach_morning_wake.dialogue",false);
+        if(beachBranch_==BeachBranch::Stay){
+            // ノーマルも同じ浜辺で目覚めるが、その後の記憶だけが朧げになる。
+            beachStayAftermathPendingEnding_=
+                eventDialogue_.Start(storyFolder_/"beach_stay_aftermath.dialogue",false);
+        }else{
+            morningWakeDialoguePendingStand_=true;
+            eventDialogue_.Start(storyFolder_/"beach_morning_wake.dialogue",false);
+        }
     }
 }
 
@@ -1889,10 +1509,10 @@ void AquariumScene::UpdateMorningStand(float deltaTime)
     if(morningStandTime_>=2.20f){
         morningStandTransition_=false;morningStandTime_=0.f;beachSeated_=false;
         beachPlayer_.Reset({2.60f,standingY,.38f},-.68f,-.035f);
-        BeginMorningAmbienceFadeOut();
         if(beachStoryMode_&&beachBranch_==BeachBranch::Leave){
-            soundEffects_.Stop("beach");StopMorningAmbience();
-            endingSequence_.startTrueEnd();
+            // 朝の波音を残したまま、退院後の再訪へつなぐ。
+            trueEpiloguePendingEnding_=
+                eventDialogue_.Start(storyFolder_/"beach_true_epilogue.dialogue",false);
         }
     }
 }
@@ -1914,7 +1534,6 @@ void AquariumScene::updateBackgroundMusic()
     using Track=audio::BackgroundMusic::Track;
     Track track=Track::Aquarium;
     if(gameMenu_.IsTitle())track=Track::Title;
-    else if(normalEndingMusic_)track=Track::Ending;
     else if(actuallyMusicStarted_)track=Track::Actually;
     else if(archChase_.PlayerCanRun())track=Track::Chase;
     else if(inWaterIntro_||beachPreview_||archChase_.Active()||archChase_.GameOver()||
@@ -1929,6 +1548,29 @@ void AquariumScene::playBeachAmbience(bool morning)
 {
     soundEffects_.Stop("beach");
     soundEffects_.PlayFile("beach",morning?beachMorningSoundPath_:beachSoundPath_,true);
+}
+
+// =========================================================
+// タイトル専用の水槽内カメラへ切替
+// =========================================================
+void AquariumScene::applyTitlePresentation()
+{
+    beachPreview_=beachMorning_=beachStoryMode_=false;
+    // 大水槽の砂面近くから、水面の三灯と泳ぐ魚影を見上げる。
+    settings_.cameraPositionX=-.65f;
+    settings_.cameraPositionY=-.55f;
+    settings_.cameraPositionZ=12.65f;
+    settings_.cameraYaw=-.16f;
+    settings_.cameraPitch=.78f;
+}
+
+// =========================================================
+// タイトル背景の緩やかな視線移動
+// =========================================================
+void AquariumScene::updateTitlePresentation()
+{
+    settings_.cameraYaw=-.16f+std::sin(simulationTime_*.075f)*.055f;
+    settings_.cameraPitch=.78f+std::sin(simulationTime_*.052f+1.2f)*.025f;
 }
 
 void AquariumScene::StartMorningAmbience()
@@ -2057,17 +1699,6 @@ framework::SceneDiagnostics AquariumScene::GetDiagnostics() const
     return diagnostics;
 }
 
-void AquariumScene::ResetSettings()
-{
-    const lighting::LocalLightingRig localLighting = settings_.localLighting;
-    const lighting::HeroTankLightingRig heroTankLighting =
-        settings_.heroTankLighting;
-    settings_ = {};
-    settings_.localLighting = localLighting;
-    settings_.heroTankLighting = heroTankLighting;
-    ResetPlayer();
-}
-
 void AquariumScene::ResetPlayer()
 {
     playerManager_.Reset(
@@ -2087,186 +1718,6 @@ void AquariumScene::ApplyHeroTankLightColor(story::TankLightingConsole::Color co
     rig.alternateEnabled=color==Color::White;
     if(color==Color::White)rig.alternateColor=rig.whiteColor;
     else rig.alternateColor=rig.defaultColor;
-}
-
-void AquariumScene::SelectUnderwaterView()
-{
-    settings_.localLighting.spatialCullingEnabled = false;
-    settings_.viewMode = 0.0f;
-    settings_.stageMode = false;
-    settings_.greyboxMode = false;
-    settings_.underwaterArchMode = false;
-    settings_.watatsumiTankMode = false;
-    settings_.continuousMapMode = false;
-    settings_.gameLayoutV3Mode = false;
-    settings_.receptionLobbyMode = false;
-}
-
-void AquariumScene::SelectStageGlassView()
-{
-    settings_.localLighting.spatialCullingEnabled = false;
-    settings_.viewMode = 1.0f;
-    settings_.stageMode = true;
-    settings_.greyboxMode = false;
-    settings_.underwaterArchMode = false;
-    settings_.watatsumiTankMode = false;
-    settings_.continuousMapMode = false;
-    settings_.gameLayoutV3Mode = false;
-    settings_.receptionLobbyMode = false;
-    settings_.cameraPositionX = 0.0f;
-    settings_.cameraPositionY = -2.25f + playerManager_.Capsule().eyeHeight;
-    settings_.cameraPositionZ = -6.65f;
-    settings_.cameraYaw = 0.0f;
-    settings_.cameraPitch = -0.03f;
-    ResetPlayer();
-}
-
-void AquariumScene::SelectAquariumGreyboxView()
-{
-    settings_.localLighting.spatialCullingEnabled = false;
-    settings_.viewMode = 1.0f;
-    settings_.stageMode = true;
-    settings_.greyboxMode = true;
-    settings_.underwaterArchMode = false;
-    settings_.watatsumiTankMode = false;
-    settings_.continuousMapMode = false;
-    settings_.gameLayoutV3Mode = false;
-    settings_.receptionLobbyMode = false;
-    // Enter from the public doors and look through the lobby toward the
-    // Jellyfish Theater. The generated route runs along +X.
-    settings_.cameraPositionX = -16.2f;
-    settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-    settings_.cameraPositionZ = 0.0f;
-    settings_.cameraYaw = 1.57079633f;
-    settings_.cameraPitch = -0.04f;
-    ResetPlayer();
-}
-
-void AquariumScene::SelectUnderwaterArchView()
-{
-    settings_.localLighting.spatialCullingEnabled = false;
-    settings_.viewMode = 1.0f;
-    settings_.stageMode = true;
-    settings_.greyboxMode = true;
-    settings_.underwaterArchMode = true;
-    settings_.watatsumiTankMode = false;
-    settings_.continuousMapMode = false;
-    settings_.gameLayoutV3Mode = false;
-    settings_.receptionLobbyMode = false;
-    settings_.cameraPositionX = 0.85f;
-    settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-    settings_.cameraPositionZ = 0.0f;
-    settings_.cameraYaw = 1.57079633f;
-    settings_.cameraPitch = -0.055f;
-    ResetPlayer();
-}
-
-void AquariumScene::SelectJellyfishReverseValidationView()
-{
-    settings_.localLighting.spatialCullingEnabled = false;
-    settings_.viewMode = 1.0f;
-    settings_.stageMode = true;
-    settings_.greyboxMode = true;
-    settings_.underwaterArchMode = false;
-    settings_.watatsumiTankMode = false;
-    settings_.continuousMapMode = false;
-    settings_.gameLayoutV3Mode = false;
-    settings_.receptionLobbyMode = false;
-    settings_.cameraPositionX = 6.0f;
-    settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-    settings_.cameraPositionZ = -6.15f;
-    settings_.cameraYaw = 0.0f;
-    settings_.cameraPitch = -0.03f;
-    ResetPlayer();
-}
-
-void AquariumScene::SelectWatatsumiTankView()
-{
-    settings_.localLighting.spatialCullingEnabled = false;
-    settings_.viewMode = 1.0f;
-    settings_.stageMode = true;
-    settings_.greyboxMode = true;
-    settings_.underwaterArchMode = false;
-    settings_.watatsumiTankMode = true;
-    settings_.continuousMapMode = false;
-    settings_.gameLayoutV3Mode = false;
-    settings_.receptionLobbyMode = false;
-    // Offset toward the ramp side so the tank remains the hero while the
-    // lower-right wall portal is readable in the establishing shot.
-    settings_.cameraPositionX = -9.5f;
-    settings_.cameraPositionY = kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-    settings_.cameraPositionZ = -3.0f;
-    settings_.cameraYaw = 1.505f;
-    settings_.cameraPitch = -0.065f;
-    ResetPlayer();
-}
-
-void AquariumScene::SelectContinuousAquariumView()
-{
-    settings_.localLighting.spatialCullingEnabled = false;
-    settings_.viewMode = 1.0f;
-    settings_.stageMode = true;
-    settings_.greyboxMode = true;
-    settings_.underwaterArchMode = false;
-    settings_.watatsumiTankMode = false;
-    settings_.continuousMapMode = true;
-    settings_.gameLayoutV3Mode = false;
-    settings_.receptionLobbyMode = false;
-    settings_.cameraPositionX = -36.5f;
-    settings_.cameraPositionY =
-        kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-    settings_.cameraPositionZ = 0.0f;
-    settings_.cameraYaw = 1.57079633f;
-    settings_.cameraPitch = -0.035f;
-    ResetPlayer();
-}
-
-void AquariumScene::SelectGameLayoutV3View()
-{
-    settings_.localLighting.spatialCullingEnabled = false;
-    settings_.viewMode = 1.0f;
-    settings_.stageMode = true;
-    settings_.greyboxMode = true;
-    settings_.underwaterArchMode = false;
-    settings_.watatsumiTankMode = false;
-    settings_.continuousMapMode = false;
-    settings_.gameLayoutV3Mode = true;
-    settings_.receptionLobbyMode = false;
-
-    // Start beside the hero-tank bench. Runtime Z is mirrored by StageModel,
-    // so +Z looks from the public hall into the large aquarium window.
-    settings_.cameraPositionX = 0.0f;
-    settings_.cameraPositionY =
-        kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-    settings_.cameraPositionZ = -7.4f;
-    settings_.cameraYaw = 0.0f;
-    settings_.cameraPitch = -0.035f;
-
-    // Sparse, local fixtures: the tanks remain the primary light source while
-    // portal thresholds stay readable in the closed-aquarium darkness.
-    settings_.localLighting.lightCount = 4;
-    settings_.localLighting.lights[0] = {
-        {-5.2f, 4.6f, 4.8f}, 12.0f,
-        {0.10f, -1.0f, -0.08f}, 6.2f,
-        {0.10f, 0.38f, 0.92f}, 24.0f, 47.0f,
-        lighting::LocalLightType::Spot, true};
-    settings_.localLighting.lights[1] = {
-        {5.0f, 5.1f, 4.2f}, 12.0f,
-        {-0.12f, -1.0f, 0.02f}, 6.0f,
-        {0.16f, 0.45f, 1.0f}, 25.0f, 49.0f,
-        lighting::LocalLightType::Spot, true};
-    settings_.localLighting.lights[2] = {
-        {-22.0f, 1.8f, 7.8f}, 7.0f,
-        {0.0f, -1.0f, 0.0f}, 3.0f,
-        {0.08f, 0.28f, 0.65f}, 28.0f, 54.0f,
-        lighting::LocalLightType::Spot, true};
-    settings_.localLighting.lights[3] = {
-        {-13.0f, -1.0f, -15.0f}, 10.0f,
-        {0.0f, -1.0f, 0.0f}, 4.0f,
-        {0.18f, 0.30f, 0.92f}, 30.0f, 56.0f,
-        lighting::LocalLightType::Spot, true};
-    settings_.exposure = 1.05f;
-    ResetPlayer();
 }
 
 void AquariumScene::SelectReceptionLobbyView()
@@ -2307,301 +1758,7 @@ void AquariumScene::SelectReceptionLobbyView()
 
     ApplyReceptionHallLighting();
 
-    // Optional QA spawn; normal key-9 behaviour remains the reception start.
-    wchar_t startZone[16]{};
-    if (GetEnvironmentVariableW(
-            L"AQUARIUM_START_ZONE", startZone, ARRAYSIZE(startZone)) > 0 &&
-        std::wcscmp(startZone, L"JELLY") == 0)
-    {
-        settings_.cameraPositionX = -10.05f;
-        settings_.cameraPositionY =
-            -6.95f + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 74.2f;
-        settings_.cameraYaw = 0.0f;
-    }
-    else if (std::wcscmp(startZone, L"ENCOUNTER") == 0)
-    {
-        // 湾曲クラゲ室の入口。会話・表情・目的更新を短時間で検証する。
-        settings_.cameraPositionX = -10.05f;
-        settings_.cameraPositionY =
-            -6.95f + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 87.65f;
-        settings_.cameraYaw = 0.0f;
-        settings_.cameraPitch = -0.03f;
-        opening_.BeginEmergencySearchForQa();
-    }
-    else if (std::wcscmp(startZone, L"RAMP") == 0)
-    {
-        settings_.cameraPositionX = 18.0f;
-        settings_.cameraPositionY =
-            -2.25f + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 6.2f;
-        settings_.cameraYaw = 0.0f;
-        settings_.cameraPitch = -0.04f;
-    }
-    else if (std::wcscmp(startZone, L"ENTRANCE") == 0)
-    {
-        // QA framing keeps the full portal in view; normal key-9 gameplay
-        // still begins at the reception spawn configured above.
-        settings_.cameraPositionX = 5.0f;
-        settings_.cameraPositionY =
-            kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 3.0f;
-        settings_.cameraYaw = 1.57079633f;
-        settings_.cameraPitch = -0.03f;
-    }
-    else if (std::wcscmp(startZone, L"EXIT_READY") == 0)
-    {
-        // Deterministic story-transition review at the real emergency exit in
-        // the far end of the curved basement jellyfish room.
-        settings_.cameraPositionX = -0.72f;
-        settings_.cameraPositionY =
-            -6.95f + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 90.40f;
-        settings_.cameraYaw = DirectX::XM_PIDIV2;
-        settings_.cameraPitch = -0.02f;
-        opening_.RestoreProgress(true,false,true,true,true,true,true,true);
-    }
-    else if (std::wcscmp(startZone, L"BEACH_CHOICE") == 0)
-    {
-        // Deterministic review point for the story branch UI. This is never
-        // selected by normal gameplay and mirrors a loaded decision-point save.
-        beachPreview_=true;beachMorning_=false;beachStoryMode_=true;
-        beachArrivalLook_=beachArrivalDialoguePendingSit_=beachSitTransition_=false;
-        beachSeated_=true;beachSeatedDialoguePendingChoice_=false;
-        beachChoiceActive_=true;beachBranch_=BeachBranch::Undecided;
-        beachPlayer_.Reset({3.8f,.86f,.12f},-.74f,-.075f);
-        const auto eye=beachPlayer_.EyePosition();
-        settings_.cameraPositionX=eye.x;settings_.cameraPositionY=eye.y;settings_.cameraPositionZ=eye.z;
-        settings_.cameraYaw=beachPlayer_.Yaw();settings_.cameraPitch=beachPlayer_.Pitch();
-        playBeachAmbience(false);
-    }
-    else if (std::wcscmp(startZone, L"MORNING_WAKE") == 0)
-    {
-        // Deterministic review point for the washed-ashore wake-up camera.
-        beachPreview_=true;beachMorning_=true;beachStoryMode_=true;
-        beachArrivalLook_=beachArrivalDialoguePendingSit_=beachSitTransition_=false;
-        beachSeated_=true;beachChoiceActive_=false;beachBranch_=BeachBranch::Leave;
-        morningWake_=true;morningWakeTime_=0.f;morningWakeBlur_=morningWakeBlink_=1.f;
-        beachPlayer_.Reset({2.12f,.34f,.28f},-.78f,0.f);
-        beachPlayer_.SetControlledPose({2.12f,.34f,.28f},-.78f,1.54f);
-        const auto eye=beachPlayer_.EyePosition();
-        settings_.cameraPositionX=eye.x;settings_.cameraPositionY=eye.y;settings_.cameraPositionZ=eye.z;
-        settings_.cameraYaw=beachPlayer_.Yaw();settings_.cameraPitch=beachPlayer_.Pitch();
-        playBeachAmbience(true);
-        StartMorningAmbience();
-    }
-    else if (std::wcscmp(startZone, L"NORMAL_END") == 0)
-    {
-        // 分岐後のエンドカードだけを短時間で確認するQA起動。
-        normalEndingMusic_=false;
-        endingSequence_.startNormalEnd();
-    }
-    else if (std::wcscmp(startZone, L"TRUE_END") == 0)
-    {
-        // 動画未配置時の代替スタッフロールも同じ経路で確認する。
-        endingSequence_.startTrueEnd();
-    }
-    else if (std::wcscmp(startZone, L"RAMP_MID") == 0)
-    {
-        settings_.cameraPositionX = 18.0f;
-        settings_.cameraPositionY =
-            -2.25f + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 10.4f;
-        settings_.cameraYaw = 1.57079633f;
-        settings_.cameraPitch = -0.03f;
-    }
-    else if (std::wcscmp(startZone, L"TANK") == 0)
-    {
-        // Deterministic art-review spawn for the 1F hero composition. Keeping
-        // this behind an environment variable avoids changing normal gameplay
-        // while allowing water/glass/lighting regressions to be captured.
-        settings_.cameraPositionX = 0.0f;
-        settings_.cameraPositionY =
-            kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 2.35f;
-        settings_.cameraYaw = 0.0f;
-        settings_.cameraPitch = -0.04f;
-    }
-    else if (std::wcscmp(startZone, L"WALL_AUDIT") == 0)
-    {
-        // Blackout-side view of the gallery/vestibule height transition.
-        settings_.cameraPositionX = -10.05f;
-        settings_.cameraPositionY =
-            kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 17.72f;
-        settings_.cameraYaw = DirectX::XM_PI;
-        settings_.cameraPitch = -0.03f;
-    }
-    else if (std::wcscmp(startZone, L"ARCH_AUDIT") == 0)
-    {
-        // Wider connector looking back at the former open shoulders.
-        settings_.cameraPositionX = -10.05f;
-        settings_.cameraPositionY =
-            kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 21.05f;
-        settings_.cameraYaw = DirectX::XM_PI;
-        settings_.cameraPitch = -0.02f;
-    }
-    else if (std::wcscmp(startZone, L"UPPER_AUDIT") == 0)
-    {
-        // Looks across the former long seam opposite Management/Reef.
-        settings_.cameraPositionX = 11.80f;
-        settings_.cameraPositionY =
-            3.25f + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 9.10f;
-        settings_.cameraYaw = DirectX::XM_PI;
-        settings_.cameraPitch = -0.48f;
-    }
-    else if (std::wcscmp(startZone, L"WEST_GAP") == 0)
-    {
-        // Faces the former 0.70 m slit between the hall and gallery walls.
-        settings_.cameraPositionX = -9.72f;
-        settings_.cameraPositionY =
-            kStageFloorOffset + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 7.65f;
-        settings_.cameraYaw = -DirectX::XM_PIDIV2;
-        settings_.cameraPitch = -0.02f;
-    }
-    else if (std::wcscmp(startZone, L"UPPER") == 0)
-    {
-        // QA starts at the centre of the observation bridge.  Looking toward
-        // the tank makes floor continuity, both side arms and the dry reveal
-        // gap readable in one deterministic frame.
-        settings_.cameraPositionX = 0.00f;
-        settings_.cameraPositionY =
-            3.25f + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 4.20f;
-        settings_.cameraYaw = 0.0f;
-        settings_.cameraPitch = -0.16f;
-    }
-    else if (std::wcscmp(startZone, L"RAMP_EXIT") == 0)
-    {
-        // Last metres of the sloped path.  Automated capture can walk forward
-        // through the portal and prove the ramp-to-flat-floor hand-off.
-        settings_.cameraPositionX = -11.85f;
-        settings_.cameraPositionY =
-            3.25f + playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ = 17.3f;
-        settings_.cameraYaw = DirectX::XM_PI;
-        settings_.cameraPitch = -0.03f;
-    }
-    else if (std::wcscmp(startZone, L"DOLPHIN") == 0 ||
-             std::wcscmp(startZone, L"REEF") == 0 ||
-             std::wcscmp(startZone, L"CLUE") == 0)
-    {
-        const bool dolphin = std::wcscmp(startZone, L"DOLPHIN") == 0;
-        settings_.cameraPositionX = dolphin ? -19.25f : 26.0f;
-        settings_.cameraPositionZ = dolphin ? 4.0f : 12.2f;
-        settings_.cameraPositionY = 3.25f + playerManager_.Capsule().eyeHeight;
-        settings_.cameraYaw = dolphin ? 0.0f : DirectX::XM_PI;
-        settings_.cameraPitch = dolphin ? 0.0f : -0.43f;
-        if(!dolphin)opening_.BeginPowerMission();
-    }
-    else if (std::wcscmp(startZone,L"TERRACE")==0)
-    {
-        settings_.cameraPositionX=0;
-        settings_.cameraPositionY=3.25f+playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ=2.3f;
-        settings_.cameraYaw=DirectX::XM_PI;
-        settings_.cameraPitch=0;
-    }
-    else if (std::wcscmp(startZone,L"TERRACE_TALK")==0)
-    {
-        settings_.cameraPositionX=-3.f;
-        settings_.cameraPositionY=3.25f+playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ=-6.6f;
-        settings_.cameraYaw=0;settings_.cameraPitch=0;
-        heroineJoined_=true;opening_.BeginPowerMission();terraceConversation_.UnlockTutorial();
-    }
-    else if (std::wcscmp(startZone,L"CHASE")==0)
-    {
-        settings_.cameraPositionX=-10.05f;
-        // Start at the real basement-side path landing. Starting in the middle
-        // with activePath=-1 bypassed the endpoint acquisition used in play
-        // and made the QA shortcut itself unable to walk.
-        settings_.cameraPositionY=-6.89f+playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ=70.f;
-        settings_.cameraYaw=DirectX::XM_PI;settings_.cameraPitch=0;
-        heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();
-    }
-    else if (std::wcscmp(startZone,L"ENDLESS")==0)
-    {
-        settings_.cameraPositionX=-10.05f;
-        settings_.cameraPositionY=-5.73148f+playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ=26.9f;
-        settings_.cameraYaw=DirectX::XM_PI;settings_.cameraPitch=0;
-        heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();
-        archChase_.BeginExtendedForQa(settings_);
-    }
-    else if (std::wcscmp(startZone,L"PREDATOR")==0)
-    {
-        settings_.cameraPositionX=-10.05f;
-        settings_.cameraPositionY=-4.60f+playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ=49.f;
-        settings_.cameraYaw=DirectX::XM_PI;settings_.cameraPitch=0;
-        heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();
-        archChase_.BeginRevealForQa(settings_);
-    }
-    else if (std::wcscmp(startZone,L"OFFICE")==0)
-    {
-        settings_.cameraPositionX=18.2f;
-        settings_.cameraPositionY=3.25f+playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ=5.5f;
-        settings_.cameraYaw=DirectX::XM_PIDIV2;
-        settings_.cameraPitch=0;
-        opening_.BeginPowerMission();
-    }
-    else if (std::wcscmp(startZone,L"REST_PENDING")==0)
-    {
-        // 電力復旧直後のPCロックと休憩ミッションを短時間で確認する。
-        settings_.cameraPositionX=24.0f;
-        settings_.cameraPositionY=3.25f+playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ=6.72f;
-        settings_.cameraYaw=DirectX::XM_PIDIV2;settings_.cameraPitch=-0.12f;
-        heroineJoined_=clueCollected_=true;
-        opening_.RestoreProgress(true,false,true,true,true,false,false,false);
-        powerOutage_.RestoreProgress(true,true,true,true,true);
-        passwordLock_.ForceUnlocked();
-    }
-    else if (std::wcscmp(startZone,L"FISH_POLISH")==0)
-    {
-        // 大水槽の生体メッシュを近距離で検証する専用視点。
-        settings_.cameraPositionX=0.0f;
-        settings_.cameraPositionY=4.7f;
-        settings_.cameraPositionZ=8.15f;
-        settings_.cameraYaw=0.0f;settings_.cameraPitch=-0.04f;
-    }
-    else if (std::wcscmp(startZone,L"BLACKOUT")==0)
-    {
-        settings_.cameraPositionX=0;settings_.cameraPositionY=-2.25f+playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ=5;settings_.cameraYaw=0;settings_.cameraPitch=0;
-        heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();archChase_.MarkComplete();
-    }
-    else if (std::wcscmp(startZone,L"WRITING")==0)
-    {
-        settings_.cameraPositionX=17.6f;settings_.cameraPositionY=.5f;
-        settings_.cameraPositionZ=9.2f;settings_.cameraYaw=0;settings_.cameraPitch=0;
-        heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();archChase_.MarkComplete();
-        powerOutage_.RestoreProgress(true,false,false,false,false);
-    }
-    else if (std::wcscmp(startZone,L"HANDS")==0)
-    {
-        // 曲がり角後の固定手形を、奥スロープ内ですぐ確認するQA起動。
-        settings_.cameraPositionX=6.7f;settings_.cameraPositionY=3.9f;
-        settings_.cameraPositionZ=-20.30f;settings_.cameraYaw=0;
-        settings_.cameraPitch=-.03f;
-        heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();archChase_.MarkComplete();
-        powerOutage_.RestoreProgress(true,true,true,false,false);
-    }
-    else if (std::wcscmp(startZone,L"IMPACT")==0)
-    {
-        settings_.cameraPositionX=0;settings_.cameraPositionY=3.25f+playerManager_.Capsule().eyeHeight;
-        settings_.cameraPositionZ=6.2f;settings_.cameraYaw=0;settings_.cameraPitch=0;
-        heroineJoined_=clueCollected_=true;opening_.BeginPowerMission();archChase_.MarkComplete();
-        powerOutage_.RestoreProgress(true,true,true,false,false);
-    }
-    if(startZone[0]==0) opening_.Start();
+    opening_.Start();
     ResetPlayer();
 }
 

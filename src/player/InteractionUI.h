@@ -65,10 +65,18 @@ inline void DrawInteraction(const InteractionTarget& target,const SelectionRay& 
     ImVec2 p{std::clamp(x+35.f,12.f,std::max(12.f,size.x-width-12)),std::clamp(y-22.f,12.f,std::max(12.f,size.y-130))};
     auto* draw=ImGui::GetForegroundDrawList();
     draw->AddCircle({size.x*.5f,size.y*.5f},3,IM_COL32(220,235,245,200),12,1.5f);
-    draw->AddRectFilled(p,{p.x+width,p.y+44},IM_COL32(8,20,32,205),6);
-    draw->AddRect(p,{p.x+width,p.y+44},IM_COL32(170,210,235,130),6);
-    draw->AddText({p.x+12,p.y+8},IM_COL32(230,240,250,240),target.label);
-    if(target.actionable)
-        draw->AddText(ImGui::GetFont(),17,{p.x+width-165,p.y+12},IM_COL32(160,200,225,210),"F / 左クリック");
+    draw->AddRectFilledMultiColor(p,{p.x+width,p.y+44},IM_COL32(4,17,28,225),
+        IM_COL32(9,32,46,218),IM_COL32(4,16,27,225),IM_COL32(3,13,23,225));
+    draw->AddRect(p,{p.x+width,p.y+44},IM_COL32(105,205,235,145),5,0,1.f);
+    draw->AddRectFilled({p.x,p.y+5},{p.x+3,p.y+39},IM_COL32(92,215,250,230),2);
+    draw->AddText({p.x+14,p.y+8},IM_COL32(232,244,250,245),target.label);
+    if(target.actionable){
+        const ImVec2 keyMinimum{p.x+width-164,p.y+8};
+        const ImVec2 keyMaximum{p.x+width-14,p.y+36};
+        draw->AddRectFilled(keyMinimum,keyMaximum,IM_COL32(23,72,91,205),3);
+        draw->AddRect(keyMinimum,keyMaximum,IM_COL32(104,203,232,135),3);
+        draw->AddText(ImGui::GetFont(),15,{keyMinimum.x+12,keyMinimum.y+5},
+            IM_COL32(190,227,240,235),"F / 左クリック");
+    }
 }
 }

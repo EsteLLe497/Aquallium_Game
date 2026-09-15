@@ -510,18 +510,22 @@ void FishRenderer::ResetHabitat(Habitat habitat)
             static_cast<float>(0x01000000u);
     };
     const std::uint32_t smallFishPerSchool = habitat == Habitat::UnderwaterArch
-        ? 15u : (habitat == Habitat::ReceptionHeroTank ? 144u : 200u);
+        ? 30u : (habitat == Habitat::ReceptionHeroTank ? 144u : 200u);
     // 大水槽は一塊に増量せず、色と遊泳層の異なる三群で密度を出す。
     // 遠距離では既存の軽量メッシュへ落ちるため、描画回数は増えない。
     const std::uint32_t smallSchoolCount = habitat == Habitat::UnderwaterArch
         ? 3u : (habitat == Habitat::ReceptionHeroTank ? 3u : 1u);
     const std::uint32_t entranceFishCount =
-        habitat == Habitat::UnderwaterArch ? 9u : 0u;
+        habitat == Habitat::UnderwaterArch ? 16u : 0u;
+    // アーチ後半の上層にも一群を置き、入口付近へ偏らない奥行きを作る。
+    const std::uint32_t upperRearFishCount =
+        habitat == Habitat::UnderwaterArch ? 24u : 0u;
     const std::uint32_t mediumFishCount =
         habitat == Habitat::UnderwaterArch
-            ? 9u : (habitat == Habitat::ReceptionHeroTank ? 8u : 12u);
+            ? 14u : (habitat == Habitat::ReceptionHeroTank ? 8u : 12u);
     agents_.reserve(
-        smallFishPerSchool * smallSchoolCount + entranceFishCount + mediumFishCount);
+        smallFishPerSchool * smallSchoolCount + entranceFishCount +
+        upperRearFishCount + mediumFishCount);
     const auto spawnSchool = [&](std::uint32_t school,
                                  std::uint32_t count,
                                  std::uint32_t species)
@@ -571,6 +575,10 @@ void FishRenderer::ResetHabitat(Habitat habitat)
         // the other schools traverse the full 48 m exhibit.
         spawnSchool(4u, entranceFishCount, 0u);
     }
+    if (upperRearFishCount > 0u)
+    {
+        spawnSchool(5u, upperRearFishCount, 0u);
+    }
 }
 
 XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
@@ -581,7 +589,7 @@ XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
         // Aquarium fish cruise slowly during exploration. The chase applies a
         // separate common acceleration, so calm movement need not be sped up.
         const float routeSpeed = school == 3u
-            ? 0.030f : (school == 4u ? 0.035f : 0.046f);
+            ? 0.030f : (school == 4u ? 0.035f : (school == 5u ? 0.032f : 0.046f));
         const float route = time * routeSpeed + schoolPhase;
         if (school == 4u)
         {
@@ -591,20 +599,24 @@ XMFLOAT3 FishRenderer::SchoolTarget(std::uint32_t school, float time) const
                 ArchFloor(x) + 2.35f + std::sin(route * 0.81f) * 0.34f,
                 4.85f + std::cos(route) * 0.68f};
         }
-        const float x = school == 0u
+        const float x = school == 5u
+            ? 35.0f + std::sin(route) * 9.0f
+            : school == 0u
             ? 15.5f + std::sin(route) * 15.0f
             : (school == 1u
                 ? 30.0f + std::sin(route) * 17.0f
                 : (school == 2u
                     ? 24.0f + std::sin(route) * 20.0f
                     : 24.0f + std::sin(route) * 21.5f));
-        if (school == 2u)
+        if (school == 2u || school == 5u)
         {
-            const float z = std::sin(route * 0.71f) * 1.55f;
+            const float z = school == 5u
+                ? std::cos(route * 0.83f + 0.8f) * 1.65f
+                : std::sin(route * 0.71f) * 1.55f;
             const float canopy = ArchCanopy(x, z);
             return {
                 x,
-                canopy + (3.28f - canopy) * 0.58f,
+                canopy + (3.28f - canopy) * (school == 5u ? 0.72f : 0.58f),
                 z};
         }
         const float side = (school == 0u || school == 3u) ? -1.0f : 1.0f;
@@ -678,21 +690,22 @@ void FishRenderer::ApplyHabitatSteering(
     XMFLOAT3 maximum{};
     if (habitat_ == Habitat::UnderwaterArch)
     {
-        if (agent.school == 2u)
+        if (agent.school == 2u || agent.school == 5u)
         {
             minimum = {
-                3.0f,
-                ArchCanopy(agent.position.x, agent.position.z) + 0.22f,
-                -2.35f};
-            maximum = {45.0f, 3.28f, 2.35f};
+                3.35f,
+                ArchCanopy(agent.position.x, agent.position.z) + 0.30f,
+                -2.10f};
+            maximum = {44.65f, 3.08f, 2.10f};
         }
         else
         {
         const bool negativeSide = agent.school == 0u || agent.school == 3u;
-        minimum = {0.2f, ArchFloor(agent.position.x) + 0.72f,
-            negativeSide ? -7.3f : 3.75f};
-        maximum = {47.8f, 3.20f,
-            negativeSide ? -3.75f : 7.3f};
+        // 魚体の長さを含めて外周ガラスと入口端から離す。
+        minimum = {1.15f, ArchFloor(agent.position.x) + 0.78f,
+            negativeSide ? -6.65f : 4.10f};
+        maximum = {46.85f, 3.02f,
+            negativeSide ? -4.10f : 6.65f};
         }
     }
     else if (habitat_ == Habitat::ReceptionHeroTank)
@@ -730,25 +743,25 @@ void FishRenderer::ConstrainToHabitat(Agent& agent) const
 {
     if (habitat_ == Habitat::UnderwaterArch)
     {
-        if (agent.school == 2u)
+        if (agent.school == 2u || agent.school == 5u)
         {
-            agent.position.x = std::clamp(agent.position.x, 3.0f, 45.0f);
-            agent.position.z = std::clamp(agent.position.z, -2.35f, 2.35f);
+            agent.position.x = std::clamp(agent.position.x, 3.35f, 44.65f);
+            agent.position.z = std::clamp(agent.position.z, -2.10f, 2.10f);
             agent.position.y = std::clamp(
                 agent.position.y,
-                ArchCanopy(agent.position.x, agent.position.z) + 0.22f,
-                3.28f);
+                ArchCanopy(agent.position.x, agent.position.z) + 0.30f,
+                3.08f);
             return;
         }
         const bool negativeSide = agent.school == 0u || agent.school == 3u;
-        agent.position.x = std::clamp(agent.position.x, 0.2f, 47.8f);
+        agent.position.x = std::clamp(agent.position.x, 1.15f, 46.85f);
         agent.position.y = std::clamp(
             agent.position.y,
-            ArchFloor(agent.position.x) + 0.72f,
-            3.20f);
+            ArchFloor(agent.position.x) + 0.78f,
+            3.02f);
         agent.position.z = negativeSide
-            ? std::clamp(agent.position.z, -7.3f, -3.75f)
-            : std::clamp(agent.position.z, 3.75f, 7.3f);
+            ? std::clamp(agent.position.z, -6.65f, -4.10f)
+            : std::clamp(agent.position.z, 4.10f, 6.65f);
     }
     else if (habitat_ == Habitat::ReceptionHeroTank)
     {
@@ -925,7 +938,7 @@ void FishRenderer::Simulate(float stepSeconds, float totalTime)
     if(habitat_==Habitat::UnderwaterArch&&fleeToEntrance_>.55f)
     {
         // 入口まで逃げ切った個体は境界へ貼り付けず、展示から退場させる。
-        std::erase_if(agents_,[](const Agent& agent){return agent.position.x<=.205f;});
+        std::erase_if(agents_,[](const Agent& agent){return agent.position.x<=1.155f;});
         // 逃走演出が完了した時点で、遠方に残った個体も展示外へ抜けた扱いにする。
         if(fleeToEntrance_>.995f)agents_.clear();
     }
@@ -1275,7 +1288,8 @@ void FishRenderer::Render(
             ? 0.39f + agent.tint * 0.10f
             : 0.58f + agent.tint * 0.14f;
         const bool overheadSilhouette =
-            habitat_ == Habitat::UnderwaterArch && agent.school == 2u;
+            habitat_ == Habitat::UnderwaterArch &&
+            (agent.school == 2u || agent.school == 5u);
         const bool heroTankHabitat =
             habitat_ == Habitat::WatatsumiTank ||
             habitat_ == Habitat::ReceptionHeroTank;

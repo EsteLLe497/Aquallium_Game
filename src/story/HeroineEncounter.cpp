@@ -22,9 +22,8 @@ void HeroineEncounter::Initialize(ID3D11Device* device,const std::filesystem::pa
         auto fields=Split(value);if(fields.size()<5)continue;
         std::string text=fields[4];for(size_t i=5;i<fields.size();++i)text+='|'+fields[i];
         text=dialogueTextCodec::quoteHeroineSpeech(fields[1],dialogueTextCodec::decode(text));
-        lines_.push_back({fields[0]=="still",fields[1],fields[2],fields[3],std::move(text)});
+        lines_.push_back({fields[1],fields[2],fields[3],std::move(text)});
     }
-    still_.Load(device,textureFolder/"stile"/"HeroineEncounter_placeholder.png");
     portraits_=PortraitLibrary::load(device,textureFolder/"girl");
 }
 void HeroineEncounter::Reset(){phase_=Phase::Dormant;line_=0;letters_=fade_=0;emergencyFailed_=false;expression_="normal";}
@@ -32,14 +31,13 @@ void HeroineEncounter::Update(float dt,bool advance,float x,float floorY,float z
     if(phase_==Phase::Dormant) {
         // Crossing the first curved-gallery threshold starts once per game flow.
         if(canTrigger && floorY< -3.5f && z>87.35f && z<99.5f && x>-21.0f && x<1.0f) {
-            phase_=Phase::StillIn;fade_=0;line_=0;letters_=0;
+            // 初遭遇から通常会話と同じ上半身立ち絵をフェード表示する。
+            phase_=Phase::PortraitIn;fade_=0;line_=0;letters_=0;
         }
         return;
     }
     if(phase_==Phase::Complete)return;
     const float fadeSpeed=1.6f;
-    if(phase_==Phase::StillIn) {fade_=std::min(1.f,fade_+dt*fadeSpeed);if(fade_>=1){phase_=Phase::StillTalk;BeginLine(0);}return;}
-    if(phase_==Phase::StillOut) {fade_=std::max(0.f,fade_-dt*fadeSpeed);if(fade_<=0){phase_=Phase::PortraitIn;while(line_<lines_.size()&&lines_[line_].still)++line_;}return;}
     if(phase_==Phase::PortraitIn) {fade_=std::min(1.f,fade_+dt*fadeSpeed);if(fade_>=1){phase_=Phase::PortraitTalk;BeginLine(line_);}return;}
     if(phase_==Phase::PortraitOut) {fade_=std::max(0.f,fade_-dt*fadeSpeed);if(fade_<=0)phase_=Phase::Complete;return;}
     if(line_>=lines_.size()){phase_=Phase::PortraitOut;return;}
@@ -56,12 +54,7 @@ void HeroineEncounter::BeginLine(size_t line) {
 }
 void HeroineEncounter::Advance() {
     ++line_;
-    if(phase_==Phase::StillTalk) {
-        if(line_>=lines_.size()||!lines_[line_].still)phase_=Phase::StillOut;
-        else BeginLine(line_);
-    } else {
-        if(line_>=lines_.size())phase_=Phase::PortraitOut;else BeginLine(line_);
-    }
+    if(line_>=lines_.size())phase_=Phase::PortraitOut;else BeginLine(line_);
 }
 const StoryTexture* HeroineEncounter::Portrait() const {
     return portraits_?portraits_->find(expression_):nullptr;
@@ -69,15 +62,7 @@ const StoryTexture* HeroineEncounter::Portrait() const {
 void HeroineEncounter::Draw() {
     if(phase_==Phase::Dormant||phase_==Phase::Complete)return;
     const ImVec2 size=ImGui::GetIO().DisplaySize;auto* background=ImGui::GetBackgroundDrawList();
-    bool stillPhase=phase_==Phase::StillIn||phase_==Phase::StillTalk||phase_==Phase::StillOut;
-    if(stillPhase&&still_.view) {
-        float imageAspect=float(still_.width)/still_.height,screenAspect=size.x/size.y;
-        ImVec2 uv0{0,0},uv1{1,1};
-        if(imageAspect>screenAspect){float visible=screenAspect/imageAspect;uv0.x=(1-visible)*.5f;uv1.x=1-uv0.x;}
-        else {float visible=imageAspect/screenAspect;uv0.y=(1-visible)*.5f;uv1.y=1-uv0.y;}
-        background->AddImage(ImTextureRef(still_.view.Get()),{0,0},size,uv0,uv1,IM_COL32(255,255,255,int(255*fade_)));
-        background->AddRectFilled({0,0},size,IM_COL32(2,8,18,int(55*fade_)));
-    } else if(const StoryTexture* portrait=Portrait();portrait&&portrait->view) {
+    if(const StoryTexture* portrait=Portrait();portrait&&portrait->view) {
         const auto layout=portraitPresentation::upperBodyLayout(
             *portrait,{size.x-18,size.y+8},size.y*1.08f,size.x*.46f);
         if(const StoryTexture* underlay=portraits_->underlay(expression_);underlay&&underlay->view)
@@ -92,6 +77,12 @@ void HeroineEncounter::Draw() {
     ImGui::SetNextWindowBgAlpha(.82f);ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(.012f,.025f,.055f,.86f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{24,18});
     ImGui::Begin("##heroine_dialogue",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);
+    const ImVec2 panelMinimum=ImGui::GetWindowPos();
+    auto* panelDraw=ImGui::GetWindowDrawList();
+    panelDraw->AddRect(panelMinimum,{panelMinimum.x+ImGui::GetWindowWidth(),panelMinimum.y+windowHeight},
+        IM_COL32(92,196,230,125),5.f,0,1.f);
+    panelDraw->AddRectFilled({panelMinimum.x+1,panelMinimum.y+5},
+        {panelMinimum.x+4,panelMinimum.y+windowHeight-5},IM_COL32(84,211,248,220),2.f);
     if(!lines_[line_].speaker.empty()) {
         ImGui::TextColored({.60f,.84f,1.f,1.f},"%s",lines_[line_].speaker.c_str());
         ImGui::Separator();
